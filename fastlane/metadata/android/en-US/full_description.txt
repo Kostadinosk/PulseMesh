@@ -10,3 +10,5 @@ Key Features:
 • Offline Tactical Map (EPSG:3857): Regional Web Mercator tile pyramid downloader with local disk caching, shared tactical pins (RALLY, HAZARD, SUPPLY, SOS), live compass bearing HUD, and barometric altitude tracking.
 • Strict Off-Grid Mode: When Off-Grid Mode is enabled, all HTTP and external internet connections are hard-blocked at the transport layer.
 • 100% Free & Open Source Software (FOSS): Zero proprietary Google Play Services, Firebase, or analytics SDKs.
+
+Note: PulseMesh (com.KostadinosK.pulsemesh) is an independent open-source off-grid mesh networking project by Konstantinos Kourtis and is not affiliated with pulsemesh.io or any commercial entity.

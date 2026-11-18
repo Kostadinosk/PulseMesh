@@ -117,6 +117,7 @@ This software is provided strictly for educational, experimental, and research p
 - **Not for Life-Safety Use**: Do not rely on PulseMesh as a primary means of communication in life-safety, search-and-rescue, medical, or critical emergency situations. Radio range, packet delivery, and device compatibility vary significantly across hardware and environments.
 - **Root & Hardware Modifications**: Features that execute privileged (`su`) commands or alter radio power-management parameters are used entirely at the user's own risk.
 - **Regulatory Compliance**: Users are solely responsible for ensuring that their use of this software, encryption, and radio transmissions complies with all applicable local laws and telecommunications regulations.
+- **Non-Affiliation Notice**: PulseMesh (`com.KostadinosK.pulsemesh`) is an independent open-source off-grid mesh networking project by Konstantinos Kourtis (`@Kostadinosk`) and is not affiliated with, endorsed by, or connected to `pulsemesh.io` (synchronized event/light-show audio streaming) or any other commercial entity.
 
 In no event shall the author or contributors be held liable for any direct, indirect, incidental, special, exemplary, or consequential damages arising in any way out of the use or inability to use this software.
 
