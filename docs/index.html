@@ -553,7 +553,7 @@
       <a href="#" class="brand">
         <img src="assets/pulsemesh-logo.png?v=2" alt="PulseMesh Icon" />
         <span>PulseMesh</span>
-        <span class="brand-badge">v1.0</span>
+        <span class="brand-badge">v1.1</span>
       </a>
       <nav class="nav-links">
         <a href="#features">Capabilities</a>
@@ -587,14 +587,14 @@
           and offline Web Mercator GPS maps without cell towers.
         </p>
         <div class="cta-group">
-          <a class="btn btn-primary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.0/app-release.apk">
-            ⬇ Download Signed Release APK (v1.0)
+          <a class="btn btn-primary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-release.apk">
+            ⬇ Download Signed Release APK (v1.1)
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.0/app-debug.apk">
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-debug.apk">
             ⚙ Download Debug APK
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0" target="_blank" rel="noopener">
-            View v1.0 Release Notes →
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1" target="_blank" rel="noopener">
+            View v1.1 Release Notes →
           </a>
         </div>
         <div class="meta-caption">
@@ -656,37 +656,37 @@
 
         <article class="glass-card">
           <span class="card-tag emerald">PMU2 / PMB1</span>
-          <h3>Free &amp; Encrypted @username Accounts</h3>
+          <h3>Free &amp; Encrypted @username Accounts + Duress Wipe</h3>
           <p>
             Claim a cryptographic <code>@username</code> backed by an ECDSA P-256 keypair and PBKDF2-encrypted key vault.
-            Migrate all chats, contacts, and keys to a new device using your PIN or one-time Recovery Key via gzipped <code>PMB1:</code> encrypted backups.
+            Supports ultrasonic tap-to-verify key fingerprints, per-message Auto-Burn TTL timers, and an emergency Duress PIN wipe.
           </p>
         </article>
 
         <article class="glass-card">
           <span class="card-tag amber">8 kHz Full-Duplex</span>
-          <h3>Real-Time Voice Calls &amp; Walkie-Talkie</h3>
+          <h3>Voice Calls, HW Volume PTT &amp; Radio VOX Bridge</h3>
           <p>
-            Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice codecs stream over local Wi-Fi/Hotspot UDP or pure BLE GATT,
-            complete with half-duplex echo ducking, lock-screen call controls, a persistent mini call bar, and automatic voicemail capture.
+            Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice codecs stream over local Wi-Fi/Hotspot UDP or pure BLE GATT.
+            Hold Volume Down for screen-off PTT, or enable the 1000 Hz VOX pre-key pilot for wired VHF/UHF radios.
           </p>
         </article>
 
         <article class="glass-card">
           <span class="card-tag">DTN Store &amp; Forward</span>
-          <h3>Multi-Hop Flood Routing (TTL = 7)</h3>
+          <h3>24/7 Background Relay &amp; Flood Routing (TTL = 7)</h3>
           <p>
-            Broadcast channels, multi-peer ECDH group chats, and direct messages automatically hop across intermediate nodes with packet deduplication,
-            rate limiting, and a persistent Delay-Tolerant Networking (DTN) outbox that flushes when peers come into range.
+            A persistent foreground relay service holds a partial WakeLock and Wi-Fi MulticastLock so phones relay packets in a backpack,
+            combining packet deduplication and a persistent DTN outbox that flushes automatically on peer discovery.
           </p>
         </article>
 
         <article class="glass-card">
           <span class="card-tag emerald">EPSG:3857</span>
-          <h3>Offline Tactical Map &amp; SOS Beacons</h3>
+          <h3>Offline Map, P2P Tile Sync &amp; Dead-Reckoning</h3>
           <p>
-            Download Web Mercator regional tile pyramids for 100% offline navigation. Drop shared tactical pins
-            (<code>RALLY</code>, <code>HAZARD</code>, <code>SUPPLY</code>, <code>SOS</code>), inspect peer distance and relative compass bearings, and control GPS privacy (<code>EXACT</code>, <code>COARSE</code>, <code>OFF</code>).
+            Download Web Mercator regional tiles and beam cached map tiles P2P to offline peers. Record GPS &amp; step dead-reckoning
+            breadcrumb trails with GPX import/export and shared tactical pins (<code>RALLY</code>, <code>HAZARD</code>, <code>SUPPLY</code>, <code>SOS</code>).
           </p>
         </article>
 
@@ -795,7 +795,7 @@ cd PulseMesh
       <div>
         <a href="contact.html">Contact</a> &bull;
         <a href="https://github.com/Kostadinosk/PulseMesh">Repository</a> &bull;
-        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0">Release v1.0</a>
+        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1">Release v1.1</a>
       </div>
     </div>
   </footer>
