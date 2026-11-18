@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/pulsemesh-icon.png" alt="PulseMesh Icon" width="118" height="118" />
+<img src="docs/assets/pulsemesh-logo.png" alt="PulseMesh Icon" width="118" height="118" />
 
 # PulseMesh
 
