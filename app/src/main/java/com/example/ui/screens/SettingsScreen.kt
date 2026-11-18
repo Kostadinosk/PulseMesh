@@ -71,6 +71,20 @@ fun SettingsScreen(
     onClaimOrRecoverUsername: (String, String, String, Boolean, (Boolean, String) -> Unit) -> Unit = { _, _, _, _, _ -> },
     onUpdateUsernameRelayUrl: (String, (Boolean, String) -> Unit) -> Unit = { _, _ -> },
     onSyncAccountBackupNow: ((Boolean, String) -> Unit) -> Unit = {},
+    onToggleBackgroundRelayService: () -> Unit = {},
+    onToggleVolumeButtonPtt: () -> Unit = {},
+    onToggleRadioVoxBridge: () -> Unit = {},
+    onToggleDeadReckoning: () -> Unit = {},
+    onToggleBreadcrumbRecording: () -> Unit = {},
+    onClearBreadcrumbTrail: () -> Unit = {},
+    onShareBreadcrumbTrail: () -> Unit = {},
+    onBroadcastOfflineMapTiles: () -> Unit = {},
+    onTransmitKeyVerifyChirp: () -> Unit = {},
+    onCycleMessageBurnTtl: () -> Unit = {},
+    onSetDuressPin: (String) -> Boolean = { false },
+    onTriggerDuressWipe: (String) -> Boolean = { false },
+    onExportGpx: () -> String = { "" },
+    onImportGpx: (String) -> Int = { 0 },
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -83,6 +97,12 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     var editCallsignDialog by remember { mutableStateOf(false) }
     var tempCallsign by remember { mutableStateOf(state.operatorCallsign) }
+    var showDuressDialog by remember { mutableStateOf(false) }
+    var duressPinInput by remember { mutableStateOf("") }
+    var duressFeedback by remember { mutableStateOf("") }
+    var showGpxDialog by remember { mutableStateOf(false) }
+    var gpxTextInput by remember { mutableStateOf("") }
+    var gpxFeedback by remember { mutableStateOf("") }
 
     var editChannelDialog by remember { mutableStateOf(false) }
     var tempChannel by remember { mutableStateOf(state.meshChannel) }
@@ -1947,6 +1967,253 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // -----------------------------------------------------------------
+        // PULSEMESH v1.1 TACTICAL SUITE (RELAY FGS, HW PTT, VOX, DEAD-RECKONING, GPX, P2P TILES, DURESS)
+        // -----------------------------------------------------------------
+        Card(
+            colors = CardDefaults.cardColors(containerColor = p.card),
+            shape = cardShape,
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, CyanGateway.copy(alpha = 0.55f), cardShape)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.RocketLaunch,
+                        contentDescription = "v1.1 Tactical Upgrades",
+                        tint = CyanGateway,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "v1.1 Field Relay, Audio & Security",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = CyanGateway
+                        )
+                    )
+                }
+
+                // 1. Background Foreground Relay Service
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "24/7 Background Mesh Relay Service",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Holds WakeLock & MulticastLock while screen is off",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.isBackgroundRelayServiceEnabled,
+                        onCheckedChange = { onToggleBackgroundRelayService() },
+                        modifier = Modifier.testTag("toggle_background_relay")
+                    )
+                }
+
+                // 2. Hardware Volume-Down PTT
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hardware Volume-Down PTT",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Hold Volume Down or Headset button to talk",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.isVolumeButtonPttEnabled,
+                        onCheckedChange = { onToggleVolumeButtonPtt() },
+                        modifier = Modifier.testTag("toggle_hw_volume_ptt")
+                    )
+                }
+
+                // 3. Wired Baofeng Radio VOX Pre-Key Pilot
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Wired Radio VOX Pre-Key Pilot",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Prepends 180ms 1kHz tone for Baofeng K1 / UHF VOX",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.isRadioVoxBridgeEnabled,
+                        onCheckedChange = { onToggleRadioVoxBridge() },
+                        modifier = Modifier.testTag("toggle_vox_bridge")
+                    )
+                }
+
+                // 4. Dead-Reckoning Step Counter Fallback
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Step Dead-Reckoning (${state.stepCount} steps)",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Estimates movement via compass + steps when GPS is jammed",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.isDeadReckoningEnabled,
+                        onCheckedChange = { onToggleDeadReckoning() },
+                        modifier = Modifier.testTag("toggle_dead_reckoning")
+                    )
+                }
+
+                // 5. Breadcrumb Trail & GPX Actions
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Offline Breadcrumb Trail (${state.breadcrumbs.size} pts)",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Records local track + GPX import/export",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.isBreadcrumbRecording,
+                        onCheckedChange = { onToggleBreadcrumbRecording() },
+                        modifier = Modifier.testTag("toggle_breadcrumbs")
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onShareBreadcrumbTrail,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Broadcast Trail", fontSize = 11.sp, maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            gpxTextInput = onExportGpx()
+                            gpxFeedback = "Exported ${state.breadcrumbs.size} track points to GPX."
+                            showGpxDialog = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("GPX I/O", fontSize = 11.sp, maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onClearBreadcrumbTrail,
+                        modifier = Modifier.weight(0.8f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Clear", fontSize = 11.sp, color = RedSosAlert, maxLines = 1)
+                    }
+                }
+
+                // 6. P2P Offline Map Tile Sync
+                Text(
+                    text = state.p2pTileSyncStatus,
+                    style = MaterialTheme.typography.labelSmall.copy(color = p.textMuted, fontFamily = FontFamily.Monospace)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onBroadcastOfflineMapTiles,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Beam Map Tiles P2P", fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onTransmitKeyVerifyChirp,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Ultrasonic Verify Key", fontSize = 11.sp, maxLines = 1)
+                    }
+                }
+
+                // 7. Auto-Burn TTL & Duress PIN Wipe
+                val burnLabel = when (state.messageBurnTtlSeconds) {
+                    60 -> "1 MIN"
+                    300 -> "5 MIN"
+                    3600 -> "1 HOUR"
+                    86400 -> "24 HOURS"
+                    else -> "OFF"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCycleMessageBurnTtl,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Burn TTL: $burnLabel", fontSize = 11.sp, maxLines = 1)
+                    }
+                    Button(
+                        onClick = {
+                            duressPinInput = ""
+                            duressFeedback = ""
+                            showDuressDialog = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (state.hasDuressPin) AmberRootBoost else RedSosAlert,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            if (state.hasDuressPin) "Duress PIN (Armed)" else "Set Duress Wipe PIN",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // Modal: 75+ Phone Profile Picker
@@ -2503,6 +2770,129 @@ fun SettingsScreen(
                     TextButton(onClick = { showRelayUrlDialog = false }) {
                         Text("Cancel", color = p.textSecondary)
                     }
+                }
+            }
+        )
+    }
+
+    if (showDuressDialog) {
+        AlertDialog(
+            onDismissRequest = { showDuressDialog = false },
+            containerColor = p.card,
+            title = {
+                Text(
+                    text = "DURESS PIN & EMERGENCY WIPE",
+                    color = RedSosAlert,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Configure a 4+ digit Duress PIN, or enter your existing Duress PIN and tap 'TRIGGER WIPE' to immediately erase all chat history, breadcrumbs, and private identity keys.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary, fontSize = 11.sp)
+                    )
+                    OutlinedTextField(
+                        value = duressPinInput,
+                        onValueChange = { duressPinInput = it },
+                        label = { Text("4+ Digit Duress PIN", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (duressFeedback.isNotBlank()) {
+                        Text(
+                            text = duressFeedback,
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.amber, fontSize = 10.sp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (state.hasDuressPin) {
+                        Button(
+                            onClick = {
+                                if (onTriggerDuressWipe(duressPinInput)) {
+                                    duressFeedback = "Wipe executed. Identity & history purged."
+                                    showDuressDialog = false
+                                } else {
+                                    duressFeedback = "Incorrect Duress PIN."
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = RedSosAlert, contentColor = Color.White)
+                        ) {
+                            Text("TRIGGER WIPE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            if (onSetDuressPin(duressPinInput)) {
+                                duressFeedback = if (duressPinInput.isBlank()) "Duress PIN cleared." else "Duress PIN armed."
+                                showDuressDialog = false
+                            } else {
+                                duressFeedback = "Enter at least 4 characters (or leave empty to clear)."
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AmberRootBoost, contentColor = Color.Black)
+                    ) {
+                        Text("SAVE PIN", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDuressDialog = false }) {
+                    Text("Close", color = p.textSecondary)
+                }
+            }
+        )
+    }
+
+    if (showGpxDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpxDialog = false },
+            containerColor = p.card,
+            title = {
+                Text(
+                    text = "GPX TRAIL IMPORT / EXPORT",
+                    color = CyanGateway,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = gpxTextInput,
+                        onValueChange = { gpxTextInput = it },
+                        label = { Text("GPX XML Payload", fontSize = 10.sp) },
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (gpxFeedback.isNotBlank()) {
+                        Text(
+                            text = gpxFeedback,
+                            style = MaterialTheme.typography.labelSmall.copy(color = EmeraldMesh, fontSize = 10.sp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val imported = onImportGpx(gpxTextInput)
+                        gpxFeedback = if (imported > 0) "Imported $imported GPX track points." else "No valid <trkpt> coordinates found."
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black)
+                ) {
+                    Text("IMPORT GPX", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGpxDialog = false }) {
+                    Text("Close", color = p.textSecondary)
                 }
             }
         )

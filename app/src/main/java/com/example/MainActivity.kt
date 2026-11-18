@@ -382,6 +382,7 @@ class MainActivity : ComponentActivity() {
                                     onToggleBroadcastCoarseLocation = { viewModel.toggleBroadcastCoarseLocationInBle() },
                                     locationShareMode = state.locationShareMode,
                                     onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
+                                    breadcrumbs = state.breadcrumbs,
                                 )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(
@@ -647,6 +648,20 @@ class MainActivity : ComponentActivity() {
                                                 onSyncAccountBackupNow = { cb ->
                                                     viewModel.syncAccountBackupNow(cb)
                                                 },
+                                                onToggleBackgroundRelayService = { viewModel.toggleBackgroundRelayService() },
+                                                onToggleVolumeButtonPtt = { viewModel.toggleVolumeButtonPtt() },
+                                                onToggleRadioVoxBridge = { viewModel.toggleRadioVoxBridge() },
+                                                onToggleDeadReckoning = { viewModel.toggleDeadReckoning() },
+                                                onToggleBreadcrumbRecording = { viewModel.toggleBreadcrumbRecording() },
+                                                onClearBreadcrumbTrail = { viewModel.clearBreadcrumbTrail() },
+                                                onShareBreadcrumbTrail = { viewModel.shareBreadcrumbTrailToMesh() },
+                                                onBroadcastOfflineMapTiles = { viewModel.broadcastOfflineMapTilesToPeers() },
+                                                onTransmitKeyVerifyChirp = { viewModel.transmitUltrasonicKeyVerifyChirp() },
+                                                onCycleMessageBurnTtl = { viewModel.cycleMessageBurnTtl() },
+                                                onSetDuressPin = { pin -> viewModel.setDuressPin(pin) },
+                                                onTriggerDuressWipe = { pin -> viewModel.verifyOrTriggerDuressWipe(pin) },
+                                                onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
+                                                onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
                                             )
                                         } else {
                                             RootBoosterScreen(
@@ -1068,6 +1083,32 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         keyguardLockedFlow.value = isKeyguardCurrentlyLocked()
         handleNotificationIntent(intent)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        val state = viewModel.uiState.value
+        val isPttHardwareKey = keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN ||
+            keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK
+        if (isPttHardwareKey && state.isVolumeButtonPttEnabled && !isKeyguardCurrentlyLocked()) {
+            if (event?.repeatCount == 0 && !state.isPttPressed) {
+                viewModel.startPtt()
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        val state = viewModel.uiState.value
+        val isPttHardwareKey = keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN ||
+            keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK
+        if (isPttHardwareKey && state.isVolumeButtonPttEnabled && !isKeyguardCurrentlyLocked()) {
+            if (state.isPttPressed) {
+                viewModel.stopPtt()
+            }
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     private fun updateLockScreenWindowFlags(allowOnLockScreen: Boolean) {

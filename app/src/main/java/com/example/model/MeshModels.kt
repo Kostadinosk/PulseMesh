@@ -44,6 +44,13 @@ data class MeshGroup(
     val groupKeyBase64: String = ""
 )
 
+data class BreadcrumbPoint(
+    val lat: Double,
+    val lon: Double,
+    val altM: Double = 0.0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 data class MeshPacket(
     val id: String,
     val sourceId: String,
@@ -60,7 +67,8 @@ data class MeshPacket(
     val isIncoming: Boolean,
     val waypointData: TacticalWaypoint? = null,
     val isDelivered: Boolean = false,
-    val ackedByCallsign: String = ""
+    val ackedByCallsign: String = "",
+    val expiresAtMs: Long = 0L
 ) {
     val transportUsed: String
         get() = transport

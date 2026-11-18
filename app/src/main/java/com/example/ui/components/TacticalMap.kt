@@ -71,6 +71,7 @@ fun TacticalMap(
     onToggleBroadcastCoarseLocation: () -> Unit = {},
     locationShareMode: LocationShareMode = LocationShareMode.EXACT,
     onSelectLocationShareMode: (LocationShareMode) -> Unit = {},
+    breadcrumbs: List<com.example.model.BreadcrumbPoint> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -345,6 +346,31 @@ fun TacticalMap(
                         py + 20f,
                         paintSub
                     )
+                }
+            }
+
+            // 2.5 Draw Operator & Mesh Breadcrumb Trail Polyline (v1.1)
+            if (breadcrumbs.size >= 2) {
+                var prevOffset: Offset? = null
+                for (pt in breadcrumbs) {
+                    val (bTileX, bTileY) = NativeTileMapManager.latLonToTileCoords(pt.lat, pt.lon, intZoom)
+                    val bx = viewCenterX + ((bTileX - curTileX) * tileSizePx).toFloat()
+                    val by = viewCenterY + ((bTileY - curTileY) * tileSizePx).toFloat()
+                    val curOffset = Offset(bx, by)
+                    prevOffset?.let { prev ->
+                        drawLine(
+                            color = CyanGateway.copy(alpha = 0.78f),
+                            start = prev,
+                            end = curOffset,
+                            strokeWidth = 5f
+                        )
+                    }
+                    drawCircle(
+                        color = CyanGateway,
+                        radius = 4.5f,
+                        center = curOffset
+                    )
+                    prevOffset = curOffset
                 }
             }
 

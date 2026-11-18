@@ -16,7 +16,9 @@ data class TacticalSensorState(
     val barometricPressureHpa: Float? = null,
     val barometricAltitudeMeters: Double? = null,
     val hasCompassSensor: Boolean = false,
-    val hasBarometerSensor: Boolean = false
+    val hasBarometerSensor: Boolean = false,
+    val stepCount: Int = 0,
+    val hasStepSensor: Boolean = false
 )
 
 /**
@@ -90,18 +92,44 @@ class TacticalSensorService(context: Context) : SensorEventListener {
             if (pressureHpa <= 0f) return 0.0
             return SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, pressureHpa).toDouble()
         }
+
+        /**
+         * Dead-Reckoning Step Advance:
+         * Given current `(lat, lon)`, compass heading in degrees (0..360 clockwise from North),
+         * and stride length in meters (default `0.74m`), returns the new `(lat, lon)` after 1 step.
+         */
+        fun stepAdvanceLatLon(
+            lat: Double,
+            lon: Double,
+            headingDeg: Float,
+            strideMeters: Double = 0.74
+        ): Pair<Double, Double> {
+            val earthRadiusM = 6378137.0
+            val headingRad = Math.toRadians(headingDeg.toDouble())
+            val dNorth = strideMeters * cos(headingRad)
+            val dEast = strideMeters * sin(headingRad)
+            val dLat = Math.toDegrees(dNorth / earthRadiusM)
+            val cosLat = cos(Math.toRadians(lat.coerceIn(-85.0, 85.0))).coerceAtLeast(0.01)
+            val dLon = Math.toDegrees(dEast / (earthRadiusM * cosLat))
+            return Pair((lat + dLat).coerceIn(-85.0511, 85.0511), ((lon + dLon + 540.0) % 360.0) - 180.0)
+        }
     }
+
+    var onStepDetected: ((headingDeg: Float) -> Unit)? = null
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val rotationVectorSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val accelSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val pressureSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_PRESSURE)
+    private val stepDetectorSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+    private var lastAccelStepMs: Long = 0L
 
     private val _sensorState = MutableStateFlow(
         TacticalSensorState(
             hasCompassSensor = rotationVectorSensor != null || (accelSensor != null && magSensor != null),
-            hasBarometerSensor = pressureSensor != null
+            hasBarometerSensor = pressureSensor != null,
+            hasStepSensor = stepDetectorSensor != null || accelSensor != null
         )
     )
     val sensorState: StateFlow<TacticalSensorState> = _sensorState.asStateFlow()
@@ -126,6 +154,12 @@ class TacticalSensorService(context: Context) : SensorEventListener {
             }
             pressureSensor?.let {
                 mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            }
+            stepDetectorSensor?.let {
+                mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            }
+            if (stepDetectorSensor == null && rotationVectorSensor != null) {
+                accelSensor?.let { mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
             }
             isRegistered = true
         }
@@ -155,6 +189,20 @@ class TacticalSensorService(context: Context) : SensorEventListener {
                 System.arraycopy(event.values, 0, gravityReadings, 0, minOf(3, event.values.size))
                 hasGravity = true
                 updateHeadingFromAccelMag()
+                if (stepDetectorSensor == null && event.values.size >= 3) {
+                    val ax = event.values[0]
+                    val ay = event.values[1]
+                    val az = event.values[2]
+                    val mag = sqrt(ax * ax + ay * ay + az * az)
+                    val now = System.currentTimeMillis()
+                    if (mag > 13.2f && now - lastAccelStepMs > 380L) {
+                        lastAccelStepMs = now
+                        recordStepEvent()
+                    }
+                }
+            }
+            Sensor.TYPE_STEP_DETECTOR -> {
+                recordStepEvent()
             }
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 System.arraycopy(event.values, 0, geomagneticReadings, 0, minOf(3, event.values.size))
@@ -183,6 +231,12 @@ class TacticalSensorService(context: Context) : SensorEventListener {
             val azimuthDeg = ((Math.toDegrees(orientationAngles[0].toDouble()) + 360.0) % 360.0).toFloat()
             _sensorState.update { it.copy(deviceHeadingDeg = azimuthDeg) }
         }
+    }
+
+    private fun recordStepEvent() {
+        val heading = _sensorState.value.deviceHeadingDeg
+        _sensorState.update { it.copy(stepCount = it.stepCount + 1) }
+        onStepDetected?.invoke(heading)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

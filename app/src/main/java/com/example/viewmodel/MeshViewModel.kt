@@ -209,6 +209,18 @@ data class MeshUiState(
     val usernameRelayTestStatus: String = "",
     val lastAccountBackupSyncStatus: String = "",
 
+    // PulseMesh v1.1 Tactical Upgrades State
+    val isBackgroundRelayServiceEnabled: Boolean = true,
+    val isVolumeButtonPttEnabled: Boolean = true,
+    val isRadioVoxBridgeEnabled: Boolean = false,
+    val isDeadReckoningEnabled: Boolean = false,
+    val isBreadcrumbRecording: Boolean = true,
+    val breadcrumbs: List<BreadcrumbPoint> = emptyList(),
+    val stepCount: Int = 0,
+    val messageBurnTtlSeconds: Int = 0,
+    val hasDuressPin: Boolean = false,
+    val p2pTileSyncStatus: String = "Ready to beam cached map tiles over local mesh",
+
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Sim, 4: Root)
     val selectedTabIndex: Int = 0
 )
@@ -262,7 +274,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             hasAccountPin = prefs.accountPinHash.isNotBlank(),
             isUsernameOnHold = prefs.isUsernameOnHold,
             pendingUsernameHold = prefs.pendingUsernameHold,
-            usernameRelayUrl = prefs.usernameRelayUrl
+            usernameRelayUrl = prefs.usernameRelayUrl,
+            isBackgroundRelayServiceEnabled = prefs.isBackgroundRelayServiceEnabled,
+            isVolumeButtonPttEnabled = prefs.isVolumeButtonPttEnabled,
+            isRadioVoxBridgeEnabled = prefs.isRadioVoxBridgeEnabled,
+            isDeadReckoningEnabled = prefs.isDeadReckoningEnabled,
+            isBreadcrumbRecording = prefs.isBreadcrumbRecording,
+            breadcrumbs = prefs.loadBreadcrumbs(),
+            messageBurnTtlSeconds = prefs.messageBurnTtlSeconds,
+            hasDuressPin = prefs.duressPinHash.isNotBlank()
         )
     )
     val uiState: StateFlow<MeshUiState> = _uiState.asStateFlow()
@@ -855,13 +875,35 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
+                    val nextBreadcrumbs = if (current.isBreadcrumbRecording && userLat != null && userLon != null && (userLat != 0.0 || userLon != 0.0)) {
+                        val lastPt = current.breadcrumbs.lastOrNull()
+                        val movedEnough = lastPt == null || com.example.service.LiveMeshNetworkService.calculateDistanceMeters(
+                            lastPt.lat, lastPt.lon, userLat, userLon
+                        ) >= 4.0
+                        if (movedEnough) {
+                            val updatedTrail = (current.breadcrumbs + BreadcrumbPoint(
+                                lat = userLat,
+                                lon = userLon,
+                                altM = current.barometricAltitudeMeters ?: 0.0,
+                                timestamp = System.currentTimeMillis()
+                            )).takeLast(500)
+                            prefs.saveBreadcrumbs(updatedTrail)
+                            updatedTrail
+                        } else {
+                            current.breadcrumbs
+                        }
+                    } else {
+                        current.breadcrumbs
+                    }
+
                     current.copy(
                         userLatitude = userLat,
                         userLongitude = userLon,
                         isGpsLocked = gps.isLocked,
                         gpsStatusMessage = gps.statusMessage,
                         usingRealGps = gps.isLocked && !gps.isManualPin,
-                        nodes = updatedNodes
+                        nodes = updatedNodes,
+                        breadcrumbs = nextBreadcrumbs
                     )
                 }
             }
@@ -888,7 +930,44 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Start real-time Compass (Rotation Vector / Magnetometer) & Barometer Altitude sensor service
+        // Start real-time Compass (Rotation Vector / Magnetometer), Barometer Altitude & Step Dead-Reckoning service
+        ultrasonicModem.voxPreKeyPilotEnabled = prefs.isRadioVoxBridgeEnabled
+        if (prefs.isBackgroundRelayServiceEnabled) {
+            com.example.service.MeshForegroundRelayService.startOrUpdate(
+                context = getApplication(),
+                peerCount = peersBackingMap.size,
+                dtnCount = _uiState.value.pendingDtnCount
+            )
+        }
+        sensorService.onStepDetected = { headingDeg ->
+            val st = _uiState.value
+            if (st.isDeadReckoningEnabled) {
+                val baseLat = st.userLatitude.takeIf { it != 0.0 } ?: 37.9838
+                val baseLon = st.userLongitude.takeIf { it != 0.0 } ?: 23.7275
+                val (nextLat, nextLon) = com.example.service.TacticalSensorService.stepAdvanceLatLon(
+                    lat = baseLat,
+                    lon = baseLon,
+                    headingDeg = headingDeg
+                )
+                val updatedTrail = if (st.isBreadcrumbRecording) {
+                    (st.breadcrumbs + BreadcrumbPoint(
+                        lat = nextLat,
+                        lon = nextLon,
+                        altM = st.barometricAltitudeMeters ?: 0.0,
+                        timestamp = System.currentTimeMillis()
+                    )).takeLast(500).also { prefs.saveBreadcrumbs(it) }
+                } else {
+                    st.breadcrumbs
+                }
+                _uiState.update { cur ->
+                    cur.copy(
+                        userLatitude = nextLat,
+                        userLongitude = nextLon,
+                        breadcrumbs = updatedTrail
+                    )
+                }
+            }
+        }
         sensorService.start()
         viewModelScope.launch {
             sensorService.sensorState.collect { sState ->
@@ -905,6 +984,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         deviceHeadingDeg = sState.deviceHeadingDeg,
                         barometricPressureHpa = sState.barometricPressureHpa,
                         barometricAltitudeMeters = resolvedAlt,
+                        stepCount = sState.stepCount,
                         nodes = updatedNodes
                     )
                 }
@@ -3165,6 +3245,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             badge = "[$pktId | ${state.localNodeId}->ALL | Hops: 0/7 | $realOutboundTransport]"
         }
 
+        val nowMs = System.currentTimeMillis()
+        val burnExpMs = if (state.messageBurnTtlSeconds > 0) nowMs + state.messageBurnTtlSeconds * 1000L else 0L
         val userPacket = MeshPacket(
             id = pktId,
             sourceId = state.localNodeId,
@@ -3177,7 +3259,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             transport = if (canTransmitWire) realOutboundTransport else "ECDH KEY PENDING",
             rawHexBadge = badge,
             isIncoming = false,
-            timestamp = System.currentTimeMillis()
+            timestamp = nowMs,
+            expiresAtMs = burnExpMs
         )
 
         // Immediately display the message in the sender's chat list
@@ -4914,7 +4997,74 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 refreshConversationsList()
                 triggerHaptic(180)
             }
+            "MAP_TILE_SYNC" -> {
+                runCatching {
+                    val obj = org.json.JSONObject(packet.payload)
+                    val z = obj.optInt("z", -1)
+                    val x = obj.optInt("x", -1)
+                    val y = obj.optInt("y", -1)
+                    val b64 = obj.optString("b64", "")
+                    if (z in 0..19 && x >= 0 && y >= 0 && b64.isNotBlank()) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val ok = com.example.util.NativeTileMapManager.importCachedTileChunk(
+                                context = getApplication(),
+                                z = z,
+                                x = x,
+                                y = y,
+                                base64Png = b64
+                            )
+                            if (ok) {
+                                _uiState.update {
+                                    it.copy(
+                                        p2pTileSyncStatus = "Received offline map tile z=$z/$x/$y from $effectiveCallsign"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "TRAIL_SYNC" -> {
+                runCatching {
+                    val arr = org.json.JSONArray(packet.payload)
+                    val incomingPts = mutableListOf<BreadcrumbPoint>()
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i) ?: continue
+                        val lat = item.optDouble("lat", Double.NaN)
+                        val lon = item.optDouble("lon", Double.NaN)
+                        if (!lat.isNaN() && !lon.isNaN()) {
+                            incomingPts.add(
+                                BreadcrumbPoint(
+                                    lat = lat,
+                                    lon = lon,
+                                    altM = item.optDouble("altM", 0.0),
+                                    timestamp = item.optLong("ts", System.currentTimeMillis())
+                                )
+                            )
+                        }
+                    }
+                    if (incomingPts.isNotEmpty()) {
+                        val merged = (_uiState.value.breadcrumbs + incomingPts).takeLast(500)
+                        prefs.saveBreadcrumbs(merged)
+                        _uiState.update { it.copy(breadcrumbs = merged) }
+                    }
+                }
+            }
             else -> {
+                if (packet.type.startsWith("KEY_VERIFY:")) {
+                    val rxChecksum = packet.type.substringAfter("KEY_VERIFY:").toIntOrNull() ?: -1
+                    val peerKey = prefs.getPendingChangedPeerPublicKey(canonicalSrcId)
+                        ?: prefs.getPeerPublicKey(canonicalSrcId)
+                        ?: peersBackingMap[normSrc]?.publicKeyBase64
+                        ?: ""
+                    if (rxChecksum >= 0 && peerKey.isNotBlank()) {
+                        val expectedChecksum = com.example.service.UltrasonicAcousticModem.fingerprintChecksum8(peerKey)
+                        if (rxChecksum == expectedChecksum) {
+                            acceptChangedPeerKey(canonicalSrcId)
+                            triggerHaptic(75)
+                        }
+                    }
+                }
                 // For background HEARTBEAT / GPS_BEACON, registerOrUpdatePeerInstant already handled throttled UI updates
             }
         }
@@ -6023,6 +6173,262 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             autoHotspotNegotiator.startHostP2pGroup(manualTrigger = true)
         }
         triggerHaptic(40)
+    }
+
+    // =========================================================================
+    // PULSEMESH v1.1 TACTICAL UPGRADE ACTIONS
+    // =========================================================================
+
+    fun toggleBackgroundRelayService() {
+        val next = !_uiState.value.isBackgroundRelayServiceEnabled
+        prefs.isBackgroundRelayServiceEnabled = next
+        _uiState.update { it.copy(isBackgroundRelayServiceEnabled = next) }
+        if (next) {
+            com.example.service.MeshForegroundRelayService.startOrUpdate(
+                context = getApplication(),
+                peerCount = peersBackingMap.size,
+                dtnCount = _uiState.value.pendingDtnCount
+            )
+        } else {
+            com.example.service.MeshForegroundRelayService.stop(getApplication())
+        }
+        triggerHaptic(35)
+    }
+
+    fun toggleVolumeButtonPtt() {
+        val next = !_uiState.value.isVolumeButtonPttEnabled
+        prefs.isVolumeButtonPttEnabled = next
+        _uiState.update { it.copy(isVolumeButtonPttEnabled = next) }
+        triggerHaptic(30)
+    }
+
+    fun toggleRadioVoxBridge() {
+        val next = !_uiState.value.isRadioVoxBridgeEnabled
+        prefs.isRadioVoxBridgeEnabled = next
+        ultrasonicModem.voxPreKeyPilotEnabled = next
+        _uiState.update { it.copy(isRadioVoxBridgeEnabled = next) }
+        triggerHaptic(35)
+    }
+
+    fun toggleDeadReckoning() {
+        val next = !_uiState.value.isDeadReckoningEnabled
+        prefs.isDeadReckoningEnabled = next
+        _uiState.update { it.copy(isDeadReckoningEnabled = next) }
+        triggerHaptic(35)
+    }
+
+    fun toggleBreadcrumbRecording() {
+        val next = !_uiState.value.isBreadcrumbRecording
+        prefs.isBreadcrumbRecording = next
+        _uiState.update { it.copy(isBreadcrumbRecording = next) }
+        triggerHaptic(30)
+    }
+
+    fun clearBreadcrumbTrail() {
+        prefs.saveBreadcrumbs(emptyList())
+        _uiState.update { it.copy(breadcrumbs = emptyList()) }
+        triggerHaptic(30)
+    }
+
+    fun exportBreadcrumbsAsGpx(): String {
+        val pts = _uiState.value.breadcrumbs
+        val sb = StringBuilder()
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        sb.append("<gpx version=\"1.1\" creator=\"PulseMesh v1.1\">\n")
+        sb.append("  <trk>\n    <name>PulseMesh Tactical Trail</name>\n    <trkseg>\n")
+        for (pt in pts) {
+            sb.append(
+                String.format(
+                    java.util.Locale.US,
+                    "      <trkpt lat=\"%.6f\" lon=\"%.6f\"><ele>%.1f</ele><time>%d</time></trkpt>\n",
+                    pt.lat,
+                    pt.lon,
+                    pt.altM,
+                    pt.timestamp
+                )
+            )
+        }
+        sb.append("    </trkseg>\n  </trk>\n</gpx>")
+        return sb.toString()
+    }
+
+    fun importBreadcrumbsFromGpx(gpxXml: String): Int {
+        if (gpxXml.isBlank()) return 0
+        val regex = Regex("""<trkpt\s+lat="([-0-9.]+)"\s+lon="([-0-9.]+)"[^>]*>(?:.*?<ele>([-0-9.]+)</ele>)?""")
+        val imported = mutableListOf<BreadcrumbPoint>()
+        val now = System.currentTimeMillis()
+        for (match in regex.findAll(gpxXml)) {
+            val lat = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: continue
+            val lon = match.groupValues.getOrNull(2)?.toDoubleOrNull() ?: continue
+            val alt = match.groupValues.getOrNull(3)?.toDoubleOrNull() ?: 0.0
+            imported.add(BreadcrumbPoint(lat = lat, lon = lon, altM = alt, timestamp = now))
+        }
+        if (imported.isNotEmpty()) {
+            val merged = (_uiState.value.breadcrumbs + imported).takeLast(500)
+            prefs.saveBreadcrumbs(merged)
+            _uiState.update { it.copy(breadcrumbs = merged) }
+        }
+        return imported.size
+    }
+
+    fun shareBreadcrumbTrailToMesh() {
+        val pts = _uiState.value.breadcrumbs.takeLast(25)
+        if (pts.isEmpty()) return
+        val arr = org.json.JSONArray()
+        for (pt in pts) {
+            arr.put(
+                org.json.JSONObject().apply {
+                    put("lat", pt.lat)
+                    put("lon", pt.lon)
+                    put("altM", pt.altM)
+                    put("ts", pt.timestamp)
+                }
+            )
+        }
+        val st = _uiState.value
+        val wirePkt = com.example.service.WireMeshPacket(
+            packetId = "trail_${normalizeId(st.localNodeId)}_${System.currentTimeMillis() and 0xFFFFF}",
+            srcNodeId = st.localNodeId,
+            srcCallsign = st.operatorCallsign,
+            dstNodeId = "ALL",
+            type = "TRAIL_SYNC",
+            payload = arr.toString(),
+            ttl = 4,
+            hops = 0
+        )
+        sendOmniPacket(wirePkt)
+        triggerHaptic(40)
+    }
+
+    fun broadcastOfflineMapTilesToPeers(
+        centerLat: Double = _uiState.value.userLatitude ?: 37.9838,
+        centerLon: Double = _uiState.value.userLongitude ?: 23.7275
+    ): Int {
+        val chunks = com.example.util.NativeTileMapManager.exportCachedTilesNear(
+            context = getApplication(),
+            centerLat = centerLat,
+            centerLon = centerLon,
+            maxTiles = 12
+        )
+        if (chunks.isEmpty()) {
+            _uiState.update {
+                it.copy(p2pTileSyncStatus = "No cached map tiles found at current location to beam")
+            }
+            return 0
+        }
+        val st = _uiState.value
+        _uiState.update {
+            it.copy(p2pTileSyncStatus = "Beaming ${chunks.size} cached map tiles to local mesh peers...")
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            for ((idx, chunk) in chunks.withIndex()) {
+                val payloadJson = org.json.JSONObject().apply {
+                    put("z", chunk.z)
+                    put("x", chunk.x)
+                    put("y", chunk.y)
+                    put("b64", chunk.base64Png)
+                }.toString()
+                val pktJson = org.json.JSONObject().apply {
+                    val pktId = "tile_${chunk.z}_${chunk.x}_${chunk.y}_${System.currentTimeMillis() and 0xFFFF}"
+                    put("id", pktId)
+                    put("packetId", pktId)
+                    put("type", "MAP_TILE_SYNC")
+                    put("t", "MAP_TILE_SYNC")
+                    put("srcId", st.localNodeId)
+                    put("src", st.localNodeId)
+                    put("srcName", st.operatorCallsign)
+                    put("cs", st.operatorCallsign)
+                    put("dstId", "ALL")
+                    put("dst", "ALL")
+                    put("ttl", 2)
+                    put("hops", 0)
+                    put("payload", payloadJson)
+                    put("p", payloadJson)
+                }.toString()
+                autoHotspotNegotiator.sendPacket(pktJson)
+                delay(90L)
+                _uiState.update {
+                    it.copy(p2pTileSyncStatus = "Beamed ${idx + 1}/${chunks.size} map tiles over local mesh")
+                }
+            }
+        }
+        triggerHaptic(45)
+        return chunks.size
+    }
+
+    fun transmitUltrasonicKeyVerifyChirp() {
+        val st = _uiState.value
+        val pubKey = st.x25519PublicKey.ifBlank { prefs.x25519PublicKey }
+        ultrasonicModem.transmitKeyVerificationChirp(st.localNodeId, pubKey)
+        triggerHaptic(40)
+    }
+
+    fun cycleMessageBurnTtl() {
+        val options = listOf(0, 60, 300, 3600, 86400)
+        val cur = _uiState.value.messageBurnTtlSeconds
+        val nextIdx = (options.indexOf(cur) + 1) % options.size
+        val nextVal = options[nextIdx]
+        prefs.messageBurnTtlSeconds = nextVal
+        _uiState.update { it.copy(messageBurnTtlSeconds = nextVal) }
+        persistentChatManager.pruneExpiredPackets()
+        refreshConversationsList()
+        triggerHaptic(30)
+    }
+
+    private fun hashDuressPin(cleanPin: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("PULSEMESH_DURESS_V11:$cleanPin".toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    fun setDuressPin(pin: String): Boolean {
+        val clean = pin.trim()
+        if (clean.isEmpty()) {
+            prefs.duressPinHash = ""
+            _uiState.update { it.copy(hasDuressPin = false) }
+            return true
+        }
+        if (clean.length < 4) return false
+        val hash = hashDuressPin(clean)
+        prefs.duressPinHash = hash
+        _uiState.update { it.copy(hasDuressPin = true) }
+        triggerHaptic(40)
+        return true
+    }
+
+    fun verifyOrTriggerDuressWipe(enteredPin: String): Boolean {
+        val clean = enteredPin.trim()
+        val storedHash = prefs.duressPinHash
+        if (clean.length < 4 || storedHash.isBlank()) return false
+        val candidateHash = hashDuressPin(clean)
+        if (candidateHash != storedHash) return false
+
+        // Execute Immediate Emergency Duress Wipe
+        persistentChatManager.wipeAllHistoryForDuress()
+        prefs.wipeSensitiveVaultForDuress()
+        synchronized(pendingDtnPackets) {
+            pendingDtnPackets.clear()
+        }
+        peersBackingMap.clear()
+        _uiState.update { cur ->
+            cur.copy(
+                localNodeId = prefs.nodeId,
+                operatorCallsign = prefs.operatorCallsign,
+                x25519PublicKey = prefs.x25519PublicKey,
+                x25519Fingerprint = prefs.fingerprint,
+                claimedUsername = "",
+                hasAccountPin = false,
+                accountRecoveryKey = "",
+                pendingDtnCount = 0,
+                breadcrumbs = emptyList(),
+                waypoints = emptyList(),
+                meshGroups = emptyList(),
+                packets = emptyList()
+            )
+        }
+        refreshConversationsList()
+        triggerHaptic(120)
+        return true
     }
 
     override fun onCleared() {

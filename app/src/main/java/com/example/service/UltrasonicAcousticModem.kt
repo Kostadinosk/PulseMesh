@@ -46,6 +46,17 @@ class UltrasonicAcousticModem(
         const val OP_CALL_ACCEPT_ACK = 0x3
         const val OP_SOS_BEACON = 0x4
         const val OP_PING_DISCOVERY = 0x5
+        const val OP_KEY_VERIFY = 0x6
+
+        fun fingerprintChecksum8(fingerprintOrPubKey: String): Int {
+            val clean = fingerprintOrPubKey.trim()
+            if (clean.isEmpty()) return 0
+            var hash = 0x5A
+            for (ch in clean) {
+                hash = ((hash * 33) xor ch.code) and 0xFF
+            }
+            return hash and 0xFF
+        }
 
         fun computeCrc4(bits28: Int): Int {
             var crc = 0xF
@@ -107,9 +118,12 @@ class UltrasonicAcousticModem(
 
         /**
          * Synthesizes a 34-symbol (2 preamble + 32 data bits) 18–19 kHz BFSK ultrasonic burst.
+         * When [includeVoxPilot] is true, prepends a 180ms (8 symbols) 1000 Hz VOX wakeup tone
+         * so handheld VHF/UHF radios (e.g. Baofeng UV-5R) open their VOX squelch before symbol 0.
          */
-        fun modulateFrameToPcm44k(frame32: Int): ShortArray {
-            val totalSymbols = 34
+        fun modulateFrameToPcm44k(frame32: Int, includeVoxPilot: Boolean = false): ShortArray {
+            val voxPilotSymbols = if (includeVoxPilot) 8 else 0
+            val totalSymbols = voxPilotSymbols + 34
             val out = ShortArray(totalSymbols * SYMBOL_SAMPLES)
             val rampSamples = 110 // 2.5 ms raised-cosine edge to avoid audible clicks
 
@@ -126,12 +140,15 @@ class UltrasonicAcousticModem(
                 }
             }
 
-            writeToneSymbol(0, FREQ_PREAMBLE_HZ)
-            writeToneSymbol(1, FREQ_PREAMBLE_HZ)
+            for (v in 0 until voxPilotSymbols) {
+                writeToneSymbol(v, 1000.0)
+            }
+            writeToneSymbol(voxPilotSymbols + 0, FREQ_PREAMBLE_HZ)
+            writeToneSymbol(voxPilotSymbols + 1, FREQ_PREAMBLE_HZ)
             for (bitIdx in 0 until 32) {
                 val bit = (frame32 ushr (31 - bitIdx)) and 1
                 val freq = if (bit == 1) FREQ_BIT1_HZ else FREQ_BIT0_HZ
-                writeToneSymbol(2 + bitIdx, freq)
+                writeToneSymbol(voxPilotSymbols + 2 + bitIdx, freq)
             }
             return out
         }
@@ -140,6 +157,9 @@ class UltrasonicAcousticModem(
     @Volatile
     var isEnabled: Boolean = false
         private set
+
+    @Volatile
+    var voxPreKeyPilotEnabled: Boolean = false
 
     private var rxJob: Job? = null
 
@@ -152,6 +172,11 @@ class UltrasonicAcousticModem(
         }
     }
 
+    fun transmitKeyVerificationChirp(localNodeIdHex: String, localFingerprintOrPubKey: String) {
+        val checksum8 = fingerprintChecksum8(localFingerprintOrPubKey)
+        transmitRawFrame(OP_KEY_VERIFY, localNodeIdHex, checksum8)
+    }
+
     fun transmitControlSignal(type: String, localNodeIdHex: String) {
         if (!isEnabled) return
         val opCode = when (type) {
@@ -159,12 +184,17 @@ class UltrasonicAcousticModem(
             "CALL_ACCEPT" -> OP_CALL_ACCEPT
             "CALL_ACCEPT_ACK" -> OP_CALL_ACCEPT_ACK
             "SOS" -> OP_SOS_BEACON
+            "KEY_VERIFY" -> OP_KEY_VERIFY
             else -> OP_PING_DISCOVERY
         }
+        transmitRawFrame(opCode, localNodeIdHex, 0)
+    }
+
+    private fun transmitRawFrame(opCode: Int, localNodeIdHex: String, flagByte: Int) {
         scope.launch(Dispatchers.IO) {
             runCatching {
-                val frame32 = packFrame32(opCode, localNodeIdHex)
-                val pcm44k = modulateFrameToPcm44k(frame32)
+                val frame32 = packFrame32(opCode, localNodeIdHex, flagByte)
+                val pcm44k = modulateFrameToPcm44k(frame32, includeVoxPilot = voxPreKeyPilotEnabled)
                 val track = AudioTrack.Builder()
                     .setAudioAttributes(
                         AudioAttributes.Builder()
@@ -185,7 +215,7 @@ class UltrasonicAcousticModem(
                 if (track.state == AudioTrack.STATE_INITIALIZED) {
                     track.write(pcm44k, 0, pcm44k.size)
                     track.play()
-                    delay(920L)
+                    delay(if (voxPreKeyPilotEnabled) 1120L else 920L)
                     runCatching { track.stop() }
                 }
                 runCatching { track.release() }
@@ -272,12 +302,13 @@ class UltrasonicAcousticModem(
                                     decodedBits = (decodedBits shl 1) or bit
                                 }
                                 if (validCapture) {
-                                    unpackFrame32(decodedBits)?.let { (opCode, srcNodeId, _) ->
+                                    unpackFrame32(decodedBits)?.let { (opCode, srcNodeId, flagByte) ->
                                         val sigType = when (opCode) {
                                             OP_CALL_RING -> "CALL_RING"
                                             OP_CALL_ACCEPT -> "CALL_ACCEPT"
                                             OP_CALL_ACCEPT_ACK -> "CALL_ACCEPT_ACK"
                                             OP_SOS_BEACON -> "SOS"
+                                            OP_KEY_VERIFY -> "KEY_VERIFY:$flagByte"
                                             else -> "HEARTBEAT"
                                         }
                                         onAcousticSignalDecoded(sigType, srcNodeId)

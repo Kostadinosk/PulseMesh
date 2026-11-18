@@ -479,6 +479,103 @@ class DevicePreferences(context: Context) {
         }
     }
 
+    // =========================================================================
+    // PULSEMESH v1.1 TACTICAL UPGRADES PERSISTENCE
+    // =========================================================================
+
+    var isBackgroundRelayServiceEnabled: Boolean
+        get() = prefs.getBoolean("background_relay_service_enabled", true)
+        set(value) = prefs.edit().putBoolean("background_relay_service_enabled", value).apply()
+
+    var isVolumeButtonPttEnabled: Boolean
+        get() = prefs.getBoolean("volume_button_ptt_enabled", true)
+        set(value) = prefs.edit().putBoolean("volume_button_ptt_enabled", value).apply()
+
+    var isRadioVoxBridgeEnabled: Boolean
+        get() = prefs.getBoolean("radio_vox_bridge_enabled", false)
+        set(value) = prefs.edit().putBoolean("radio_vox_bridge_enabled", value).apply()
+
+    var isDeadReckoningEnabled: Boolean
+        get() = prefs.getBoolean("dead_reckoning_enabled", false)
+        set(value) = prefs.edit().putBoolean("dead_reckoning_enabled", value).apply()
+
+    var isBreadcrumbRecording: Boolean
+        get() = prefs.getBoolean("breadcrumb_recording_enabled", true)
+        set(value) = prefs.edit().putBoolean("breadcrumb_recording_enabled", value).apply()
+
+    var messageBurnTtlSeconds: Int
+        get() = prefs.getInt("message_burn_ttl_seconds", 0)
+        set(value) = prefs.edit().putInt("message_burn_ttl_seconds", value.coerceAtLeast(0)).apply()
+
+    var duressPinHash: String
+        get() = prefs.getString("duress_pin_hash", "") ?: ""
+        set(value) = prefs.edit().putString("duress_pin_hash", value.trim()).apply()
+
+    fun loadBreadcrumbs(): List<com.example.model.BreadcrumbPoint> {
+        val raw = prefs.getString("breadcrumbs_json", null) ?: return emptyList()
+        if (raw.isBlank()) return emptyList()
+        val list = mutableListOf<com.example.model.BreadcrumbPoint>()
+        runCatching {
+            val arr = org.json.JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val lat = obj.optDouble("lat", Double.NaN)
+                val lon = obj.optDouble("lon", Double.NaN)
+                if (!lat.isNaN() && !lon.isNaN()) {
+                    list.add(
+                        com.example.model.BreadcrumbPoint(
+                            lat = lat,
+                            lon = lon,
+                            altM = obj.optDouble("altM", 0.0),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                        )
+                    )
+                }
+            }
+        }
+        return list.takeLast(500)
+    }
+
+    fun saveBreadcrumbs(points: List<com.example.model.BreadcrumbPoint>) {
+        val capped = points.takeLast(500)
+        val arr = org.json.JSONArray()
+        for (pt in capped) {
+            arr.put(
+                org.json.JSONObject().apply {
+                    put("lat", pt.lat)
+                    put("lon", pt.lon)
+                    put("altM", pt.altM)
+                    put("timestamp", pt.timestamp)
+                }
+            )
+        }
+        prefs.edit().putString("breadcrumbs_json", arr.toString()).apply()
+    }
+
+    fun wipeSensitiveVaultForDuress() {
+        val newId = generateRandomNodeId()
+        val kp = TacticalE2eeManager.generateKeyPair()
+        prefs.edit()
+            .remove("claimed_username")
+            .remove("account_salt_hex")
+            .remove("account_pin_hash")
+            .remove("account_recovery_key")
+            .remove("account_recovery_hash")
+            .remove("pending_username_hold")
+            .remove("is_username_on_hold")
+            .remove("account_auth_token")
+            .remove("pending_dtn_packets_json")
+            .remove("mesh_groups_json")
+            .remove("breadcrumbs_json")
+            .remove("known_username_claims_json")
+            .putString("node_id", newId)
+            .putString("callsign", "User-" + newId.takeLast(4))
+            .putString("x25519_pub", kp.publicKeyBase64)
+            .putString("x25519_priv", kp.privateKeyBase64)
+            .putString("x25519_fp", kp.fingerprint)
+            .apply()
+    }
+
     init {
         // Ensure unique random node ID is initialized on first launch
         if (prefs.getString("node_id", null).isNullOrBlank()) {

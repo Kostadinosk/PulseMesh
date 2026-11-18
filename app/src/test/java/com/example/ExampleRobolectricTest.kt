@@ -1468,4 +1468,54 @@ class ExampleRobolectricTest {
     vm.setLocationShareMode(com.example.model.LocationShareMode.EXACT)
     assertEquals(com.example.model.LocationShareMode.EXACT, vm.uiState.value.locationShareMode)
   }
+
+  @Test
+  fun testPulseMeshV11Upgrades() {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val vm = MeshViewModel(app)
+
+    // 1. Dead-reckoning step advance North (0 deg) increases latitude
+    val (nLat, nLon) = com.example.service.TacticalSensorService.stepAdvanceLatLon(37.9838, 23.7275, 0f, strideMeters = 1.0)
+    assertTrue("Stepping North must increase latitude", nLat > 37.9838)
+    assertEquals(23.7275, nLon, 0.0001)
+
+    // 2. Ultrasonic VOX pre-key pilot modulation & key verify checksum
+    val checksum = com.example.service.UltrasonicAcousticModem.fingerprintChecksum8("TEST_PUBKEY_BASE64")
+    val frame = com.example.service.UltrasonicAcousticModem.packFrame32(
+      com.example.service.UltrasonicAcousticModem.OP_KEY_VERIFY,
+      "0xABCD",
+      checksum
+    )
+    val unpacked = com.example.service.UltrasonicAcousticModem.unpackFrame32(frame)
+    assertNotNull(unpacked)
+    assertEquals(com.example.service.UltrasonicAcousticModem.OP_KEY_VERIFY, unpacked!!.first)
+    assertEquals("0xABCD", unpacked.second)
+    assertEquals(checksum, unpacked.third)
+
+    val normalPcm = com.example.service.UltrasonicAcousticModem.modulateFrameToPcm44k(frame, includeVoxPilot = false)
+    val voxPcm = com.example.service.UltrasonicAcousticModem.modulateFrameToPcm44k(frame, includeVoxPilot = true)
+    assertTrue("VOX pilot must prepend 8 symbols", voxPcm.size > normalPcm.size)
+
+    // 3. Breadcrumb GPX import/export
+    val gpxSample = """
+      <?xml version="1.0"?>
+      <gpx version="1.1"><trk><trkseg>
+        <trkpt lat="37.983800" lon="23.727500"><ele>120.5</ele></trkpt>
+        <trkpt lat="37.984100" lon="23.727900"><ele>122.0</ele></trkpt>
+      </trkseg></trk></gpx>
+    """.trimIndent()
+    val imported = vm.importBreadcrumbsFromGpx(gpxSample)
+    assertEquals(2, imported)
+    val exported = vm.exportBreadcrumbsAsGpx()
+    assertTrue(exported.contains("37.983800"))
+    assertTrue(exported.contains("23.727900"))
+
+    // 4. Burn-on-read TTL & Duress wipe
+    vm.sendChatMessage("Secret tactical ping")
+    assertTrue(vm.setDuressPin("9911"))
+    assertTrue(vm.uiState.value.hasDuressPin)
+    assertTrue("Wrong duress PIN must not wipe", !vm.verifyOrTriggerDuressWipe("1234"))
+    assertTrue("Correct duress PIN must wipe", vm.verifyOrTriggerDuressWipe("9911"))
+    assertEquals(0, vm.uiState.value.breadcrumbs.size)
+  }
 }

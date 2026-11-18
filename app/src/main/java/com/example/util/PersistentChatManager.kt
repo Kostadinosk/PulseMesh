@@ -80,7 +80,8 @@ class PersistentChatManager(private val context: Context) {
                             isIncoming = isIncoming,
                             timestamp = item.optLong("timestamp", System.currentTimeMillis()),
                             isDelivered = item.optBoolean("isDelivered", false),
-                            ackedByCallsign = item.optString("ackedByCallsign", "")
+                            ackedByCallsign = item.optString("ackedByCallsign", ""),
+                            expiresAtMs = item.optLong("expiresAtMs", 0L)
                         )
                     )
                 }
@@ -162,7 +163,37 @@ class PersistentChatManager(private val context: Context) {
     }
 
     @Synchronized
+    fun pruneExpiredPackets(nowMs: Long = System.currentTimeMillis()): Int {
+        var removedCount = 0
+        for ((_, list) in memoryCache) {
+            val iter = list.iterator()
+            while (iter.hasNext()) {
+                val pkt = iter.next()
+                if (pkt.expiresAtMs in 1..nowMs) {
+                    iter.remove()
+                    removedCount++
+                }
+            }
+        }
+        if (removedCount > 0) {
+            persistToDisk()
+        }
+        return removedCount
+    }
+
+    @Synchronized
+    fun wipeAllHistoryForDuress() {
+        memoryCache.clear()
+        runCatching {
+            if (historyFile.exists()) historyFile.delete()
+        }
+        seedDefaultChannels()
+        persistToDisk()
+    }
+
+    @Synchronized
     fun getPacketsForThread(threadId: String): List<MeshPacket> {
+        pruneExpiredPackets()
         return memoryCache[threadId]?.toList() ?: emptyList()
     }
 
@@ -237,6 +268,9 @@ class PersistentChatManager(private val context: Context) {
                         put("isDelivered", p.isDelivered)
                         if (p.ackedByCallsign.isNotBlank()) {
                             put("ackedByCallsign", p.ackedByCallsign)
+                        }
+                        if (p.expiresAtMs > 0L) {
+                            put("expiresAtMs", p.expiresAtMs)
                         }
                     }
                     array.put(item)

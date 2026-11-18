@@ -6,15 +6,15 @@
 
 **Off-Grid Peer-to-Peer Android Mesh Messenger, Full-Duplex Voice Communicator & Tactical Offline Map**
 
-[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0)
-[![Platform](https://img.shields.io/badge/Android-7.0%2B%20(API%2024--36)-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0)
+[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1)
+[![Platform](https://img.shields.io/badge/Android-7.0%2B%20(API%2024--36)-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://github.com/Kostadinosk/PulseMesh)
 [![Encryption](https://img.shields.io/badge/Crypto-ECDH%20P--256%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0088E6?style=flat-square)](LICENSE)
 
 [**Live Website**](https://kostadinosk.github.io/PulseMesh/) &bull;
-[**Download Release APK (v1.0)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.0/app-release.apk) &bull;
-[**Download Debug APK**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.0/app-debug.apk) &bull;
+[**Download Release APK (v1.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-release.apk) &bull;
+[**Download Debug APK (v1.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-debug.apk) &bull;
 [**Contact & Field Reports**](https://kostadinosk.github.io/PulseMesh/contact.html) &bull;
 [**Report an Issue**](https://github.com/Kostadinosk/PulseMesh/issues)
 

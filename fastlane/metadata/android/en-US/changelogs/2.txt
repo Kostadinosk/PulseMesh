@@ -1,0 +1,8 @@
+PulseMesh v1.1 Tactical Upgrade Release:
+- Persistent off-grid Background Mesh Relay ForegroundService (WakeLock + MulticastLock)
+- P2P Offline Map Tile Sync over local Wi-Fi Direct / Hotspot mesh
+- Hardware Volume-Down & Headset button PTT (Walkie-Talkie)
+- Wired VHF/UHF radio VOX 1000 Hz pre-key pilot tone bridge
+- Ultrasonic 18.5 kHz tap-to-verify E2EE key fingerprint chirp
+- Auto-Burn message TTL timer (1m / 5m / 1h / 24h) & emergency Duress Wipe PIN
+- Live offline Breadcrumb Trail, GPX import/export, and Step Dead-Reckoning fallback

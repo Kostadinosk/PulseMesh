@@ -186,4 +186,71 @@ object NativeTileMapManager {
         val lat = Math.toDegrees(atan(sinh(Math.PI * (1.0 - 2.0 * tileY / n))))
         return Pair(lat, lon)
     }
+
+    data class CachedTileChunk(
+        val z: Int,
+        val x: Int,
+        val y: Int,
+        val base64Png: String
+    )
+
+    /**
+     * Exports up to [maxTiles] cached PNG map tiles near `(centerLat, centerLon)` for P2P mesh tile beaming.
+     */
+    fun exportCachedTilesNear(
+        context: Context,
+        centerLat: Double,
+        centerLon: Double,
+        zoomLevels: IntRange = 11..14,
+        maxTiles: Int = 16
+    ): List<CachedTileChunk> {
+        val results = mutableListOf<CachedTileChunk>()
+        val seen = HashSet<String>()
+        for (z in zoomLevels) {
+            val (cx, cy) = latLonToSlippyTileInts(centerLat, centerLon, z)
+            for (dx in -1..1) {
+                for (dy in -1..1) {
+                    if (results.size >= maxTiles) break
+                    val tx = cx + dx
+                    val ty = cy + dy
+                    val key = "$z/$tx/$ty"
+                    if (!seen.add(key)) continue
+                    val file = getTileFile(context, z, tx, ty).takeIf { it.exists() && it.length() in 64..65536 }
+                        ?: getLegacyCacheTileFile(context, z, tx, ty).takeIf { it.exists() && it.length() in 64..65536 }
+                    if (file != null) {
+                        runCatching {
+                            val b64 = android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
+                            results.add(CachedTileChunk(z = z, x = tx, y = ty, base64Png = b64))
+                        }
+                    }
+                }
+            }
+        }
+        return results
+    }
+
+    /**
+     * Imports a P2P-beamed PNG map tile into persistent disk cache (`osm_tiles/$z/$x/$y.png`) and memory LRU cache.
+     */
+    fun importCachedTileChunk(
+        context: Context,
+        z: Int,
+        x: Int,
+        y: Int,
+        base64Png: String
+    ): Boolean {
+        if (z !in 0..19 || base64Png.isBlank()) return false
+        return runCatching {
+            val bytes = android.util.Base64.decode(base64Png.trim(), android.util.Base64.DEFAULT)
+            if (bytes.size < 32) return false
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return false
+            val targetFile = getTileFile(context, z, x, y)
+            targetFile.parentFile?.mkdirs()
+            FileOutputStream(targetFile).use { out ->
+                out.write(bytes)
+            }
+            tileCache.put("$z/$x/$y", bmp.asImageBitmap())
+            true
+        }.getOrDefault(false)
+    }
 }
