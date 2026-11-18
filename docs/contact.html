@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact &amp; Hardware Reports — PulseMesh</title>
+  <meta name="description" content="Get in touch with the PulseMesh developer, submit Android hardware test results, or report bugs." />
+  <meta name="theme-color" content="#041320" />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <style>
+    :root {
+      --bg-canvas: #041320;
+      --bg-gradient-1: #072238;
+      --bg-gradient-2: #041320;
+      --glass-card: rgba(10, 34, 54, 0.80);
+      --glass-surface: rgba(14, 45, 69, 0.74);
+      --glass-highlight: rgba(255, 255, 255, 0.14);
+      --border-crystal: rgba(60, 184, 240, 0.42);
+      --border-bright: rgba(199, 240, 255, 0.65);
+      --text-primary: #F0F9FF;
+      --text-secondary: #9AD4F5;
+      --text-muted: #6BA3C7;
+      --accent-cyan: #38CFFF;
+      --accent-cyan-dim: rgba(8, 62, 92, 0.55);
+      --accent-emerald: #19E68C;
+      --accent-emerald-dim: rgba(6, 78, 53, 0.55);
+      --accent-amber: #FFB02E;
+      --accent-amber-dim: rgba(82, 50, 0, 0.55);
+      --shadow-card: 0 20px 50px rgba(0, 8, 18, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.22);
+      --orb-glow-1: rgba(56, 207, 255, 0.22);
+      --orb-glow-2: rgba(25, 230, 140, 0.16);
+      --code-bg: rgba(3, 12, 22, 0.85);
+      --input-bg: rgba(4, 19, 32, 0.78);
+    }
+
+    html[data-theme="light"] {
+      --bg-canvas: #D6F2FF;
+      --bg-gradient-1: #EBF9FF;
+      --bg-gradient-2: #C2E9FF;
+      --glass-card: rgba(243, 251, 255, 0.86);
+      --glass-surface: rgba(248, 253, 255, 0.82);
+      --glass-highlight: rgba(255, 255, 255, 0.85);
+      --border-crystal: rgba(100, 187, 232, 0.65);
+      --border-bright: #FFFFFF;
+      --text-primary: #072A44;
+      --text-secondary: #215273;
+      --text-muted: #4C7C99;
+      --accent-cyan: #0088E6;
+      --accent-cyan-dim: #D4F0FF;
+      --accent-emerald: #0BA354;
+      --accent-emerald-dim: #D2FAE6;
+      --accent-amber: #E07D00;
+      --accent-amber-dim: #FEF3C7;
+      --shadow-card: 0 16px 40px rgba(7, 42, 68, 0.12), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+      --orb-glow-1: rgba(0, 136, 230, 0.20);
+      --orb-glow-2: rgba(11, 163, 84, 0.16);
+      --code-bg: rgba(7, 42, 68, 0.08);
+      --input-bg: rgba(255, 255, 255, 0.88);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-canvas);
+      background-image:
+        radial-gradient(circle at 15% 15%, var(--orb-glow-1), transparent 42%),
+        radial-gradient(circle at 85% 25%, var(--orb-glow-2), transparent 40%),
+        linear-gradient(160deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    a:hover {
+      opacity: 0.9;
+    }
+
+    .container {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    header.navbar {
+      position: sticky;
+      top: 14px;
+      z-index: 100;
+      margin: 14px auto 0;
+      max-width: 1160px;
+      padding: 0 24px;
+    }
+
+    .navbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-radius: 999px;
+      background: var(--glass-card);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-crystal);
+      box-shadow: var(--shadow-card);
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .brand img {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      border: 1px solid var(--border-bright);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-emerald-dim);
+      color: var(--accent-emerald);
+      border: 1px solid var(--accent-emerald);
+      letter-spacing: 0.04em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      color: var(--text-primary);
+    }
+
+    .theme-btn {
+      cursor: pointer;
+      border: 1px solid var(--border-crystal);
+      background: var(--glass-surface);
+      color: var(--text-primary);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: inset 0 1px 0 var(--glass-highlight);
+    }
+
+    .page-header {
+      padding: 56px 0 32px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 13px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      background: var(--accent-cyan-dim);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border-crystal);
+      margin-bottom: 14px;
+    }
+
+    .page-header h1 {
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.12;
+      font-weight: 850;
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+    }
+
+    .page-header h1 span.gradient-text {
+      background: linear-gradient(95deg, var(--accent-cyan), var(--accent-emerald));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .page-header p {
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      max-width: 680px;
+    }
+
+    .contact-layout {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 24px;
+      padding-bottom: 44px;
+    }
+
+    .channel-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .glass-card {
+      background: var(--glass-card);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-crystal);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-tag {
+      display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      background: var(--accent-cyan-dim);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border-crystal);
+    }
+
+    .card-tag.emerald {
+      background: var(--accent-emerald-dim);
+      color: var(--accent-emerald);
+    }
+
+    .card-tag.amber {
+      background: var(--accent-amber-dim);
+      color: var(--accent-amber);
+    }
+
+    .glass-card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 6px;
+      font-weight: 780;
+    }
+
+    .glass-card p {
+      color: var(--text-secondary);
+      font-size: 0.93rem;
+      margin-bottom: 14px;
+    }
+
+    .channel-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 13px;
+      font-weight: 750;
+      font-size: 0.9rem;
+      background: var(--glass-surface);
+      border: 1px solid var(--border-crystal);
+      color: var(--text-primary);
+    }
+
+    .channel-link:hover {
+      border-color: var(--border-bright);
+      transform: translateY(-1px);
+    }
+
+    /* Form Styling */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 13px;
+      border: 1px solid var(--border-crystal);
+      background: var(--input-bg);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.94rem;
+      outline: none;
+      transition: border-color 0.16s ease;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    textarea.form-control {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 14px;
+      font-weight: 750;
+      font-size: 0.93rem;
+      border: 1px solid var(--border-bright);
+      cursor: pointer;
+      transition: transform 0.16s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #47D7FF 0%, #0088E6 100%);
+      color: #02111D;
+      box-shadow: 0 10px 24px rgba(0, 136, 230, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.75);
+    }
+
+    .btn-secondary {
+      background: var(--glass-surface);
+      color: var(--text-primary);
+      border-color: var(--border-crystal);
+    }
+
+    .status-banner {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      font-weight: 650;
+      color: var(--accent-emerald);
+      display: none;
+    }
+
+    footer {
+      margin-top: 28px;
+      padding: 36px 0 48px;
+      border-top: 1px solid var(--border-crystal);
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    @media (max-width: 880px) {
+      .contact-layout,
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <div class="navbar-inner">
+      <a href="index.html" class="brand">
+        <img src="assets/icon.png" alt="PulseMesh Icon" />
+        <span>PulseMesh</span>
+        <span class="brand-badge">v1.0</span>
+      </a>
+      <nav class="nav-links">
+        <a href="index.html#features">Capabilities</a>
+        <a href="index.html#transports">Transports</a>
+        <a href="index.html#security">Security</a>
+        <a href="index.html#build">Build &amp; Install</a>
+        <a href="contact.html" class="active">Contact</a>
+        <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener">GitHub</a>
+        <button class="theme-btn" id="themeToggle" type="button" aria-label="Toggle Frutiger Aero Theme">
+          <span id="themeLabel">☀ Daylight Aero</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="page-header">
+      <span class="pill">● Developer &amp; Community Comms</span>
+      <h1>Contact &amp; <span class="gradient-text">Hardware Field Reports</span></h1>
+      <p>
+        Have BLE mesh range benchmarks, OEM Bluetooth stack observations, feature suggestions, or questions?
+        Reach out directly on social media or submit a structured report to GitHub.
+      </p>
+    </section>
+
+    <section class="contact-layout">
+      <!-- Left Column: Direct Channels -->
+      <div class="channel-stack">
+        <article class="glass-card">
+          <span class="card-tag emerald">GitHub Repository</span>
+          <h3>Bug Reports &amp; Technical Issues</h3>
+          <p>
+            Open an issue on the official PulseMesh repository for bug reports, pull requests, and RF transport diagnostics.
+          </p>
+          <a class="channel-link" href="https://github.com/Kostadinosk/PulseMesh/issues" target="_blank" rel="noopener">
+            → github.com/Kostadinosk/PulseMesh/issues
+          </a>
+        </article>
+
+        <article class="glass-card">
+          <span class="card-tag">Instagram</span>
+          <h3>Direct Message on Instagram</h3>
+          <p>
+            Reach Konstantinos directly for quick questions, collaboration, or project updates.
+          </p>
+          <a class="channel-link" href="https://www.instagram.com/kkourtis_/" target="_blank" rel="noopener">
+            → @kkourtis_ on Instagram
+          </a>
+        </article>
+
+        <article class="glass-card">
+          <span class="card-tag amber">TikTok</span>
+          <h3>Demos &amp; Hardware Builds on TikTok</h3>
+          <p>
+            Follow hardware experiments, off-grid mesh tests, and embedded Android builds.
+          </p>
+          <a class="channel-link" href="https://www.tiktok.com/@raspberrypi500" target="_blank" rel="noopener">
+            → @raspberrypi500 on TikTok
+          </a>
+        </article>
+      </div>
+
+      <!-- Right Column: Interactive Report & Contact Builder -->
+      <div class="glass-card">
+        <span class="card-tag">Quick Dispatch</span>
+        <h3>Prepare a Report or Message</h3>
+        <p>
+          Fill out the details below to open a pre-formatted GitHub Issue in one click, or copy the report to paste into an Instagram / TikTok DM.
+        </p>
+
+        <form id="contactForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="topic">Topic</label>
+              <select id="topic" class="form-control">
+                <option value="Hardware Field Test">Hardware / SoC Field Test</option>
+                <option value="Bug Report">Bug Report</option>
+                <option value="Feature Request">Feature Request</option>
+                <option value="General Inquiry">General Inquiry</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="handle">Your Name / Handle (Optional)</label>
+              <input id="handle" type="text" class="form-control" placeholder="e.g. @operator42" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device">Phone Model / SoC (Optional)</label>
+              <input id="device" type="text" class="form-control" placeholder="e.g. Pixel 9 Pro / OnePlus 13" />
+            </div>
+            <div class="form-group">
+              <label for="androidVer">Android Version &amp; Transport</label>
+              <input id="androidVer" type="text" class="form-control" placeholder="e.g. Android 16 • BLE + Hotspot" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="subject">Subject</label>
+            <input id="subject" type="text" class="form-control" placeholder="Short summary of your report or question" required />
+          </div>
+
+          <div class="form-group">
+            <label for="message">Message / Diagnostic Details</label>
+            <textarea id="message" class="form-control" placeholder="Describe what you tested, observed range/RSSI, or steps to reproduce..." required></textarea>
+          </div>
+
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary">
+              ↗ Open Pre-Filled GitHub Issue
+            </button>
+            <button type="button" id="copyBtn" class="btn btn-secondary">
+              📋 Copy Formatted Message for DM
+            </button>
+          </div>
+          <div id="copyStatus" class="status-banner">
+            ✓ Copied formatted message to clipboard — ready to paste on Instagram, TikTok, or GitHub!
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-row">
+      <div>
+        <strong>PulseMesh</strong> (<code>com.KostadinosK.pulsemesh</code>) &bull; Released under the <a href="https://github.com/Kostadinosk/PulseMesh/blob/main/LICENSE">MIT License</a>.
+      </div>
+      <div>
+        <a href="index.html">Home</a> &bull;
+        <a href="contact.html">Contact</a> &bull;
+        <a href="https://github.com/Kostadinosk/PulseMesh">Repository</a> &bull;
+        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0">Release v1.0</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+      const label = document.getElementById("themeLabel");
+      const saved = localStorage.getItem("pulsemesh-theme");
+      if (saved === "light" || saved === "dark") {
+        root.setAttribute("data-theme", saved);
+      }
+      function syncLabel() {
+        const current = root.getAttribute("data-theme") || "dark";
+        label.textContent = current === "dark" ? "☀ Daylight Aero" : "☾ Dark Frutiger Aero";
+      }
+      syncLabel();
+      btn.addEventListener("click", function () {
+        const next = (root.getAttribute("data-theme") === "dark") ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem("pulsemesh-theme", next);
+        syncLabel();
+      });
+
+      function buildReport() {
+        const topic = document.getElementById("topic").value;
+        const handle = document.getElementById("handle").value.trim() || "Anonymous Operator";
+        const device = document.getElementById("device").value.trim() || "N/A";
+        const androidVer = document.getElementById("androidVer").value.trim() || "N/A";
+        const subject = document.getElementById("subject").value.trim() || topic;
+        const message = document.getElementById("message").value.trim();
+
+        const title = "[" + topic + "] " + subject;
+        const body = [
+          "### PulseMesh " + topic,
+          "- **From:** " + handle,
+          "- **Device / SoC:** " + device,
+          "- **Android / Transport:** " + androidVer,
+          "- **Package:** `com.KostadinosK.pulsemesh` (v1.0)",
+          "",
+          "### Details",
+          message || "(No details provided)"
+        ].join("\n");
+        return { title: title, body: body };
+      }
+
+      document.getElementById("contactForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const r = buildReport();
+        const url = "https://github.com/Kostadinosk/PulseMesh/issues/new?title=" +
+          encodeURIComponent(r.title) + "&body=" + encodeURIComponent(r.body);
+        window.open(url, "_blank", "noopener");
+      });
+
+      document.getElementById("copyBtn").addEventListener("click", function () {
+        const r = buildReport();
+        const status = document.getElementById("copyStatus");
+        navigator.clipboard.writeText(r.title + "\n\n" + r.body).then(function () {
+          status.style.display = "block";
+          setTimeout(function () { status.style.display = "none"; }, 4000);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
