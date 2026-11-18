@@ -105,8 +105,8 @@ Tested PulseMesh on a new phone model, custom ROM, or long-range environment? Sh
 
 - **Website Contact & Report Builder**: [kostadinosk.github.io/PulseMesh/contact.html](https://kostadinosk.github.io/PulseMesh/contact.html)
 - **GitHub Issues**: [github.com/Kostadinosk/PulseMesh/issues](https://github.com/Kostadinosk/PulseMesh/issues)
-- **Instagram**: [@kkourtis_](https://www.instagram.com/pulsemesh_app/)
-- **TikTok**: [@raspberrypi500](https://www.tiktok.com/@pulsemesh.app)
+- **Instagram**: [@pulsemesh_app](https://www.instagram.com/pulsemesh_app/)
+- **TikTok**: [@pulsemesh.app](https://www.tiktok.com/@pulsemesh.app)
 
 ---
 
