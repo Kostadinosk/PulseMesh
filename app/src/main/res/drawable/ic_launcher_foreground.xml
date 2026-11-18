@@ -5,49 +5,102 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer Cyan Hexagonal Mesh Shield -->
+    <!-- Outer Octagonal Tactical Bezel -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M54,24L79.98,39L79.98,69L54,84L28.02,69L28.02,39Z"
-        android:strokeWidth="3.2"
-        android:strokeColor="#00E5FF"
-        android:strokeLineJoin="round" />
+        android:fillAlpha="0.32"
+        android:fillColor="#04182B"
+        android:pathData="M42.5,22L65.5,22L86,42.5L86,65.5L65.5,86L42.5,86L22,65.5L22,42.5Z"
+        android:strokeColor="#38CFFF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.8" />
 
-    <!-- Mesh Spokes Connecting Corner Nodes to Core -->
+    <!-- Warm Tactical Amber RF Signal Arcs (Top & Bottom Brackets) -->
     <path
         android:fillColor="#00000000"
-        android:pathData="M54,24L54,42M79.98,39L64.4,48M79.98,69L64.4,60M54,84L54,66M28.02,69L43.6,60M28.02,39L43.6,48"
-        android:strokeWidth="2.0"
-        android:strokeColor="#00E676"
-        android:strokeAlpha="0.55"
-        android:strokeLineCap="round" />
-
-    <!-- Bold Emerald ECG / RF Pulse Waveform Across Center -->
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M31,54L43,54L48.5,40L54,68L59.5,45L64,54L77,54"
-        android:strokeWidth="4.2"
-        android:strokeColor="#00E676"
+        android:pathData="M37,29C47,23 61,23 71,29"
+        android:strokeColor="#FFB02E"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:strokeWidth="3.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M37,79C47,85 61,85 71,79"
+        android:strokeColor="#FFB02E"
+        android:strokeLineCap="round"
+        android:strokeWidth="3.0" />
 
-    <!-- 6 High-Contrast Corner Node Beacons -->
+    <!-- Inner Diamond Mesh Constellation Lattice -->
     <path
-        android:fillColor="#00E5FF"
-        android:pathData="M54,24m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+        android:fillColor="#00000000"
+        android:pathData="M54,28L80,54L54,80L28,54Z"
+        android:strokeAlpha="0.72"
+        android:strokeColor="#5EE2FF"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.9" />
     <path
-        android:fillColor="#00E676"
-        android:pathData="M79.98,39m-3.4,0a3.4,3.4 0,1 1,6.8 0a3.4,3.4 0,1 1,-6.8 0" />
+        android:fillColor="#00000000"
+        android:pathData="M35,35L73,73M73,35L35,73"
+        android:strokeAlpha="0.45"
+        android:strokeColor="#19E68C"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.6" />
+
+    <!-- Bold Emerald Outer Glow Halo for Pulse Waveform -->
     <path
-        android:fillColor="#00E5FF"
-        android:pathData="M79.98,69m-3.4,0a3.4,3.4 0,1 1,6.8 0a3.4,3.4 0,1 1,-6.8 0" />
+        android:fillColor="#00000000"
+        android:pathData="M24,54L37,54L43.5,35L51,73L58.5,31L65,63L70.5,54L84,54"
+        android:strokeAlpha="0.48"
+        android:strokeColor="#19E68C"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="7.6" />
+
+    <!-- High-Amplitude Emerald + Ice-White Core Pulse Waveform -->
     <path
-        android:fillColor="#00E676"
-        android:pathData="M54,84m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+        android:fillColor="#00000000"
+        android:pathData="M24,54L37,54L43.5,35L51,73L58.5,31L65,63L70.5,54L84,54"
+        android:strokeColor="#19E68C"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4.4" />
     <path
-        android:fillColor="#00E5FF"
-        android:pathData="M28.02,69m-3.4,0a3.4,3.4 0,1 1,6.8 0a3.4,3.4 0,1 1,-6.8 0" />
+        android:fillColor="#00000000"
+        android:pathData="M26,54L37,54L43.5,35L51,73L58.5,31L65,63L70.5,54L82,54"
+        android:strokeColor="#F0F9FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.1" />
+
+    <!-- 4 Diagonal Satellite Mesh Nodes (Amber & Cyan) -->
     <path
-        android:fillColor="#00E676"
-        android:pathData="M28.02,39m-3.4,0a3.4,3.4 0,1 1,6.8 0a3.4,3.4 0,1 1,-6.8 0" />
+        android:fillColor="#FFB02E"
+        android:pathData="M35,35m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2" />
+    <path
+        android:fillColor="#38CFFF"
+        android:pathData="M73,35m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2" />
+    <path
+        android:fillColor="#38CFFF"
+        android:pathData="M35,73m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2" />
+    <path
+        android:fillColor="#FFB02E"
+        android:pathData="M73,73m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2" />
+
+    <!-- 2 Cardinal Relay Beacons (Top & Bottom) -->
+    <path
+        android:fillColor="#19E68C"
+        android:pathData="M54,24m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0"
+        android:strokeColor="#04182B"
+        android:strokeWidth="1.2" />
+    <path
+        android:fillColor="#19E68C"
+        android:pathData="M54,84m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0"
+        android:strokeColor="#04182B"
+        android:strokeWidth="1.2" />
 </vector>

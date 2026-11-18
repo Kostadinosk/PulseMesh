@@ -1,15 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Deep Obsidian Carbon Base -->
+
+    <!-- Deep Midnight Sapphire to Aurora Teal Gradient Base -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="96"
+                android:endY="98"
+                android:startX="12"
+                android:startY="10"
+                android:type="linear">
+                <item
+                    android:color="#031222"
+                    android:offset="0.0" />
+                <item
+                    android:color="#082D4F"
+                    android:offset="0.52" />
+                <item
+                    android:color="#05476E"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Luminous Central Aqua Radar Core Glow -->
+    <path android:pathData="M54,10A44,44 0,1 1,10 54A44,44 0,0 1,54 10Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="50"
+                android:gradientRadius="44"
+                android:type="radial">
+                <item
+                    android:color="#4D17A2E8"
+                    android:offset="0.0" />
+                <item
+                    android:color="#1F0B5E8A"
+                    android:offset="0.65" />
+                <item
+                    android:color="#00031222"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Frutiger Aero Top Glass Specular Canopy -->
     <path
-        android:fillColor="#06090E"
-        android:pathData="M0,0h108v108h-108z" />
-    <!-- Subtle Outer Tactical Ring -->
+        android:fillAlpha="0.18"
+        android:fillColor="#B8E9FF"
+        android:pathData="M0,0h108v44C84,54 24,54 0,44Z" />
+
+    <!-- Tactical Radar Range Rings & Crosshairs -->
     <path
-        android:fillColor="#0D1622"
-        android:pathData="M54,14A40,40 0,1 1,14 54A40,40 0,0 1,54 14Z" />
+        android:fillColor="#00000000"
+        android:pathData="M54,17A37,37 0,1 1,17 54A37,37 0,0 1,54 17Z"
+        android:strokeAlpha="0.28"
+        android:strokeColor="#49D3FF"
+        android:strokeWidth="1.2" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,28A26,26 0,1 1,28 54A26,26 0,0 1,54 28Z"
+        android:strokeAlpha="0.22"
+        android:strokeColor="#19E68C"
+        android:strokeWidth="1.0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,12L54,96M12,54L96,54"
+        android:strokeAlpha="0.14"
+        android:strokeColor="#7CE0FF"
+        android:strokeWidth="0.9" />
 </vector>
