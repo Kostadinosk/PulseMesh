@@ -1,0 +1,5 @@
+Initial v1.0 release of PulseMesh:
+- 9-layer off-grid transport engine (BLE 1M, BLE Coded PHY, BT Classic RFCOMM, Wi-Fi Direct / Auto-Hotspot UDP & TCP, mDNS, IPv6 link-local, USB/Ethernet tethering, Acoustic AFSK modem)
+- Multi-hop store-and-forward DTN messaging with ECDH + AES-256-GCM end-to-end encryption
+- Full-duplex voice calls and Walkie-Talkie PTT over Wi-Fi Direct / Hotspot and BLE GATT
+- Offline Web Mercator tile map downloader, shared tactical waypoints, and compass/barometer HUD
