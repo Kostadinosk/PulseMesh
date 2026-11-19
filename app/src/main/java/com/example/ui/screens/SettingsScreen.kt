@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Konstantinos Kourtis
+// SPDX-License-Identifier: GPL-3.0-only
+
 package com.example.ui.screens
 
 import androidx.compose.animation.*
@@ -85,9 +88,11 @@ fun SettingsScreen(
     onTriggerDuressWipe: (String) -> Boolean = { false },
     onExportGpx: () -> String = { "" },
     onImportGpx: (String) -> Int = { 0 },
+    onToggleWebPortal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val cardShape = tacticalCardShape(state.isSimpleMode, p.isOriginal, p.isAero)
     val btnShape = tacticalButtonShape(state.isSimpleMode, p.isOriginal, p.isAero)
     val isLightMode = state.appTheme == AppTheme.TACTICAL_LIGHT
@@ -799,6 +804,113 @@ fun SettingsScreen(
                             ),
                             modifier = Modifier.testTag("toggle_hotspot_popup_switch")
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // v1.2 Wi-Fi Direct Embedded Web Portal Card (Visible in both Simple & Pro modes)
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway.copy(alpha = 0.55f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "v1.2 WI-FI DIRECT WEB PORTAL",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                )
+                                Text(
+                                    text = if (state.webPortalStatus.isRunning) {
+                                        "ACTIVE • ${state.webPortalStatus.activeClientCount} browser client(s) linked"
+                                    } else {
+                                        "Auto-hosts the full PulseMesh Web Node when Wi-Fi Direct / Hotspot starts"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = p.textSecondary,
+                                        fontSize = 10.sp
+                                    )
+                                )
+                            }
+                            Switch(
+                                checked = state.webPortalStatus.isRunning,
+                                onCheckedChange = { onToggleWebPortal() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = EmeraldMesh,
+                                    uncheckedThumbColor = p.textMuted,
+                                    uncheckedTrackColor = p.card
+                                ),
+                                modifier = Modifier.testTag("toggle_web_portal_switch")
+                            )
+                        }
+
+                        if (state.webPortalStatus.isRunning && state.webPortalStatus.portalUrl.isNotBlank()) {
+                            Surface(
+                                color = p.background,
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldMeshDim),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = state.webPortalStatus.portalUrl,
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                color = EmeraldMesh,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        )
+                                        Text(
+                                            text = "Join this phone's Wi-Fi Direct / Hotspot & open URL in any browser (zero internet)",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                color = p.textSecondary,
+                                                fontSize = 9.sp
+                                            )
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                            cm?.setPrimaryClip(
+                                                android.content.ClipData.newPlainText(
+                                                    "PulseMesh Web Portal URL",
+                                                    state.webPortalStatus.portalUrl
+                                                )
+                                            )
+                                        }
+                                    ) {
+                                        Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -2214,6 +2326,20 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // About & GNU GPL-3.0 License Footer Notice
+        Text(
+            text = "PulseMesh v1.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            style = MaterialTheme.typography.labelSmall.copy(
+                color = p.textMuted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp
+            ),
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(vertical = 8.dp)
+                .testTag("about_gpl_footer")
+        )
     }
 
     // Modal: 75+ Phone Profile Picker

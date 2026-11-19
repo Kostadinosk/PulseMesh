@@ -1,14 +1,15 @@
-PulseMesh is an open-source, zero-infrastructure peer-to-peer communication suite for Android devices operating where cellular and internet networks are unavailable, degraded, or untrusted.
+PulseMesh is a free, open-source, zero-infrastructure peer-to-peer communication app for Android devices operating where cellular and internet networks are unavailable, degraded, or untrusted.
 
-It uses the radios already built into standard Android hardware—Bluetooth Low Energy (BLE 1M & Coded PHY), Classic Bluetooth RFCOMM, Wi-Fi Direct & local hotspot subnets, USB/Ethernet tethering, and an Acoustic AFSK audio modem—to discover nearby nodes in under a second, route multi-hop encrypted text and voice traffic, and synchronize GPS waypoints on an offline Web Mercator tile map.
+It uses the radios already built into standard Android hardware: Bluetooth Low Energy (BLE 1M and Coded PHY), Classic Bluetooth RFCOMM, Wi-Fi Direct and local hotspot/LAN UDP subnets, USB/Ethernet tethering, and an Acoustic AFSK audio modem to discover nearby nodes, route multi-hop encrypted messages and voice traffic, and share locations on an offline map.
 
 Key Features:
-• Multi-Hop DTN Messaging: Broadcast channels, ECDH group chats, and direct messages with TTL=7 flood routing, packet deduplication, delivery ACKs, and a persistent Delay-Tolerant Networking (DTN) store-and-forward outbox.
-• End-to-End Cryptography: ECDH P-256 / X25519 key agreement, HKDF-SHA256 ratcheting, AES-256-GCM authenticated encryption, safety number verification, and encrypted @username key vaults (PMU2 / PMB1).
-• Full-Duplex Voice & Walkie-Talkie (PTT): Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice streaming over local Wi-Fi/Hotspot UDP or pure BLE GATT, plus half-duplex echo ducking and voicemail capture.
+• Multi-Hop BLE & UDP Mesh Routing: Broadcast channels, multi-mesh group chats, and direct messages with TTL-7 flood routing, packet deduplication, delivery ACKs, and a Delay-Tolerant Networking (DTN) store-and-forward outbox.
+• End-to-End Encryption (E2EE): ECDH P-256 / X25519 key agreement, HKDF-SHA256 ratcheting, AES-256-GCM authenticated encryption, safety number verification, and encrypted @username key vaults.
+• Voice & Walkie-Talkie (PTT): 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice/PTT over local Wi-Fi/Hotspot UDP or BLE GATT, plus half-duplex echo ducking and voicemail capture.
+• Offline OpenStreetMap Tactical Map (EPSG:3857): Regional OpenStreetMap Web Mercator tile downloader with local disk caching, shared tactical pins (RALLY, HAZARD, SUPPLY, SOS), live compass bearing HUD, and barometric altitude tracking.
+• 3-State Location Privacy: Per-contact and mesh location sharing modes (OFF, APPROXIMATE grid fuzzing, PRECISE GPS) so coordinates are never broadcast unintentionally.
 • Acoustic AFSK Audio Modem: Air-gapped data transmission over phone speakers and microphones (1200 / 2200 Hz Bell 202 tones) with Reed-Solomon forward error correction.
-• Offline Tactical Map (EPSG:3857): Regional Web Mercator tile pyramid downloader with local disk caching, shared tactical pins (RALLY, HAZARD, SUPPLY, SOS), live compass bearing HUD, and barometric altitude tracking.
-• Strict Off-Grid Mode: When Off-Grid Mode is enabled, all HTTP and external internet connections are hard-blocked at the transport layer.
-• 100% Free & Open Source Software (FOSS): Zero proprietary Google Play Services, Firebase, or analytics SDKs.
+• Embedded Wi-Fi Direct Web Portal: Automatically hosts a self-contained offline PulseMesh Web Node over Wi-Fi Direct (192.168.49.1:8080) and Local Hotspot (192.168.43.1:8080) so nearby laptops, iPhones, or browsers join the live mesh, cached offline map tiles, waypoints, and PTT audio with zero internet.
+• Strict Off-Grid Mode & 100% FOSS: Hard-blocks external HTTP connections when Off-Grid Mode is enabled, with zero Google Play Services, Firebase, or analytics SDKs.
 
-Note: PulseMesh (com.KostadinosK.pulsemesh) is an independent open-source off-grid mesh networking project by Konstantinos Kourtis and is not affiliated with pulsemesh.io or any commercial entity.
+Licensed under GNU GPL-3.0-only (see LICENSE and TRADEMARK.md). PulseMesh (com.KostadinosK.pulsemesh) is an independent open-source project by Konstantinos Kourtis and is not affiliated with pulsemesh.io or any commercial entity.

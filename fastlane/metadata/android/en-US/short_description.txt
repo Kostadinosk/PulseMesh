@@ -1,1 +1,1 @@
-Off-grid P2P Android mesh messenger, full-duplex voice & offline tactical map
+Off-grid tactical BLE & Wi-Fi mesh chat, E2EE groups, voice & offline maps.

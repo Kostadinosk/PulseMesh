@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Konstantinos Kourtis
+// SPDX-License-Identifier: GPL-3.0-only
+
 package com.example.util
 
 import android.content.Context

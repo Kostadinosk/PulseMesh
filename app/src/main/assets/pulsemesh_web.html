@@ -1,0 +1,2416 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PulseMesh Web Node — Off-Grid &amp; Hybrid Mesh Client (v1.2)</title>
+  <meta name="description" content="PulseMesh browser mesh client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid channels." />
+  <meta name="theme-color" content="#041320" />
+  <link rel="icon" type="image/png" href="../assets/pulsemesh-logo.png" onerror="this.href='/api/icon.png'" />
+  <style>
+    :root {
+      --bg-canvas: #041320;
+      --bg-grad-1: #072238;
+      --bg-grad-2: #030e19;
+      --glass-card: rgba(10, 34, 54, 0.86);
+      --glass-surface: rgba(14, 45, 69, 0.78);
+      --glass-input: rgba(5, 19, 32, 0.88);
+      --border: rgba(60, 184, 240, 0.36);
+      --border-bright: rgba(199, 240, 255, 0.58);
+      --text-primary: #F0F9FF;
+      --text-secondary: #9AD4F5;
+      --text-muted: #6BA3C7;
+      --cyan: #38CFFF;
+      --cyan-dim: rgba(8, 62, 92, 0.58);
+      --emerald: #19E68C;
+      --emerald-dim: rgba(6, 78, 53, 0.58);
+      --amber: #FFB02E;
+      --amber-dim: rgba(82, 50, 0, 0.58);
+      --red: #FF4D6D;
+      --red-dim: rgba(98, 12, 32, 0.68);
+      --shadow: 0 14px 36px rgba(0, 8, 18, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+    }
+
+    html[data-theme="light"] {
+      --bg-canvas: #D6F2FF;
+      --bg-grad-1: #EBF9FF;
+      --bg-grad-2: #C2E9FF;
+      --glass-card: rgba(243, 251, 255, 0.92);
+      --glass-surface: rgba(248, 253, 255, 0.88);
+      --glass-input: rgba(255, 255, 255, 0.94);
+      --border: rgba(70, 165, 220, 0.55);
+      --border-bright: #FFFFFF;
+      --text-primary: #072A44;
+      --text-secondary: #1E4E6E;
+      --text-muted: #4C7C99;
+      --cyan: #0088E6;
+      --cyan-dim: #D4F0FF;
+      --emerald: #0BA354;
+      --emerald-dim: #D2FAE6;
+      --amber: #D97706;
+      --amber-dim: #FEF3C7;
+      --red: #D81B4A;
+      --red-dim: #FFE4EA;
+      --shadow: 0 10px 28px rgba(7, 42, 68, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--sans);
+      color: var(--text-primary);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(56, 207, 255, 0.18), transparent 40%),
+        radial-gradient(circle at 88% 20%, rgba(25, 230, 140, 0.14), transparent 38%),
+        linear-gradient(160deg, var(--bg-grad-1) 0%, var(--bg-grad-2) 100%);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* SOS Banner */
+    .sos-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 14px;
+      background: linear-gradient(90deg, #b91c1c, #ff1744, #b91c1c);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      z-index: 50;
+    }
+    .sos-banner.active { display: flex; }
+    .sos-banner button {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Top Bar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--glass-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      z-index: 40;
+      flex-wrap: wrap;
+    }
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+    .brand-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 10px var(--emerald);
+      flex-shrink: 0;
+    }
+    .brand-dot.connecting { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+    .brand-dot.offline { background: var(--red); box-shadow: 0 0 10px var(--red); }
+    .callsign-title {
+      font-family: var(--mono);
+      font-weight: 800;
+      font-size: 13px;
+      color: var(--emerald);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .version-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--cyan-dim);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: var(--glass-surface);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+    .pill.emerald { border-color: var(--emerald); background: var(--emerald-dim); color: var(--emerald); }
+    .pill.cyan { border-color: var(--cyan); background: var(--cyan-dim); color: var(--cyan); }
+    .pill.amber { border-color: var(--amber); background: var(--amber-dim); color: var(--amber); }
+    .pill.red { border-color: var(--red); background: var(--red-dim); color: var(--red); cursor: pointer; }
+    .icon-btn {
+      background: var(--glass-surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .icon-btn:hover { border-color: var(--cyan); }
+
+    /* Main Workspace */
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .tab-view {
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .tab-view.active { display: flex; }
+
+    /* Bottom Navigation */
+    .bottom-nav {
+      display: flex;
+      align-items: stretch;
+      justify-content: space-around;
+      background: var(--glass-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      padding: 4px 6px env(safe-area-inset-bottom, 4px);
+      z-index: 40;
+    }
+    .nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 6px 4px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 10px;
+      transition: all 0.15s ease;
+    }
+    .nav-btn .ico { font-size: 16px; line-height: 1; }
+    .nav-btn.active {
+      color: var(--cyan);
+      background: var(--cyan-dim);
+      box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    /* ===================== TAB 1: TACTICAL MAP ===================== */
+    #tab-map { position: relative; flex-direction: column; }
+    #mapCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    #mapCanvas:active { cursor: grabbing; }
+    .map-hud-top {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .hud-box {
+      pointer-events: auto;
+      background: var(--glass-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      box-shadow: var(--shadow);
+    }
+    .map-controls {
+      position: absolute;
+      right: 12px;
+      bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .map-fab {
+      background: var(--glass-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+    .map-fab:hover { border-color: var(--cyan); color: var(--cyan); }
+    .map-fab.emerald { border-color: var(--emerald); color: var(--emerald); }
+
+    /* ===================== TAB 2: CHAT ===================== */
+    #tab-chat { flex-direction: row; }
+    .chat-sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--glass-surface);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .thread-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(60, 184, 240, 0.14);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: background 0.14s ease;
+    }
+    .thread-item:hover { background: rgba(56, 207, 255, 0.1); }
+    .thread-item.active {
+      background: var(--cyan-dim);
+      border-left: 3px solid var(--cyan);
+    }
+    .thread-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .thread-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-e2ee {
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--emerald-dim);
+      color: var(--emerald);
+      border: 1px solid var(--emerald);
+    }
+
+    .chat-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .chat-header {
+      padding: 10px 14px;
+      background: var(--glass-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .chat-header-info h2 { font-size: 14px; font-weight: 800; }
+    .chat-header-info p { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+    .mobile-threads-btn {
+      display: none;
+      background: var(--glass-surface);
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .messages-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg-bubble {
+      max-width: 82%;
+      padding: 9px 13px;
+      border-radius: 14px;
+      background: var(--glass-card);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      align-self: flex-start;
+      word-break: break-word;
+    }
+    .msg-bubble.self {
+      align-self: flex-end;
+      background: var(--cyan-dim);
+      border-color: var(--cyan);
+    }
+    .msg-bubble.sos {
+      background: var(--red-dim);
+      border-color: var(--red);
+    }
+    .msg-bubble.waypoint {
+      background: var(--emerald-dim);
+      border-color: var(--emerald);
+    }
+    .msg-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+    .msg-sender { font-weight: 800; color: var(--emerald); }
+    .msg-bubble.self .msg-sender { color: var(--cyan); }
+    .msg-text { font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; }
+    .msg-img {
+      max-width: 220px;
+      max-height: 220px;
+      border-radius: 8px;
+      margin-top: 6px;
+      display: block;
+      border: 1px solid var(--border);
+    }
+    .msg-badge {
+      margin-top: 5px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    .chat-composer {
+      padding: 10px 12px;
+      background: var(--glass-card);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .chat-composer input[type="text"] {
+      flex: 1;
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text-primary);
+      font-size: 13.5px;
+      outline: none;
+    }
+    .chat-composer input[type="text"]:focus { border-color: var(--cyan); }
+    .btn {
+      padding: 9px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--glass-surface);
+      color: var(--text-primary);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #00A8FF, #19E68C);
+      color: #03131F;
+      border: none;
+    }
+    .btn-danger {
+      background: var(--red);
+      color: #fff;
+      border: none;
+    }
+    .btn-emerald {
+      background: var(--emerald);
+      color: #03131F;
+      border: none;
+    }
+
+    /* ===================== TAB 3: VOICE & PTT ===================== */
+    #tab-voice {
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-y: auto;
+      padding: 18px 14px;
+      gap: 16px;
+    }
+    .voice-card {
+      width: 100%;
+      max-width: 560px;
+      background: var(--glass-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+    }
+    .ptt-btn {
+      width: 158px;
+      height: 158px;
+      border-radius: 50%;
+      border: 3px solid var(--emerald);
+      background: radial-gradient(circle at 30% 30%, rgba(25, 230, 140, 0.35), rgba(6, 48, 36, 0.85));
+      color: var(--text-primary);
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      box-shadow: 0 0 32px rgba(25, 230, 140, 0.25), inset 0 2px 4px rgba(255, 255, 255, 0.25);
+      transition: transform 0.1s ease, box-shadow 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .ptt-btn.tx {
+      transform: scale(0.95);
+      border-color: var(--red);
+      background: radial-gradient(circle at 30% 30%, rgba(255, 77, 109, 0.65), rgba(120, 10, 30, 0.92));
+      box-shadow: 0 0 42px rgba(255, 77, 109, 0.65);
+    }
+    .quick-macros {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .voice-status-box {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* ===================== TAB 4 & 5: NODES & SETTINGS ===================== */
+    .scroll-panel {
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 14px;
+      align-items: center;
+    }
+    .panel-container {
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .card {
+      background: var(--glass-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card h3 {
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      color: var(--cyan);
+      font-family: var(--mono);
+      letter-spacing: 0.03em;
+    }
+    .node-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .node-meta { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 700;
+    }
+    .field input, .field select {
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      color: var(--text-primary);
+      font-family: var(--mono);
+      font-size: 12px;
+      outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: var(--cyan); }
+    .log-box {
+      max-height: 180px;
+      overflow-y: auto;
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* Waypoint Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 10, 18, 0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--glass-card);
+      border: 1px solid var(--border-bright);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    @media (max-width: 760px) {
+      .chat-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 30;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        width: 80%;
+        max-width: 290px;
+      }
+      .chat-sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.7); }
+      .mobile-threads-btn { display: inline-flex; }
+      .topbar { padding: 7px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Priority SOS Banner -->
+  <div class="sos-banner" id="sosBanner">
+    <span id="sosBannerText">⚠ PRIORITY SOS DISTRESS BEACON ACTIVE</span>
+    <button type="button" id="cancelSosBtn">CANCEL SOS</button>
+  </div>
+
+  <!-- Top Status Bar -->
+  <header class="topbar">
+    <div class="brand-left">
+      <span class="brand-dot connecting" id="connDot"></span>
+      <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
+      <span class="version-tag">v1.2 WEB</span>
+    </div>
+    <div class="topbar-right">
+      <span class="pill cyan" id="modePill">DETECTING...</span>
+      <span class="pill emerald" id="peerCountPill">PEERS: 0</span>
+      <button type="button" class="pill red" id="topSosBtn" title="Broadcast Priority SOS">SOS</button>
+      <button type="button" class="icon-btn" id="themeToggleBtn">☀ Aero</button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- TAB 1: TACTICAL MAP -->
+    <section class="tab-view active" id="tab-map">
+      <canvas id="mapCanvas"></canvas>
+      <div class="map-hud-top">
+        <div class="hud-box">
+          <div style="color:var(--cyan);font-weight:800;">EPSG:3857 TACTICAL MAP</div>
+          <div id="mapCoordsHud">Center: 37.9838, 23.7275 • Z12</div>
+          <div id="mapTileSourceHud" style="color:var(--text-muted);font-size:10px;">Tiles: Auto (Offline/OSM)</div>
+        </div>
+        <div class="hud-box" id="mapHostBanner" style="display:none;border-color:var(--emerald);">
+          <div style="color:var(--emerald);font-weight:800;">WI-FI DIRECT BRIDGE</div>
+          <div id="mapHostInfo">Connected to Android Host</div>
+        </div>
+      </div>
+      <div class="map-controls">
+        <button type="button" class="map-fab" id="mapZoomIn">+</button>
+        <button type="button" class="map-fab" id="mapZoomOut">−</button>
+        <button type="button" class="map-fab emerald" id="mapGpsBtn">◎ GPS</button>
+        <button type="button" class="map-fab" id="mapDropPinBtn">📍 Pin</button>
+      </div>
+    </section>
+
+    <!-- TAB 2: MESH CHAT -->
+    <section class="tab-view" id="tab-chat">
+      <aside class="chat-sidebar" id="chatSidebar">
+        <div class="sidebar-header">
+          <span>CHANNELS &amp; E2EE DMS</span>
+          <button type="button" class="icon-btn" id="closeSidebarBtn" style="padding:2px 7px;">✕</button>
+        </div>
+        <div id="threadsContainer"></div>
+      </aside>
+      <div class="chat-main">
+        <div class="chat-header">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <button type="button" class="mobile-threads-btn" id="openSidebarBtn">☰ Threads</button>
+            <div class="chat-header-info">
+              <h2 id="activeThreadTitle">#Primary-LongFast</h2>
+              <p id="activeThreadSub">Broadcast mesh channel (TTL=7 flood)</p>
+            </div>
+          </div>
+          <span class="badge-e2ee" id="activeThreadBadge">MESH</span>
+        </div>
+        <div class="messages-list" id="messagesList"></div>
+        <form class="chat-composer" id="chatForm">
+          <label class="btn" title="Attach Photo (200px Tactical JPEG)" style="cursor:pointer;padding:9px 11px;">
+            📷
+            <input type="file" id="photoInput" accept="image/*" style="display:none;" />
+          </label>
+          <input type="text" id="chatInput" placeholder="Message mesh..." autocomplete="off" />
+          <button type="submit" class="btn btn-primary">SEND</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 3: VOICE & PTT -->
+    <section class="tab-view" id="tab-voice">
+      <div class="voice-card">
+        <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--cyan);">
+          WALKIE-TALKIE PTT (8 kHz G.711 μ-LAW)
+        </div>
+        <div class="voice-status-box" id="voiceStatusBox">STANDBY • HOLD PTT OR SPACEBAR TO TRANSMIT</div>
+        <button type="button" class="ptt-btn" id="pttBtn">
+          <span style="font-size:28px;">🎙</span>
+          <span id="pttBtnLabel">HOLD TO TALK</span>
+        </button>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;">
+          <button type="button" class="btn" id="voiceRxToggleBtn">🔊 RX Audio: ON</button>
+          <button type="button" class="btn" id="voiceToneBtn">📡 Ping Tone</button>
+        </div>
+        <div id="micCapabilityHint" style="font-size:11px;color:var(--text-muted);font-family:var(--mono);"></div>
+        <div style="width:100%;border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-muted);margin-bottom:8px;">QUICK TACTICAL VOICE/TEXT CALLOUTS</div>
+          <div class="quick-macros">
+            <button type="button" class="btn quick-macro" data-msg="ROGER / COPY THAT">ROGER</button>
+            <button type="button" class="btn quick-macro" data-msg="HOLDING POSITION — STAND BY">HOLD POS</button>
+            <button type="button" class="btn quick-macro" data-msg="MOVING TO RALLY POINT">MOVING</button>
+            <button type="button" class="btn quick-macro" data-msg="RADIO CHECK — REPORT SIGNAL">RADIO CHECK</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="voice-card" style="border-color:var(--red);">
+        <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--red);">
+          EMERGENCY DISTRESS BEACON
+        </div>
+        <p style="font-size:12.5px;color:var(--text-secondary);">
+          Broadcasts a high-priority SOS packet with your current coordinates to all connected BLE, Wi-Fi Direct, and Relay peers.
+        </p>
+        <button type="button" class="btn btn-danger" id="voiceSosBtn" style="width:100%;padding:12px;">
+          ⚠ TRIGGER PRIORITY SOS ALERT
+        </button>
+      </div>
+    </section>
+
+    <!-- TAB 4: MESH NODES -->
+    <section class="tab-view scroll-panel" id="tab-nodes">
+      <div class="panel-container">
+        <div class="card">
+          <h3>DISCOVERED MESH PEERS</h3>
+          <div id="nodesList"></div>
+        </div>
+        <div class="card">
+          <h3>LIVE TELEMETRY &amp; PACKET LOG</h3>
+          <div class="log-box" id="telemetryLog"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: SETTINGS & PORTAL -->
+    <section class="tab-view scroll-panel" id="tab-settings">
+      <div class="panel-container">
+        <div class="card" id="localPortalCard" style="display:none;border-color:var(--emerald);">
+          <h3 style="color:var(--emerald);">WI-FI DIRECT / HOTSPOT PORTAL HOST</h3>
+          <p id="localPortalDetails" style="font-size:13px;color:var(--text-secondary);line-height:1.5;"></p>
+        </div>
+
+        <div class="card">
+          <h3>OPERATOR IDENTITY &amp; ENCRYPTION</h3>
+          <div class="form-grid">
+            <div class="field">
+              <label for="setCallsign">Operator Callsign</label>
+              <input type="text" id="setCallsign" maxlength="24" />
+            </div>
+            <div class="field">
+              <label for="setPassphrase">Mesh Channel Passphrase</label>
+              <input type="text" id="setPassphrase" maxlength="64" />
+            </div>
+            <div class="field">
+              <label for="setLocMode">3-State Location Privacy</label>
+              <select id="setLocMode">
+                <option value="EXACT">EXACT GPS Coordinates</option>
+                <option value="COARSE">COARSE (~1 km Grid Fuzzing)</option>
+                <option value="OFF">OFF (Never Broadcast Location)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Local Node ID &amp; Safety Fingerprint</label>
+              <input type="text" id="setFingerprint" readonly />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-emerald" id="saveSettingsBtn">Save &amp; Reconnect</button>
+            <button type="button" class="btn" id="regenKeysBtn">Rotate ECDH Keys</button>
+            <button type="button" class="btn" id="pingMeshBtn">Broadcast Presence Ping</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>CONNECT TO A LOCAL WI-FI DIRECT / HOTSPOT NODE</h3>
+          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
+            When joined to an Android phone's PulseMesh Wi-Fi Direct group (<code>192.168.49.1</code>) or Local Hotspot (<code>192.168.43.1</code>), open its local portal directly with zero internet:
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="localHostUrlInput" value="http://192.168.49.1:8080" style="flex:1;min-width:200px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
+            <button type="button" class="btn btn-primary" id="openLocalPortalBtn">Open Local Portal</button>
+            <a class="btn" href="http://192.168.43.1:8080">Hotspot :8080</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>ABOUT PULSEMESH WEB NODE (v1.2)</h3>
+          <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
+            Identical browser counterpart to the PulseMesh Android app. Uses <strong>ECDH P-256</strong> + <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>) for live hybrid relay compatibility and connects offline to any Android PulseMesh Wi-Fi Direct Web Portal.<br /><br />
+            <strong>PulseMesh • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Tab Navigation -->
+  <nav class="bottom-nav">
+    <button type="button" class="nav-btn active" data-tab="map"><span class="ico">🗺</span><span>MAP</span></button>
+    <button type="button" class="nav-btn" data-tab="chat"><span class="ico">💬</span><span>CHAT</span></button>
+    <button type="button" class="nav-btn" data-tab="voice"><span class="ico">🎙</span><span>PTT</span></button>
+    <button type="button" class="nav-btn" data-tab="nodes"><span class="ico">📡</span><span>NODES</span></button>
+    <button type="button" class="nav-btn" data-tab="settings"><span class="ico">⚙</span><span>SETUP</span></button>
+  </nav>
+
+  <!-- Waypoint Modal -->
+  <div class="modal-backdrop" id="waypointModal">
+    <div class="modal-card">
+      <h3 style="font-family:var(--mono);font-size:14px;color:var(--emerald);">DROP SHARED TACTICAL PIN</h3>
+      <div class="field">
+        <label for="wpTitle">Pin Title</label>
+        <input type="text" id="wpTitle" placeholder="e.g. Alpha Rally Point" maxlength="40" />
+      </div>
+      <div class="field">
+        <label for="wpType">Pin Category</label>
+        <select id="wpType">
+          <option value="RALLY">RALLY — Rally Point</option>
+          <option value="HAZARD">HAZARD — Obstacle / Danger</option>
+          <option value="SUPPLY">SUPPLY — Supply Cache</option>
+          <option value="CAMP">CAMP — Camp / Base</option>
+          <option value="WATER">WATER — Water Source</option>
+          <option value="SOS">SOS — Emergency Pin</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Coordinates</label>
+        <input type="text" id="wpCoordsPreview" readonly />
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn" id="wpCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-emerald" id="wpSaveBtn">Broadcast Pin</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // =========================================================================
+    // STATE & PERSISTENCE
+    // =========================================================================
+    const STORAGE_KEY = "pulsemesh_web_v12_state";
+    const CHANNEL_TOPIC_SALT = "PULSEMESH_TOPIC_V2:";
+    const CHANNEL_AES_SALT = "PULSEMESH_CHANNEL_AES_V2:";
+    const ECDH_KDF_INFO = "PULSEMESH_ECDH_V1";
+    const DM_PREFIX_ECDH = "E2EE_ECDH_V2:";
+    const CHANNEL_PREFIX = "PM2:";
+    const NTFY_BASE = "https://ntfy.sh";
+
+    function loadSavedConfig() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+      catch (_) { return {}; }
+    }
+    function saveConfig(patch) {
+      const cur = loadSavedConfig();
+      const next = Object.assign(cur, patch);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+      return next;
+    }
+
+    function randomNodeId() {
+      const n = Math.floor(0x1000 + Math.random() * 0xEFFF);
+      return "0x" + n.toString(16).toUpperCase().padStart(4, "0");
+    }
+
+    const saved = loadSavedConfig();
+    const state = {
+      mode: "DETECTING", // "LOCAL_DIRECT" | "HYBRID_NTFY"
+      hostInfo: null,
+      nodeId: saved.nodeId || randomNodeId(),
+      callsign: saved.callsign || ("WebNode-" + (saved.nodeId || "01").slice(-2)),
+      passphrase: saved.passphrase || "pulsemesh-tactical",
+      locationMode: saved.locationMode || "EXACT",
+      pubKeyB64: saved.pubKeyB64 || "",
+      privKeyB64: saved.privKeyB64 || "",
+      fingerprint: saved.fingerprint || "LOCAL-WEB-NODE",
+      lat: null,
+      lng: null,
+      isSosActive: false,
+      voiceRxEnabled: true,
+      selectedThreadId: "channel_primary",
+      nodes: new Map(),      // normId -> nodeObj
+      groups: [],            // { groupId, groupName, memberIds }
+      waypoints: new Map(),  // id -> wp
+      packets: [],           // chronological list
+      seenIds: new Set(),
+      logs: [],
+      map: {
+        lat: 37.9838,
+        lng: 23.7275,
+        zoom: 12,
+        dragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        dragMoved: false,
+        pendingPinLat: 37.9838,
+        pendingPinLng: 23.7275,
+        tileCache: new Map()
+      },
+      ntfyAbort: null,
+      sseSource: null,
+      localPollTimer: null,
+      heartbeatTimer: null,
+      lastVoiceSeq: 0
+    };
+    saveConfig({ nodeId: state.nodeId, callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode });
+
+    function normId(id) {
+      if (!id) return "";
+      return String(id).trim().replace(/^0x/i, "").toUpperCase();
+    }
+
+    function logLine(tag, msg) {
+      const ts = new Date().toLocaleTimeString([], { hour12: false });
+      state.logs.unshift(`[${ts}] [${tag}] ${msg}`);
+      if (state.logs.length > 120) state.logs.length = 120;
+      const el = document.getElementById("telemetryLog");
+      if (el) el.textContent = state.logs.join("\n");
+    }
+
+    // =========================================================================
+    // WEB CRYPTO (100% COMPATIBLE WITH ANDROID TacticalE2eeManager.kt)
+    // =========================================================================
+    const hasSubtle = !!(window.crypto && window.crypto.subtle);
+    const encUtf8 = (s) => new TextEncoder().encode(s);
+    const decUtf8 = (b) => new TextDecoder().decode(b);
+
+    function bytesToB64(bytes) {
+      let bin = "";
+      const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+      return btoa(bin);
+    }
+    function b64ToBytes(b64) {
+      const bin = atob(b64.trim());
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    function bytesToLowerHex(bytes) {
+      return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+    function format12HexFingerprint(hashBytes) {
+      const hex = Array.from(new Uint8Array(hashBytes).slice(0, 6))
+        .map((b) => b.toString(16).toUpperCase().padStart(2, "0")).join("");
+      return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}`;
+    }
+
+    async function sha256Bytes(data) {
+      const buf = typeof data === "string" ? encUtf8(data) : data;
+      return new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+    }
+
+    async function ensureEcdhKeys(forceRegen = false) {
+      if (!hasSubtle) {
+        state.fingerprint = "HTTP-LOCAL-" + normId(state.nodeId);
+        return;
+      }
+      if (!forceRegen && state.pubKeyB64 && state.privKeyB64) {
+        try {
+          const h = await sha256Bytes(b64ToBytes(state.pubKeyB64));
+          state.fingerprint = format12HexFingerprint(h);
+          return;
+        } catch (_) {}
+      }
+      const kp = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+      const spki = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+      const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+      state.pubKeyB64 = bytesToB64(spki);
+      state.privKeyB64 = bytesToB64(pkcs8);
+      state.fingerprint = format12HexFingerprint(await sha256Bytes(spki));
+      saveConfig({ pubKeyB64: state.pubKeyB64, privKeyB64: state.privKeyB64, fingerprint: state.fingerprint });
+      logLine("CRYPTO", "ECDH P-256 identity ready: " + state.fingerprint);
+    }
+
+    async function deriveNtfyTopic(passphrase) {
+      const clean = (passphrase || "").trim() || "pulsemesh-tactical";
+      const h = await sha256Bytes(CHANNEL_TOPIC_SALT + clean);
+      return "pm_" + bytesToLowerHex(h).slice(0, 20);
+    }
+
+    async function deriveChannelAesKey(passphrase) {
+      const clean = (passphrase || "").trim() || "pulsemesh-tactical";
+      const keyBytes = await sha256Bytes(CHANNEL_AES_SALT + clean);
+      return crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    }
+
+    async function aesGcmEncryptB64(plainBytes, cryptoKey) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, cryptoKey, plainBytes));
+      const combined = new Uint8Array(12 + ct.length);
+      combined.set(iv, 0);
+      combined.set(ct, 12);
+      return bytesToB64(combined);
+    }
+
+    async function aesGcmDecryptBytes(b64, cryptoKey) {
+      const combined = b64ToBytes(b64);
+      if (combined.length <= 12) throw new Error("short");
+      const iv = combined.slice(0, 12);
+      const ct = combined.slice(12);
+      return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, tagLength: 128 }, cryptoKey, ct));
+    }
+
+    async function encryptChannelPayload(jsonStr, passphrase) {
+      const key = await deriveChannelAesKey(passphrase);
+      return CHANNEL_PREFIX + await aesGcmEncryptB64(encUtf8(jsonStr), key);
+    }
+
+    async function decryptChannelPayload(envelope, passphrase) {
+      const trimmed = (envelope || "").trim();
+      if (!trimmed.startsWith(CHANNEL_PREFIX)) return null;
+      try {
+        const key = await deriveChannelAesKey(passphrase);
+        const plain = await aesGcmDecryptBytes(trimmed.slice(CHANNEL_PREFIX.length), key);
+        return decUtf8(plain);
+      } catch (_) { return null; }
+    }
+
+    async function deriveEcdhAesKey(myPrivB64, peerPubB64) {
+      const priv = await crypto.subtle.importKey("pkcs8", b64ToBytes(myPrivB64), { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+      const pub = await crypto.subtle.importKey("spki", b64ToBytes(peerPubB64), { name: "ECDH", namedCurve: "P-256" }, false, []);
+      const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: pub }, priv, 256));
+      const info = encUtf8(ECDH_KDF_INFO);
+      const buf = new Uint8Array(shared.length + info.length);
+      buf.set(shared, 0);
+      buf.set(info, shared.length);
+      const aesBytes = await sha256Bytes(buf);
+      return crypto.subtle.importKey("raw", aesBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    }
+
+    async function encryptDmEcdh(plaintext, peerPubB64) {
+      if (!hasSubtle || !state.privKeyB64 || !peerPubB64) return null;
+      try {
+        const key = await deriveEcdhAesKey(state.privKeyB64, peerPubB64);
+        return DM_PREFIX_ECDH + await aesGcmEncryptB64(encUtf8(plaintext), key);
+      } catch (_) { return null; }
+    }
+
+    async function decryptDmEcdh(payload, peerPubB64) {
+      const trimmed = (payload || "").trim();
+      if (!trimmed) return "";
+      if (trimmed.startsWith("PLAINTEXT:")) return trimmed.slice(10);
+      if (!trimmed.startsWith(DM_PREFIX_ECDH)) return trimmed;
+      if (!hasSubtle || !state.privKeyB64 || !peerPubB64) return "[E2EE DM — Key Exchange Pending]";
+      try {
+        const key = await deriveEcdhAesKey(state.privKeyB64, peerPubB64);
+        const plain = await aesGcmDecryptBytes(trimmed.slice(DM_PREFIX_ECDH.length), key);
+        return decUtf8(plain);
+      } catch (_) { return "[E2EE Decryption Failed]"; }
+    }
+
+    // =========================================================================
+    // ITU-T G.711 MU-LAW CODEC (COMPATIBLE WITH Android TacticalAudioService.kt)
+    // =========================================================================
+    function pcm16ToMuLaw(sample) {
+      const MULAW_BIAS = 0x84;
+      const MULAW_CLIP = 32635;
+      let pcm = Math.max(-32768, Math.min(32767, sample | 0));
+      let sign = 0;
+      if (pcm < 0) { pcm = -pcm; sign = 0x80; }
+      if (pcm > MULAW_CLIP) pcm = MULAW_CLIP;
+      pcm += MULAW_BIAS;
+      let exp = 7;
+      for (let mask = 0x4000; exp > 0 && (pcm & mask) === 0; exp--, mask >>= 1) {}
+      const mantissa = (pcm >> (exp + 3)) & 0x0F;
+      return (~(sign | (exp << 4) | mantissa)) & 0xFF;
+    }
+
+    function muLawToPcm16(uVal) {
+      const u = (~uVal) & 0xFF;
+      const sign = u & 0x80;
+      const exp = (u >> 4) & 0x07;
+      const mantissa = u & 0x0F;
+      let sample = ((mantissa << 3) + 0x84) << exp;
+      sample -= 0x84;
+      return sign ? -sample : sample;
+    }
+
+    let audioCtx = null;
+    let nextPlayTime = 0;
+    function getAudioCtx() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      }
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+      return audioCtx;
+    }
+
+    function playMuLawBase64(b64) {
+      if (!state.voiceRxEnabled || !b64) return;
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const raw = b64ToBytes(b64);
+        if (!raw.length) return;
+        // Android sends 4kHz (640B for 160ms) or 8kHz (1600B for 200ms)
+        const sampleRate = raw.length <= 1000 ? 4000 : 8000;
+        const buf = ctx.createBuffer(1, raw.length, sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < raw.length; i++) {
+          ch[i] = muLawToPcm16(raw[i]) / 32768.0;
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        const now = ctx.currentTime;
+        const startAt = Math.max(now + 0.02, nextPlayTime);
+        src.start(startAt);
+        nextPlayTime = startAt + buf.duration;
+      } catch (_) {}
+    }
+
+    // =========================================================================
+    // LOCATION PRIVACY & HAVERSINE
+    // =========================================================================
+    function getEffectiveLocation() {
+      if (state.locationMode === "OFF" || state.lat == null || state.lng == null) return { lat: null, lng: null };
+      if (state.locationMode === "COARSE") {
+        return { lat: Math.round(state.lat * 100) / 100, lng: Math.round(state.lng * 100) / 100 };
+      }
+      return { lat: state.lat, lng: state.lng };
+    }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = (d) => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // =========================================================================
+    // PACKET INGESTION & UI RENDERING
+    // =========================================================================
+    async function ingestWirePacket(pkt, sourceTransportLabel) {
+      if (!pkt || !pkt.packetId) return;
+      if (state.seenIds.has(pkt.packetId)) return;
+      state.seenIds.add(pkt.packetId);
+      if (state.seenIds.size > 2000) {
+        const first = state.seenIds.values().next().value;
+        state.seenIds.delete(first);
+      }
+
+      const srcNorm = normId(pkt.srcNodeId);
+      const myNorm = normId(state.nodeId);
+      const isSelf = srcNorm === myNorm;
+
+      // Update peer table
+      if (srcNorm && !isSelf) {
+        const prev = state.nodes.get(srcNorm) || {
+          id: pkt.srcNodeId,
+          callsign: pkt.srcCallsign || pkt.srcNodeId,
+          batteryPercent: 100,
+          rssiDbm: -55,
+          hopCount: pkt.hops || 1,
+          transports: new Set(),
+          publicKeyBase64: "",
+          latitude: 0,
+          longitude: 0
+        };
+        if (pkt.srcCallsign) prev.callsign = pkt.srcCallsign;
+        if (pkt.pk) prev.publicKeyBase64 = pkt.pk;
+        if (typeof pkt.lat === "number" && typeof pkt.lng === "number" && (pkt.lat !== 0 || pkt.lng !== 0)) {
+          prev.latitude = pkt.lat;
+          prev.longitude = pkt.lng;
+        }
+        if (typeof pkt.battery === "number") prev.batteryPercent = pkt.battery;
+        if (typeof pkt.rssiDbm === "number") prev.rssiDbm = pkt.rssiDbm;
+        prev.hopCount = pkt.hops || prev.hopCount || 1;
+        prev.lastSeenMs = Date.now();
+        if (sourceTransportLabel) prev.transports.add(sourceTransportLabel);
+        state.nodes.set(srcNorm, prev);
+      }
+
+      const type = String(pkt.type || "CHAT").toUpperCase();
+
+      if (type === "HEARTBEAT" || type === "GPS_BEACON") {
+        renderPeersAndHeader();
+        drawMap();
+        return;
+      }
+
+      if (type === "VOICE" || type === "VOICE_PTT" || type === "VOICE_STREAM" || type === "CALL_AUDIO") {
+        if (!isSelf && pkt.payload) {
+          playMuLawBase64(pkt.payload);
+          const box = document.getElementById("voiceStatusBox");
+          if (box) box.textContent = `🔊 SPEAKING: ${pkt.srcCallsign || pkt.srcNodeId} (${sourceTransportLabel || "MESH"})`;
+          logLine("VOICE", `RX voice frame from ${pkt.srcCallsign || pkt.srcNodeId}`);
+        }
+        return;
+      }
+
+      if (type === "WAYPOINT") {
+        let wpObj = null;
+        try { wpObj = JSON.parse(pkt.payload); } catch (_) {}
+        const wp = {
+          id: (wpObj && wpObj.id) || pkt.packetId,
+          title: (wpObj && wpObj.title) || pkt.payload || "Tactical Pin",
+          type: (wpObj && wpObj.type) || "RALLY",
+          latitude: (wpObj && typeof wpObj.lat === "number") ? wpObj.lat : (pkt.lat || 0),
+          longitude: (wpObj && typeof wpObj.lon === "number") ? wpObj.lon : (pkt.lng || 0),
+          creatorCallsign: (wpObj && wpObj.creator) || pkt.srcCallsign || pkt.srcNodeId,
+          timestamp: pkt.timestamp || Date.now()
+        };
+        if (wp.latitude || wp.longitude) {
+          state.waypoints.set(wp.id, wp);
+        }
+        addChatMessage({
+          id: pkt.packetId,
+          threadId: "channel_primary",
+          sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId,
+          text: `📍 SHARED PIN [${wp.type}]: ${wp.title} (${wp.latitude.toFixed(4)}, ${wp.longitude.toFixed(4)})`,
+          kind: "waypoint",
+          isSelf,
+          transport: sourceTransportLabel || "MESH",
+          hops: pkt.hops || 0,
+          timestamp: pkt.timestamp || Date.now()
+        });
+        drawMap();
+        return;
+      }
+
+      if (type === "SOS") {
+        const banner = document.getElementById("sosBanner");
+        const bannerText = document.getElementById("sosBannerText");
+        if (banner && bannerText) {
+          banner.classList.add("active");
+          bannerText.textContent = `⚠ SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "EMERGENCY DISTRESS"}`;
+        }
+        addChatMessage({
+          id: pkt.packetId,
+          threadId: "channel_primary",
+          sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId,
+          text: `⚠ SOS DISTRESS: ${pkt.payload || "EMERGENCY ALERT"}`,
+          kind: "sos",
+          isSelf,
+          transport: sourceTransportLabel || "MESH",
+          hops: pkt.hops || 0,
+          timestamp: pkt.timestamp || Date.now()
+        });
+        logLine("SOS", `Emergency alert from ${pkt.srcCallsign || pkt.srcNodeId}`);
+        return;
+      }
+
+      if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
+        const dst = String(pkt.dstNodeId || "ALL");
+        let threadId = "channel_primary";
+        let displayText = pkt.payload || "";
+
+        if (type === "E2EE_DM" || (dst !== "ALL" && dst !== "BROADCAST" && dst !== "ENC_TACNET" && type !== "GROUP_CHAT")) {
+          const dstNorm = normId(dst);
+          if (!isSelf && dstNorm !== myNorm) return; // Not addressed to us
+          const peerId = isSelf ? dst : pkt.srcNodeId;
+          threadId = "dm_" + peerId;
+          const peer = state.nodes.get(normId(peerId));
+          const peerPub = pkt.pk || (peer && peer.publicKeyBase64) || "";
+          if (displayText.startsWith(DM_PREFIX_ECDH)) {
+            displayText = await decryptDmEcdh(displayText, peerPub);
+          } else if (displayText.startsWith("PLAINTEXT:")) {
+            displayText = displayText.slice(10);
+          }
+        } else if (type === "GROUP_CHAT" && pkt.groupId) {
+          threadId = "group_" + pkt.groupId;
+          if (!state.groups.some((g) => g.groupId === pkt.groupId)) {
+            state.groups.push({ groupId: pkt.groupId, groupName: pkt.groupName || ("Group " + pkt.groupId.slice(-4)), memberIds: [] });
+          }
+        } else if (dst === "ENC_TACNET") {
+          threadId = "channel_encrypted";
+        }
+
+        addChatMessage({
+          id: pkt.packetId,
+          threadId,
+          sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId,
+          text: displayText,
+          kind: "text",
+          isSelf,
+          transport: sourceTransportLabel || "MESH",
+          hops: pkt.hops || 0,
+          timestamp: pkt.timestamp || Date.now()
+        });
+      }
+    }
+
+    function addChatMessage(msg) {
+      if (state.packets.some((p) => p.id === msg.id)) return;
+      state.packets.push(msg);
+      if (state.packets.length > 350) state.packets.shift();
+      renderThreads();
+      if (msg.threadId === state.selectedThreadId) {
+        renderMessages();
+      }
+    }
+
+    function renderPeersAndHeader() {
+      const count = state.nodes.size;
+      document.getElementById("peerCountPill").textContent = `PEERS: ${count}`;
+      document.getElementById("topIdentity").textContent = `${state.callsign} (${state.nodeId})`;
+      document.getElementById("setFingerprint").value = `${state.nodeId} • ${state.fingerprint}`;
+
+      const nodesList = document.getElementById("nodesList");
+      if (!nodesList) return;
+      const arr = Array.from(state.nodes.values()).sort((a, b) => (b.lastSeenMs || 0) - (a.lastSeenMs || 0));
+      if (!arr.length) {
+        nodesList.innerHTML = `<div style="font-size:12.5px;color:var(--text-muted);font-family:var(--mono);padding:8px 0;">Scanning for nearby PulseMesh nodes... Send a message or Presence Ping to announce yourself.</div>`;
+      } else {
+        nodesList.innerHTML = arr.map((n) => {
+          const transports = Array.from(n.transports || []).join(" • ") || "MESH";
+          let distStr = "";
+          if (state.lat != null && state.lng != null && (n.latitude || n.longitude)) {
+            const d = haversineMeters(state.lat, state.lng, n.latitude, n.longitude);
+            distStr = d >= 1000 ? ` • ${(d / 1000).toFixed(2)} km` : ` • ${Math.round(d)} m`;
+          }
+          const safeId = escapeHtml(n.id);
+          return `
+            <div class="node-row">
+              <div>
+                <div style="font-weight:800;font-size:13.5px;color:var(--emerald);">${escapeHtml(n.callsign)} <span style="color:var(--text-muted);font-family:var(--mono);font-size:11px;">(${safeId})</span></div>
+                <div class="node-meta">${escapeHtml(transports)} • RSSI ${n.rssiDbm || -55} dBm • Bat ${n.batteryPercent || 100}% • Hops ${n.hopCount || 1}${distStr}</div>
+              </div>
+              <button type="button" class="btn btn-primary" onclick="window.__openDm('${safeId}')" style="padding:6px 11px;font-size:11px;">E2EE DM</button>
+            </div>
+          `;
+        }).join("");
+      }
+      renderThreads();
+    }
+
+    function renderThreads() {
+      const container = document.getElementById("threadsContainer");
+      if (!container) return;
+      const threads = [
+        { id: "channel_primary", title: "#Primary-LongFast", sub: "Public Mesh Broadcast (TTL=7)", badge: "MESH" },
+        { id: "channel_encrypted", title: "#Encrypted-TacNet", sub: "AES-256-GCM Team Channel", badge: "AES-256" }
+      ];
+      for (const g of state.groups) {
+        threads.push({ id: "group_" + g.groupId, title: "👥 " + g.groupName, sub: "Multi-Mesh E2EE Group", badge: "GROUP" });
+      }
+      for (const n of state.nodes.values()) {
+        threads.push({
+          id: "dm_" + n.id,
+          title: n.callsign,
+          sub: `${n.id} • ${n.publicKeyBase64 ? "ECDH P-256 Ready" : "Direct Mesh"}`,
+          badge: n.publicKeyBase64 ? "ECDH" : "DM"
+        });
+      }
+
+      container.innerHTML = threads.map((t) => {
+        const lastMsg = [...state.packets].reverse().find((p) => p.threadId === t.id);
+        const preview = lastMsg ? (lastMsg.text.startsWith("[[PM_IMAGE]]:") ? "📷 Photo attachment" : lastMsg.text) : t.sub;
+        return `
+          <div class="thread-item ${t.id === state.selectedThreadId ? "active" : ""}" data-tid="${escapeHtml(t.id)}">
+            <div class="thread-title">
+              <span>${escapeHtml(t.title)}</span>
+              <span class="badge-e2ee">${escapeHtml(t.badge)}</span>
+            </div>
+            <div class="thread-sub">${escapeHtml(preview)}</div>
+          </div>
+        `;
+      }).join("");
+
+      container.querySelectorAll(".thread-item").forEach((el) => {
+        el.addEventListener("click", () => {
+          selectThread(el.getAttribute("data-tid"));
+          document.getElementById("chatSidebar").classList.remove("open");
+        });
+      });
+
+      const active = threads.find((t) => t.id === state.selectedThreadId) || threads[0];
+      if (active) {
+        document.getElementById("activeThreadTitle").textContent = active.title;
+        document.getElementById("activeThreadSub").textContent = active.sub;
+        document.getElementById("activeThreadBadge").textContent = active.badge;
+      }
+    }
+
+    function renderMessages() {
+      const list = document.getElementById("messagesList");
+      if (!list) return;
+      const msgs = state.packets.filter((p) => p.threadId === state.selectedThreadId);
+      if (!msgs.length) {
+        list.innerHTML = `<div style="margin:auto;text-align:center;color:var(--text-muted);font-family:var(--mono);font-size:12px;padding:24px;">No messages in this thread yet.<br/>Type below to broadcast across the mesh.</div>`;
+        return;
+      }
+      list.innerHTML = msgs.map((m) => {
+        const ts = new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const cls = ["msg-bubble", m.isSelf ? "self" : "", m.kind === "sos" ? "sos" : "", m.kind === "waypoint" ? "waypoint" : ""].filter(Boolean).join(" ");
+        let bodyHtml = "";
+        if (m.text && m.text.startsWith("[[PM_IMAGE]]:")) {
+          const rest = m.text.slice("[[PM_IMAGE]]:".length);
+          const parts = rest.split("||");
+          const b64 = parts[0].replace(/[^A-Za-z0-9+/=]/g, "");
+          const cap = parts[1] ? `<div class="msg-text" style="margin-top:4px;">${escapeHtml(parts[1])}</div>` : "";
+          bodyHtml = `<img class="msg-img" src="data:image/jpeg;base64,${b64}" alt="Mesh photo" />${cap}`;
+        } else {
+          bodyHtml = `<div class="msg-text">${escapeHtml(m.text)}</div>`;
+        }
+        return `
+          <div class="${cls}">
+            <div class="msg-meta">
+              <span class="msg-sender">${escapeHtml(m.sender)}</span>
+              <span>${ts}</span>
+            </div>
+            ${bodyHtml}
+            <div class="msg-badge">${escapeHtml(m.transport)} • Hop ${m.hops}</div>
+          </div>
+        `;
+      }).join("");
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function selectThread(threadId) {
+      state.selectedThreadId = threadId;
+      renderThreads();
+      renderMessages();
+    }
+
+    window.__openDm = function (peerId) {
+      selectThread("dm_" + peerId);
+      switchTab("chat");
+    };
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    // =========================================================================
+    // OUTBOUND SENDING (LOCAL WI-FI DIRECT PORTAL OR ENCRYPTED NTFY HYBRID)
+    // =========================================================================
+    async function sendMeshAction({ type = "CHAT", threadId = state.selectedThreadId, text = "", payload = "", wp = null }) {
+      const pktId = `web_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`;
+      const loc = getEffectiveLocation();
+
+      if (state.mode === "LOCAL_DIRECT") {
+        // Send to Android Host Bridge — Android encrypts & relays across BLE + Wi-Fi + Relay
+        const body = {
+          packetId: pktId,
+          clientNodeId: state.nodeId,
+          callsign: state.callsign,
+          publicKeyBase64: state.pubKeyB64,
+          threadId: threadId || "channel_primary",
+          type,
+          text,
+          payload: payload || text,
+          lat: loc.lat,
+          lng: loc.lng,
+          waypointTitle: wp ? wp.title : "",
+          waypointType: wp ? wp.type : "",
+          waypointLat: wp ? wp.latitude : null,
+          waypointLng: wp ? wp.longitude : null
+        };
+        const res = await fetch("/api/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error("Local host returned " + res.status);
+        if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
+          addChatMessage({
+            id: pktId,
+            threadId: threadId || "channel_primary",
+            sender: state.callsign + " (You)",
+            srcNodeId: state.nodeId,
+            text: text || payload,
+            kind: "text",
+            isSelf: true,
+            transport: "WI-FI DIRECT HOST",
+            hops: 0,
+            timestamp: Date.now()
+          });
+        } else if (type === "WAYPOINT" && wp) {
+          state.waypoints.set(wp.id, wp);
+          drawMap();
+        }
+        return;
+      }
+
+      // HYBRID ENCRYPTED RELAY MODE (ntfy.sh PM2 AES-256-GCM)
+      let dstNodeId = "ALL";
+      let wireType = type;
+      let wirePayload = payload || text;
+      let groupId = "";
+
+      if (type === "CHAT") {
+        if (threadId === "channel_encrypted") {
+          dstNodeId = "ENC_TACNET";
+        } else if (threadId.startsWith("dm_")) {
+          dstNodeId = threadId.slice(3);
+          wireType = "E2EE_DM";
+          const peer = state.nodes.get(normId(dstNodeId));
+          if (peer && peer.publicKeyBase64) {
+            const enc = await encryptDmEcdh(text, peer.publicKeyBase64);
+            wirePayload = enc || ("PLAINTEXT:" + text);
+          } else {
+            wirePayload = "PLAINTEXT:" + text;
+          }
+        } else if (threadId.startsWith("group_")) {
+          groupId = threadId.slice(6);
+          dstNodeId = groupId;
+          wireType = "GROUP_CHAT";
+        }
+      } else if (type === "WAYPOINT" && wp) {
+        wirePayload = JSON.stringify({
+          id: wp.id, title: wp.title, type: wp.type,
+          lat: wp.latitude, lon: wp.longitude,
+          creator: state.callsign, ts: wp.timestamp
+        });
+      }
+
+      const wirePkt = {
+        packetId: pktId,
+        srcNodeId: state.nodeId,
+        srcCallsign: state.callsign,
+        dstNodeId,
+        type: wireType,
+        payload: wirePayload,
+        ttl: 7,
+        hops: 0,
+        timestamp: Date.now()
+      };
+      if (loc.lat != null && loc.lng != null) { wirePkt.lat = loc.lat; wirePkt.lng = loc.lng; }
+      if (state.pubKeyB64) wirePkt.pk = state.pubKeyB64;
+      if (groupId) wirePkt.groupId = groupId;
+
+      state.seenIds.add(pktId);
+      if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
+        addChatMessage({
+          id: pktId,
+          threadId,
+          sender: state.callsign + " (You)",
+          srcNodeId: state.nodeId,
+          text,
+          kind: "text",
+          isSelf: true,
+          transport: wireType === "E2EE_DM" ? "E2EE ECDH RELAY" : "HYBRID PM2 RELAY",
+          hops: 0,
+          timestamp: wirePkt.timestamp
+        });
+      } else if (type === "WAYPOINT" && wp) {
+        state.waypoints.set(wp.id, wp);
+        addChatMessage({
+          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)",
+          srcNodeId: state.nodeId, text: `📍 SHARED PIN [${wp.type}]: ${wp.title}`,
+          kind: "waypoint", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
+        });
+        drawMap();
+      } else if (type === "SOS") {
+        addChatMessage({
+          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)",
+          srcNodeId: state.nodeId, text: `⚠ SOS DISTRESS: ${wirePayload}`,
+          kind: "sos", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
+        });
+      }
+
+      const topic = await deriveNtfyTopic(state.passphrase);
+      const envelope = await encryptChannelPayload(JSON.stringify(wirePkt), state.passphrase);
+      await fetch(`${NTFY_BASE}/${topic}`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        body: envelope
+      });
+    }
+
+    async function sendPresencePing() {
+      const loc = getEffectiveLocation();
+      if (state.mode === "LOCAL_DIRECT") {
+        await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nodeId: state.nodeId,
+            callsign: state.callsign,
+            publicKeyBase64: state.pubKeyB64,
+            lat: loc.lat,
+            lng: loc.lng,
+            locationMode: state.locationMode
+          })
+        }).catch(() => {});
+        return;
+      }
+      if (!hasSubtle) return;
+      const pkt = {
+        packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
+        srcNodeId: state.nodeId,
+        srcCallsign: state.callsign,
+        dstNodeId: "BROADCAST",
+        type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
+        payload: "PulseMesh Web Node v1.2",
+        ttl: 7,
+        hops: 0,
+        battery: 100,
+        timestamp: Date.now()
+      };
+      if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
+      if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
+      state.seenIds.add(pkt.packetId);
+      const topic = await deriveNtfyTopic(state.passphrase);
+      const env = await encryptChannelPayload(JSON.stringify(pkt), state.passphrase);
+      fetch(`${NTFY_BASE}/${topic}`, { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: env }).catch(() => {});
+    }
+
+    // =========================================================================
+    // TRANSPORT 1: LOCAL WI-FI DIRECT / HOTSPOT PORTAL BRIDGE
+    // =========================================================================
+    function applyLocalSnapshot(snap) {
+      if (!snap) return;
+      if (snap.hostNode) {
+        const hn = snap.hostNode;
+        const nId = normId(hn.id);
+        if (nId && nId !== normId(state.nodeId)) {
+          state.nodes.set(nId, {
+            id: hn.id,
+            callsign: hn.callsign + " (Host)",
+            batteryPercent: hn.batteryPercent || 100,
+            rssiDbm: -30,
+            hopCount: 0,
+            latitude: hn.latitude || 0,
+            longitude: hn.longitude || 0,
+            publicKeyBase64: hn.publicKeyBase64 || "",
+            transports: new Set(["WI-FI DIRECT HOST"]),
+            lastSeenMs: Date.now()
+          });
+        }
+        if (state.lat == null && hn.latitude && hn.longitude && !state.map.userMoved) {
+          state.map.lat = hn.latitude;
+          state.map.lng = hn.longitude;
+        }
+      }
+      if (Array.isArray(snap.nodes)) {
+        for (const n of snap.nodes) {
+          const nid = normId(n.id);
+          if (!nid || nid === normId(state.nodeId)) continue;
+          state.nodes.set(nid, {
+            id: n.id,
+            callsign: n.callsign || n.id,
+            batteryPercent: n.batteryPercent || 100,
+            rssiDbm: n.rssiDbm || -55,
+            hopCount: n.hopCount || 1,
+            latitude: n.latitude || 0,
+            longitude: n.longitude || 0,
+            publicKeyBase64: n.publicKeyBase64 || "",
+            transports: new Set(Array.isArray(n.transports) ? n.transports : [n.transport || "MESH"]),
+            lastSeenMs: Date.now()
+          });
+        }
+      }
+      if (Array.isArray(snap.groups)) {
+        state.groups = snap.groups;
+      }
+      if (Array.isArray(snap.waypoints)) {
+        for (const wp of snap.waypoints) {
+          if (wp && wp.id) state.waypoints.set(wp.id, wp);
+        }
+      }
+      if (Array.isArray(snap.packets)) {
+        for (const p of snap.packets) {
+          const id = p.id;
+          if (!id || state.packets.some((x) => x.id === id)) continue;
+          state.seenIds.add(id);
+          const isSelf = normId(p.sourceId) === normId(state.nodeId);
+          state.packets.push({
+            id,
+            threadId: p.threadId || "channel_primary",
+            sender: p.sourceCallsign || p.sourceId || "Peer",
+            srcNodeId: p.sourceId || "",
+            text: p.content || "",
+            kind: p.type === "SOS" ? "sos" : (p.type === "WAYPOINT" ? "waypoint" : "text"),
+            isSelf,
+            transport: p.transport || "WI-FI DIRECT",
+            hops: p.hops || 0,
+            timestamp: p.timestamp || Date.now()
+          });
+        }
+        state.packets.sort((a, b) => a.timestamp - b.timestamp);
+      }
+      if (snap.recentVoice && snap.recentVoice.seq > state.lastVoiceSeq) {
+        state.lastVoiceSeq = snap.recentVoice.seq;
+        if (normId(snap.recentVoice.srcNodeId) !== normId(state.nodeId) && snap.recentVoice.payload) {
+          playMuLawBase64(snap.recentVoice.payload);
+          const box = document.getElementById("voiceStatusBox");
+          if (box) box.textContent = `🔊 SPEAKING: ${snap.recentVoice.srcCallsign || snap.recentVoice.srcNodeId} (HOST BRIDGE)`;
+        }
+      }
+      if (snap.isSosActive) {
+        document.getElementById("sosBanner").classList.add("active");
+      }
+      renderPeersAndHeader();
+      renderMessages();
+      drawMap();
+    }
+
+    async function startLocalDirectMode(info) {
+      state.mode = "LOCAL_DIRECT";
+      state.hostInfo = info;
+      document.getElementById("connDot").className = "brand-dot";
+      const pill = document.getElementById("modePill");
+      pill.textContent = "WI-FI DIRECT LOCAL";
+      pill.className = "pill emerald";
+      document.getElementById("mapTileSourceHud").textContent = "Tiles: Offline Host Cache (/api/tiles)";
+      document.getElementById("mapHostBanner").style.display = "block";
+      document.getElementById("mapHostInfo").textContent = `${info.hostCallsign} (${info.hostNodeId}) • ${info.ssid || "Local AP"}`;
+
+      const portalCard = document.getElementById("localPortalCard");
+      portalCard.style.display = "block";
+      document.getElementById("localPortalDetails").innerHTML =
+        `Connected offline to Android host <strong>${escapeHtml(info.hostCallsign)}</strong> (<code>${escapeHtml(info.hostNodeId)}</code>).<br/>` +
+        `SSID: <code>${escapeHtml(info.ssid || "Local Wi-Fi")}</code> • Portal: <code>${escapeHtml(info.portalUrl || location.origin)}</code><br/>` +
+        `All messages, waypoints, and PTT bursts sent here are bridged directly across the host phone's BLE, Wi-Fi Direct, and mesh transports with zero internet.`;
+
+      logLine("LOCAL", `Bridged to Android Host ${info.hostCallsign} (${info.hostNodeId}) v${info.version}`);
+
+      await sendPresencePing();
+      await pullLocalState();
+
+      // Open real-time SSE stream
+      try {
+        if (state.sseSource) state.sseSource.close();
+        const es = new EventSource(`/api/events?clientNodeId=${encodeURIComponent(state.nodeId)}`);
+        es.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.event === "voice" && msg.payload) {
+              if (normId(msg.srcNodeId) !== normId(state.nodeId)) {
+                playMuLawBase64(msg.payload);
+                document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
+              }
+            } else if (msg.event === "refresh") {
+              pullLocalState();
+            }
+          } catch (_) {}
+        };
+        es.onerror = () => { /* polling fallback keeps sync alive */ };
+        state.sseSource = es;
+      } catch (_) {}
+
+      if (state.localPollTimer) clearInterval(state.localPollTimer);
+      state.localPollTimer = setInterval(pullLocalState, 2200);
+      if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
+      state.heartbeatTimer = setInterval(sendPresencePing, 14000);
+    }
+
+    async function pullLocalState() {
+      try {
+        const res = await fetch(`/api/state?clientNodeId=${encodeURIComponent(state.nodeId)}`, { cache: "no-store" });
+        if (res.ok) {
+          applyLocalSnapshot(await res.json());
+          document.getElementById("connDot").className = "brand-dot";
+        }
+      } catch (_) {
+        document.getElementById("connDot").className = "brand-dot offline";
+      }
+    }
+
+    // =========================================================================
+    // TRANSPORT 2: WEBSITE HYBRID ENCRYPTED RELAY (ntfy.sh PM2 AES-256-GCM)
+    // =========================================================================
+    async function startHybridNtfyMode() {
+      state.mode = "HYBRID_NTFY";
+      const pill = document.getElementById("modePill");
+      pill.textContent = "HYBRID E2EE RELAY";
+      pill.className = "pill amber";
+      document.getElementById("mapTileSourceHud").textContent = "Tiles: OpenStreetMap + Radar Fallback";
+
+      if (!hasSubtle) {
+        document.getElementById("connDot").className = "brand-dot offline";
+        logLine("ERROR", "Web Crypto requires HTTPS for Hybrid Relay mode.");
+        return;
+      }
+
+      if (state.ntfyAbort) state.ntfyAbort.abort();
+      const ctrl = new AbortController();
+      state.ntfyAbort = ctrl;
+
+      const topic = await deriveNtfyTopic(state.passphrase);
+      logLine("RELAY", `Connecting to encrypted PM2 channel (${topic})...`);
+
+      sendPresencePing();
+      if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
+      state.heartbeatTimer = setInterval(sendPresencePing, 18000);
+
+      (async function streamLoop() {
+        while (!ctrl.signal.aborted) {
+          try {
+            const resp = await fetch(`${NTFY_BASE}/${topic}/json?since=2m`, {
+              signal: ctrl.signal,
+              headers: { "Accept": "application/x-ndjson" }
+            });
+            if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+            document.getElementById("connDot").className = "brand-dot";
+            logLine("RELAY", "LIVE — E2EE AES-256-GCM stream active (Android compatible)");
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = "";
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buf += decoder.decode(value, { stream: true });
+              const lines = buf.split("\n");
+              buf = lines.pop() || "";
+              for (const line of lines) {
+                const t = line.trim();
+                if (!t) continue;
+                try {
+                  const outer = JSON.parse(t);
+                  if (outer.event === "message" && outer.message) {
+                    const plain = await decryptChannelPayload(outer.message, state.passphrase);
+                    if (plain) {
+                      await ingestWirePacket(JSON.parse(plain), "HYBRID E2EE");
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
+          } catch (e) {
+            if (ctrl.signal.aborted) break;
+            document.getElementById("connDot").className = "brand-dot connecting";
+            await new Promise((r) => setTimeout(r, 3000));
+          }
+        }
+      })();
+    }
+
+    // =========================================================================
+    // EPSG:3857 SLIPPY TILE CANVAS MAP (WORKS 100% OFFLINE ON WI-FI DIRECT)
+    // =========================================================================
+    const mapCanvas = document.getElementById("mapCanvas");
+    const mctx = mapCanvas.getContext("2d");
+
+    function latLonToTile(lat, lon, z) {
+      const n = Math.pow(2, z);
+      const x = ((lon + 180) / 360) * n;
+      const rad = Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI / 180;
+      const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
+      return { x, y };
+    }
+
+    function tileToLatLon(tx, ty, z) {
+      const n = Math.pow(2, z);
+      const lon = (tx / n) * 360 - 180;
+      const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n))) * 180 / Math.PI;
+      return { lat, lon };
+    }
+
+    function getTileImage(z, x, y) {
+      const maxT = 1 << z;
+      if (y < 0 || y >= maxT) return null;
+      const wx = ((x % maxT) + maxT) % maxT;
+      const key = `${state.mode}:${z}/${wx}/${y}`;
+      const cached = state.map.tileCache.get(key);
+      if (cached) return cached.loaded ? cached.img : null;
+
+      const entry = { img: new Image(), loaded: false, failed: false };
+      entry.img.crossOrigin = "anonymous";
+      entry.img.onload = () => { entry.loaded = true; drawMap(); };
+      entry.img.onerror = () => { entry.failed = true; };
+      entry.img.src = state.mode === "LOCAL_DIRECT"
+        ? `/api/tiles/${z}/${wx}/${y}.png`
+        : `https://tile.openstreetmap.org/${z}/${wx}/${y}.png`;
+      state.map.tileCache.set(key, entry);
+      if (state.map.tileCache.size > 180) {
+        state.map.tileCache.delete(state.map.tileCache.keys().next().value);
+      }
+      return null;
+    }
+
+    function resizeMapCanvas() {
+      const rect = mapCanvas.parentElement.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      mapCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      mapCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawMap();
+    }
+
+    function drawMap() {
+      const w = mapCanvas.clientWidth;
+      const h = mapCanvas.clientHeight;
+      if (!w || !h) return;
+
+      const isLight = document.documentElement.getAttribute("data-theme") === "light";
+      mctx.fillStyle = isLight ? "#cde8f8" : "#041320";
+      mctx.fillRect(0, 0, w, h);
+
+      const z = state.map.zoom;
+      const center = latLonToTile(state.map.lat, state.map.lng, z);
+      const tileSize = 256;
+      const startX = Math.floor(center.x - (w / 2) / tileSize) - 1;
+      const endX = Math.ceil(center.x + (w / 2) / tileSize) + 1;
+      const startY = Math.floor(center.y - (h / 2) / tileSize) - 1;
+      const endY = Math.ceil(center.y + (h / 2) / tileSize) + 1;
+
+      let anyTile = false;
+      for (let tx = startX; tx <= endX; tx++) {
+        for (let ty = startY; ty <= endY; ty++) {
+          const px = Math.floor(w / 2 + (tx - center.x) * tileSize);
+          const py = Math.floor(h / 2 + (ty - center.y) * tileSize);
+          const img = getTileImage(z, tx, ty);
+          if (img) {
+            anyTile = true;
+            mctx.save();
+            if (!isLight) mctx.filter = "invert(92%) hue-rotate(180deg) brightness(0.88) contrast(0.95) saturate(1.15)";
+            mctx.drawImage(img, px, py, tileSize, tileSize);
+            mctx.restore();
+          } else {
+            // Tactical radar grid fallback when tile is offline/uncached
+            mctx.strokeStyle = isLight ? "rgba(0,136,230,0.16)" : "rgba(56,207,255,0.13)";
+            mctx.lineWidth = 1;
+            mctx.strokeRect(px, py, tileSize, tileSize);
+            mctx.beginPath();
+            mctx.moveTo(px + tileSize / 2, py); mctx.lineTo(px + tileSize / 2, py + tileSize);
+            mctx.moveTo(px, py + tileSize / 2); mctx.lineTo(px + tileSize, py + tileSize / 2);
+            mctx.stroke();
+          }
+        }
+      }
+
+      // Subtle radar rings around center when no tiles loaded
+      if (!anyTile) {
+        mctx.strokeStyle = isLight ? "rgba(0,136,230,0.22)" : "rgba(25,230,140,0.18)";
+        mctx.lineWidth = 1.2;
+        [70, 140, 210].forEach((r) => {
+          mctx.beginPath();
+          mctx.arc(w / 2, h / 2, r, 0, Math.PI * 2);
+          mctx.stroke();
+        });
+      }
+
+      function project(lat, lng) {
+        const t = latLonToTile(lat, lng, z);
+        return { x: w / 2 + (t.x - center.x) * tileSize, y: h / 2 + (t.y - center.y) * tileSize };
+      }
+
+      // Draw Waypoints
+      const wpColors = { RALLY: "#19E68C", HAZARD: "#FF4D6D", SUPPLY: "#FFB02E", SOS: "#FF1744", CAMP: "#38CFFF", WATER: "#00E5FF" };
+      for (const wp of state.waypoints.values()) {
+        if (!wp.latitude && !wp.longitude) continue;
+        const pt = project(wp.latitude, wp.longitude);
+        const col = wpColors[wp.type] || "#19E68C";
+        mctx.fillStyle = col;
+        mctx.beginPath();
+        mctx.moveTo(pt.x, pt.y - 12);
+        mctx.lineTo(pt.x + 8, pt.y);
+        mctx.lineTo(pt.x, pt.y + 8);
+        mctx.lineTo(pt.x - 8, pt.y);
+        mctx.closePath();
+        mctx.fill();
+        mctx.font = "bold 11px monospace";
+        mctx.fillStyle = isLight ? "#072A44" : "#F0F9FF";
+        mctx.fillText(`${wp.type}: ${wp.title}`, pt.x + 11, pt.y + 4);
+      }
+
+      // Draw Peer Nodes
+      for (const n of state.nodes.values()) {
+        if (!n.latitude && !n.longitude) continue;
+        const pt = project(n.latitude, n.longitude);
+        mctx.fillStyle = "rgba(56, 207, 255, 0.22)";
+        mctx.beginPath(); mctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2); mctx.fill();
+        mctx.fillStyle = "#38CFFF";
+        mctx.beginPath(); mctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); mctx.fill();
+        mctx.font = "bold 11px monospace";
+        mctx.fillStyle = isLight ? "#072A44" : "#F0F9FF";
+        mctx.fillText(n.callsign || n.id, pt.x + 10, pt.y - 2);
+      }
+
+      // Draw Self GPS
+      if (state.lat != null && state.lng != null) {
+        const pt = project(state.lat, state.lng);
+        mctx.fillStyle = "rgba(25, 230, 140, 0.26)";
+        mctx.beginPath(); mctx.arc(pt.x, pt.y, 16, 0, Math.PI * 2); mctx.fill();
+        mctx.fillStyle = "#19E68C";
+        mctx.beginPath(); mctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2); mctx.fill();
+        mctx.strokeStyle = "#fff"; mctx.lineWidth = 2; mctx.stroke();
+        mctx.font = "bold 11px monospace";
+        mctx.fillStyle = "#19E68C";
+        mctx.fillText(state.callsign + " (YOU)", pt.x + 11, pt.y + 4);
+      }
+
+      document.getElementById("mapCoordsHud").textContent =
+        `Center: ${state.map.lat.toFixed(4)}, ${state.map.lng.toFixed(4)} • Z${z}`;
+    }
+
+    // Map Pointer Pan & Tap-to-Pin
+    mapCanvas.addEventListener("pointerdown", (e) => {
+      state.map.dragging = true;
+      state.map.dragMoved = false;
+      state.map.dragStartX = e.clientX;
+      state.map.dragStartY = e.clientY;
+      mapCanvas.setPointerCapture(e.pointerId);
+    });
+    mapCanvas.addEventListener("pointermove", (e) => {
+      if (!state.map.dragging) return;
+      const dx = e.clientX - state.map.dragStartX;
+      const dy = e.clientY - state.map.dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        state.map.dragMoved = true;
+        state.map.userMoved = true;
+      }
+      state.map.dragStartX = e.clientX;
+      state.map.dragStartY = e.clientY;
+      const center = latLonToTile(state.map.lat, state.map.lng, state.map.zoom);
+      const next = tileToLatLon(center.x - dx / 256, center.y - dy / 256, state.map.zoom);
+      state.map.lat = Math.max(-84, Math.min(84, next.lat));
+      state.map.lng = ((next.lon + 540) % 360) - 180;
+      drawMap();
+    });
+    mapCanvas.addEventListener("pointerup", (e) => {
+      state.map.dragging = false;
+      if (!state.map.dragMoved) {
+        const rect = mapCanvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const center = latLonToTile(state.map.lat, state.map.lng, state.map.zoom);
+        const ll = tileToLatLon(center.x + (cx - rect.width / 2) / 256, center.y + (cy - rect.height / 2) / 256, state.map.zoom);
+        openWaypointModal(ll.lat, ll.lon);
+      }
+    });
+    mapCanvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      state.map.zoom = Math.max(2, Math.min(17, state.map.zoom + (e.deltaY < 0 ? 1 : -1)));
+      drawMap();
+    }, { passive: false });
+
+    function openWaypointModal(lat, lng) {
+      state.map.pendingPinLat = lat;
+      state.map.pendingPinLng = lng;
+      document.getElementById("wpTitle").value = "";
+      document.getElementById("wpCoordsPreview").value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      document.getElementById("waypointModal").classList.add("open");
+    }
+
+    document.getElementById("mapZoomIn").addEventListener("click", () => { state.map.zoom = Math.min(17, state.map.zoom + 1); drawMap(); });
+    document.getElementById("mapZoomOut").addEventListener("click", () => { state.map.zoom = Math.max(2, state.map.zoom - 1); drawMap(); });
+    document.getElementById("mapDropPinBtn").addEventListener("click", () => openWaypointModal(state.map.lat, state.map.lng));
+    document.getElementById("wpCancelBtn").addEventListener("click", () => document.getElementById("waypointModal").classList.remove("open"));
+    document.getElementById("wpSaveBtn").addEventListener("click", async () => {
+      const title = document.getElementById("wpTitle").value.trim() || "Tactical Pin";
+      const type = document.getElementById("wpType").value;
+      const wp = {
+        id: "wp_" + Date.now(),
+        title,
+        type,
+        latitude: state.map.pendingPinLat,
+        longitude: state.map.pendingPinLng,
+        creatorCallsign: state.callsign,
+        timestamp: Date.now()
+      };
+      document.getElementById("waypointModal").classList.remove("open");
+      await sendMeshAction({ type: "WAYPOINT", wp }).catch((e) => logLine("ERR", e.message));
+    });
+
+    document.getElementById("mapGpsBtn").addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        logLine("GPS", "Geolocation API not available in this browser.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          state.lat = pos.coords.latitude;
+          state.lng = pos.coords.longitude;
+          state.map.lat = state.lat;
+          state.map.lng = state.lng;
+          state.map.zoom = Math.max(state.map.zoom, 14);
+          drawMap();
+          sendPresencePing();
+          logLine("GPS", `Locked ${state.lat.toFixed(5)}, ${state.lng.toFixed(5)}`);
+        },
+        (err) => logLine("GPS", "Location denied or requires HTTPS: " + err.message),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    });
+
+    // =========================================================================
+    // PTT MICROPHONE (8 kHz -> 4 kHz G.711 MU-LAW) & ALERT TONE
+    // =========================================================================
+    let pttActive = false;
+    let pttStream = null;
+    let pttProcessor = null;
+    let pttSourceNode = null;
+    let pttSampleBuf = [];
+
+    const hasMicApi = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    document.getElementById("micCapabilityHint").textContent = hasMicApi
+      ? "Microphone capture ready (G.711 μ-law 4kHz/8kHz compatible with Android PulseMesh)"
+      : "Note: Browser blocks live mic on plain HTTP Wi-Fi Direct. Incoming voice playback, Ping Tone & Quick Callouts work 100% offline.";
+
+    async function startPttTx() {
+      if (pttActive) return;
+      pttActive = true;
+      const btn = document.getElementById("pttBtn");
+      btn.classList.add("tx");
+      document.getElementById("pttBtnLabel").textContent = "TRANSMITTING...";
+
+      if (!hasMicApi) {
+        document.getElementById("voiceStatusBox").textContent = "📡 TX ALERT TONE (Plain HTTP Mic Fallback)";
+        await sendSyntheticAlertTone();
+        return;
+      }
+      try {
+        const ctx = getAudioCtx();
+        pttStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, channelCount: 1 } });
+        pttSourceNode = ctx.createMediaStreamSource(pttStream);
+        pttProcessor = ctx.createScriptProcessor(4096, 1, 1);
+        pttSampleBuf = [];
+        const step = ctx.sampleRate / 4000;
+        let phase = 0;
+
+        pttProcessor.onaudioprocess = (ev) => {
+          if (!pttActive) return;
+          const input = ev.inputBuffer.getChannelData(0);
+          while (phase < input.length) {
+            const idx = Math.floor(phase);
+            const s16 = Math.max(-32768, Math.min(32767, Math.round(input[idx] * 32767 * 1.4)));
+            pttSampleBuf.push(pcm16ToMuLaw(s16));
+            phase += step;
+          }
+          phase -= input.length;
+          while (pttSampleBuf.length >= 640) {
+            const slice = new Uint8Array(pttSampleBuf.splice(0, 640));
+            sendMeshAction({ type: "VOICE_PTT", payload: bytesToB64(slice) }).catch(() => {});
+          }
+        };
+        pttSourceNode.connect(pttProcessor);
+        pttProcessor.connect(ctx.destination);
+        document.getElementById("voiceStatusBox").textContent = "🔴 LIVE PTT TX — STREAMING G.711 μ-LAW FRAMES";
+      } catch (e) {
+        logLine("VOICE", "Mic error: " + e.message);
+        document.getElementById("voiceStatusBox").textContent = "Mic permission denied — tap Ping Tone or Quick Callout";
+        stopPttTx();
+      }
+    }
+
+    function stopPttTx() {
+      if (!pttActive) return;
+      pttActive = false;
+      document.getElementById("pttBtn").classList.remove("tx");
+      document.getElementById("pttBtnLabel").textContent = "HOLD TO TALK";
+      document.getElementById("voiceStatusBox").textContent = "STANDBY • HOLD PTT OR SPACEBAR TO TRANSMIT";
+      try { if (pttProcessor) pttProcessor.disconnect(); } catch (_) {}
+      try { if (pttSourceNode) pttSourceNode.disconnect(); } catch (_) {}
+      try { if (pttStream) pttStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+      pttProcessor = null; pttSourceNode = null; pttStream = null;
+    }
+
+    async function sendSyntheticAlertTone() {
+      const slice = new Uint8Array(640);
+      for (let i = 0; i < 640; i++) {
+        const s = Math.sin(2 * Math.PI * 880 * (i / 4000)) * 18000;
+        slice[i] = pcm16ToMuLaw(s);
+      }
+      const b64 = bytesToB64(slice);
+      playMuLawBase64(b64);
+      await sendMeshAction({ type: "VOICE_PTT", payload: b64 }).catch(() => {});
+      logLine("VOICE", "Broadcast 880 Hz tactical ping tone");
+    }
+
+    const pttBtn = document.getElementById("pttBtn");
+    pttBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); startPttTx(); });
+    window.addEventListener("pointerup", stopPttTx);
+    window.addEventListener("pointercancel", stopPttTx);
+    document.getElementById("voiceToneBtn").addEventListener("click", sendSyntheticAlertTone);
+    document.getElementById("voiceRxToggleBtn").addEventListener("click", (e) => {
+      state.voiceRxEnabled = !state.voiceRxEnabled;
+      e.target.textContent = state.voiceRxEnabled ? "🔊 RX Audio: ON" : "🔇 RX Audio: MUTED";
+    });
+    document.querySelectorAll(".quick-macro").forEach((b) => {
+      b.addEventListener("click", () => {
+        sendMeshAction({ type: "CHAT", threadId: "channel_primary", text: b.getAttribute("data-msg") }).catch(() => {});
+        logLine("PTT", "Sent quick callout: " + b.getAttribute("data-msg"));
+      });
+    });
+
+    // =========================================================================
+    // CHAT, PHOTO, SOS, TABS & SETTINGS HANDLERS
+    // =========================================================================
+    document.getElementById("chatForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("chatInput");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      try {
+        await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text });
+      } catch (err) {
+        logLine("ERR", "Send failed: " + err.message);
+      }
+    });
+
+    document.getElementById("photoInput").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 200;
+          const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          const dataUrl = c.toDataURL("image/jpeg", 0.55);
+          const b64 = dataUrl.split(",")[1] || "";
+          if (b64) {
+            await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text: `[[PM_IMAGE]]:${b64}` }).catch(() => {});
+          }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+      e.target.value = "";
+    });
+
+    async function triggerSos() {
+      state.isSosActive = true;
+      const loc = getEffectiveLocation();
+      const locStr = (loc.lat != null && loc.lng != null) ? ` @ ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : "";
+      document.getElementById("sosBanner").classList.add("active");
+      document.getElementById("sosBannerText").textContent = `⚠ PRIORITY SOS ACTIVE (${state.callsign}${locStr})`;
+      await sendMeshAction({ type: "SOS", text: `PRIORITY SOS FROM ${state.callsign}${locStr}` }).catch(() => {});
+    }
+    document.getElementById("topSosBtn").addEventListener("click", triggerSos);
+    document.getElementById("voiceSosBtn").addEventListener("click", triggerSos);
+    document.getElementById("cancelSosBtn").addEventListener("click", () => {
+      state.isSosActive = false;
+      document.getElementById("sosBanner").classList.remove("active");
+    });
+
+    function switchTab(tabName) {
+      document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
+      document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+      const target = document.getElementById("tab-" + tabName);
+      if (target) target.classList.add("active");
+      const nav = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+      if (nav) nav.classList.add("active");
+      if (tabName === "map") setTimeout(resizeMapCanvas, 30);
+      if (tabName === "chat") renderMessages();
+    }
+    document.querySelectorAll(".nav-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.getAttribute("data-tab"))));
+
+    document.getElementById("openSidebarBtn").addEventListener("click", () => document.getElementById("chatSidebar").classList.add("open"));
+    document.getElementById("closeSidebarBtn").addEventListener("click", () => document.getElementById("chatSidebar").classList.remove("open"));
+
+    // Theme toggle
+    const themeBtn = document.getElementById("themeToggleBtn");
+    const savedTheme = localStorage.getItem("pulsemesh-theme");
+    if (savedTheme === "light" || savedTheme === "dark") document.documentElement.setAttribute("data-theme", savedTheme);
+    function syncThemeBtn() {
+      const cur = document.documentElement.getAttribute("data-theme") || "dark";
+      themeBtn.textContent = cur === "dark" ? "☀ Aero" : "☾ Dark";
+    }
+    syncThemeBtn();
+    themeBtn.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("pulsemesh-theme", next);
+      syncThemeBtn();
+      drawMap();
+    });
+
+    // Settings
+    document.getElementById("setCallsign").value = state.callsign;
+    document.getElementById("setPassphrase").value = state.passphrase;
+    document.getElementById("setLocMode").value = state.locationMode;
+
+    document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
+      state.callsign = document.getElementById("setCallsign").value.trim() || state.callsign;
+      state.passphrase = document.getElementById("setPassphrase").value.trim() || "pulsemesh-tactical";
+      state.locationMode = document.getElementById("setLocMode").value;
+      saveConfig({ callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode });
+      renderPeersAndHeader();
+      if (state.mode === "HYBRID_NTFY") {
+        await startHybridNtfyMode();
+      } else {
+        await sendPresencePing();
+      }
+      logLine("SETUP", "Saved operator profile & reconnected.");
+    });
+
+    document.getElementById("regenKeysBtn").addEventListener("click", async () => {
+      await ensureEcdhKeys(true);
+      renderPeersAndHeader();
+      await sendPresencePing();
+    });
+    document.getElementById("pingMeshBtn").addEventListener("click", () => {
+      sendPresencePing();
+      logLine("PING", "Presence beacon transmitted.");
+    });
+    document.getElementById("openLocalPortalBtn").addEventListener("click", () => {
+      const url = document.getElementById("localHostUrlInput").value.trim();
+      if (url) window.location.href = url;
+    });
+
+    window.addEventListener("resize", resizeMapCanvas);
+
+    // =========================================================================
+    // BOOTSTRAP: AUTO-DETECT WI-FI DIRECT ANDROID HOST VS WEBSITE RELAY
+    // =========================================================================
+    async function boot() {
+      await ensureEcdhKeys(false);
+      renderPeersAndHeader();
+      renderThreads();
+      renderMessages();
+      resizeMapCanvas();
+
+      // Probe /api/info on same origin (fast 1.5s timeout)
+      let localInfo = null;
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch("/api/info", { signal: ctrl.signal, cache: "no-store" });
+        clearTimeout(tid);
+        if (res.ok) {
+          const j = await res.json();
+          if (j && j.pulsemeshHost === true) localInfo = j;
+        }
+      } catch (_) {}
+
+      if (localInfo) {
+        await startLocalDirectMode(localInfo);
+      } else {
+        await startHybridNtfyMode();
+      }
+    }
+
+    boot();
+  })();
+  </script>
+</body>
+</html>

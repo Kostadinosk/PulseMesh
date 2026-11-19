@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Konstantinos Kourtis
+// SPDX-License-Identifier: GPL-3.0-only
+
 package com.example
 
 import android.Manifest
@@ -497,6 +500,7 @@ class MainActivity : ComponentActivity() {
                                         onSyncAccountBackupNow = { cb ->
                                             viewModel.syncAccountBackupNow(cb)
                                         },
+                                        onToggleWebPortal = { viewModel.toggleWebPortal() },
                                     )
                                 } else {
                                     Column(
@@ -662,6 +666,7 @@ class MainActivity : ComponentActivity() {
                                                 onTriggerDuressWipe = { pin -> viewModel.verifyOrTriggerDuressWipe(pin) },
                                                 onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
                                                 onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
+                                                onToggleWebPortal = { viewModel.toggleWebPortal() },
                                             )
                                         } else {
                                             RootBoosterScreen(

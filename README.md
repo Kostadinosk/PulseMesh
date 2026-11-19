@@ -6,15 +6,16 @@
 
 **Off-Grid Peer-to-Peer Android Mesh Messenger, Full-Duplex Voice Communicator & Tactical Offline Map**
 
-[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1)
-[![Platform](https://img.shields.io/badge/Android-7.0%2B%20(API%2024--36)-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1)
+[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2)
+[![Platform](https://img.shields.io/badge/Android-7.0%2B%20(API%2024--36)-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://github.com/Kostadinosk/PulseMesh)
 [![Encryption](https://img.shields.io/badge/Crypto-ECDH%20P--256%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
-[![License: MIT](https://img.shields.io/badge/License-MIT-0088E6?style=flat-square)](LICENSE)
+[![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-0088E6?style=flat-square)](LICENSE)
 
 [**Live Website**](https://kostadinosk.github.io/PulseMesh/) &bull;
-[**Download Release APK (v1.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-release.apk) &bull;
-[**Download Debug APK (v1.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-debug.apk) &bull;
+[**PulseMesh Web Node**](https://kostadinosk.github.io/PulseMesh/web/) &bull;
+[**Download Release APK (v1.2)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-release.apk) &bull;
+[**Download Debug APK (v1.2)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-debug.apk) &bull;
 [**Contact & Field Reports**](https://kostadinosk.github.io/PulseMesh/contact.html) &bull;
 [**Report an Issue**](https://github.com/Kostadinosk/PulseMesh/issues)
 
@@ -32,6 +33,7 @@
 
 | Module | Highlights |
 | :--- | :--- |
+| **Wi-Fi Direct Web Portal & Browser Node (v1.2)** | Embedded pure-Kotlin HTTP/SSE server (`:8080`) auto-hosted on Wi-Fi Direct (`192.168.49.1`) and Local Hotspot (`192.168.43.1`) subnets so iPhones, laptops, and browsers join the live BLE/Wi-Fi mesh, cached offline map tiles, waypoints, and G.711 μ-law PTT with zero internet. Also available online at [`/web/`](https://kostadinosk.github.io/PulseMesh/web/). |
 | **Multi-Hop DTN Messaging** | Broadcast channels, ECDH group chats, and direct messages with `TTL=7` flood routing, packet deduplication, delivery ACKs, and a persistent Delay-Tolerant Networking (DTN) outbox. |
 | **Encrypted `@username` Accounts (`PMU2` / `PMB1`)** | Free cryptographic `@username` handles signed with ECDSA P-256 keys, PBKDF2-HMAC-SHA256 encrypted key vaults, and full-device migration (chats, contacts, keys) via PIN or one-time Recovery Key. |
 | **Full-Duplex Voice & Walkie-Talkie (PTT)** | Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice streaming over local Wi-Fi/Hotspot UDP or pure BLE GATT, with half-duplex echo ducking, lock-screen call controls, mini call bar, and voicemail capture. |
@@ -123,6 +125,8 @@ In no event shall the author or contributors be held liable for any direct, indi
 
 ---
 
-## License
+## License & Trademark Policy
 
-Released under the [MIT License](LICENSE).
+Released under the **[GNU General Public License v3.0 (`GPL-3.0-only`)](LICENSE)**.
+
+Pursuant to **GPL-3.0 Section 7(e)**, the **PulseMesh** name, custom app icon, and branding remain the exclusive property of Konstantinos Kourtis. See **[TRADEMARK.md](TRADEMARK.md)** for full brand reservation terms (any public fork or modified distribution must use a different app name, package ID, and icon).

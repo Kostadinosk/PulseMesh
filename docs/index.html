@@ -553,9 +553,10 @@
       <a href="#" class="brand">
         <img src="assets/pulsemesh-logo.png?v=2" alt="PulseMesh Icon" />
         <span>PulseMesh</span>
-        <span class="brand-badge">v1.1</span>
+        <span class="brand-badge">v1.2</span>
       </a>
       <nav class="nav-links">
+        <a href="web/" style="color:var(--accent-emerald);font-weight:800;">Web App</a>
         <a href="#features">Capabilities</a>
         <a href="#transports">Transports</a>
         <a href="#security">Security</a>
@@ -576,29 +577,32 @@
         <div class="pill-row">
           <span class="pill emerald">● Off-Grid Multi-Radio Mesh</span>
           <span class="pill">BLE 0xCAFE / 0xCAFF</span>
-          <span class="pill amber">E2EE @username Vaults</span>
+          <span class="pill amber">v1.2 Wi-Fi Direct Web Portal</span>
         </div>
         <h1>
-          Peer-to-Peer Tactical Mesh for <span class="gradient-text">Zero-Infrastructure</span> Android Devices.
+          Peer-to-Peer Tactical Mesh for <span class="gradient-text">Zero-Infrastructure</span> Android &amp; Web Devices.
         </h1>
         <p class="lead">
           PulseMesh links standard Android phones over Bluetooth Low Energy, Wi-Fi Direct / Auto-Hotspot subnets,
-          Acoustic AFSK, and USB/Ethernet bridges to deliver end-to-end encrypted messaging, live full-duplex voice calls,
-          and offline Web Mercator GPS maps without cell towers.
+          an embedded Wi-Fi Direct Web Portal (so iPhones and laptops join via browser with zero internet),
+          Acoustic AFSK, and USB/Ethernet bridges for E2EE chat, voice PTT, and offline Web Mercator GPS maps.
         </p>
         <div class="cta-group">
-          <a class="btn btn-primary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-release.apk">
-            ⬇ Download Signed Release APK (v1.1)
+          <a class="btn btn-primary" href="web/">
+            🌐 Launch PulseMesh Web Node
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.1/app-debug.apk">
-            ⚙ Download Debug APK
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-release.apk">
+            ⬇ Download Release APK (v1.2)
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1" target="_blank" rel="noopener">
-            View v1.1 Release Notes →
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-debug.apk">
+            ⚙ Debug APK
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2" target="_blank" rel="noopener">
+            v1.2 Release Notes →
           </a>
         </div>
         <div class="meta-caption">
-          Package: <code>com.KostadinosK.pulsemesh</code> &bull; Android 7.0+ (API 24–36) &bull; MIT License
+          Package: <code>com.KostadinosK.pulsemesh</code> &bull; Android 7.0+ (API 24–36) &bull; GNU GPL-3.0-only
         </div>
       </div>
 
@@ -631,9 +635,9 @@
         </div>
         <div class="hud-log">
           <div><span class="ok">[BLE-MESH]</span> 0xCAFE 14B micro-degree beacon active (GATT staggered)</div>
-          <div><span class="cyan">[E2EE-ID]</span> @username ECDSA signature verified &bull; PMU2 ECDH inbox ready</div>
-          <div><span class="amber">[VOICE]</span> Full-duplex 8kHz IMA-ADPCM + UDP 45888 local subnet link</div>
-          <div><span class="ok">[MAP-CACHE]</span> EPSG:3857 offline tile pyramid &amp; SOS waypoint synced</div>
+          <div><span class="cyan">[WEB-PORTAL]</span> Wi-Fi Direct HTTP :8080 offline browser node &amp; SSE bridge live</div>
+          <div><span class="amber">[VOICE]</span> Full-duplex 8kHz IMA-ADPCM + G.711 μ-law UDP 45888 subnet link</div>
+          <div><span class="ok">[MAP-CACHE]</span> EPSG:3857 offline tile cache served to Android &amp; Web clients</div>
         </div>
       </aside>
     </section>
@@ -645,6 +649,14 @@
         <p>Every layer is engineered to survive intermittent links, OEM Bluetooth quirks, and strict off-grid isolation.</p>
       </div>
       <div class="grid-3">
+        <article class="glass-card">
+          <span class="card-tag emerald">v1.2 Web Node</span>
+          <h3>Wi-Fi Direct Local Web Portal &amp; Browser App</h3>
+          <p>
+            When an Android phone hosts a Wi-Fi Direct group (<code>192.168.49.1:8080</code>) or Local Hotspot (<code>192.168.43.1:8080</code>), it automatically serves the full offline PulseMesh Web Client so any iPhone, laptop, or browser joins the live BLE/Wi-Fi mesh, map tile cache, and PTT voice with zero internet. Also available online at <a href="web/"><code>/web/</code></a>.
+          </p>
+        </article>
+
         <article class="glass-card">
           <span class="card-tag">0xCAFE / 0xCAFF</span>
           <h3>Sub-Second BLE Discovery &amp; GATT Mesh</h3>
@@ -728,6 +740,11 @@
               <td>High-bandwidth local subnet multicast, full-duplex voice streaming, and rapid photo/message sync.</td>
             </tr>
             <tr>
+              <td><strong>Embedded Wi-Fi Direct Web Portal (v1.2)</strong></td>
+              <td><code>HTTP :8080</code> / SSE / <code>_http._tcp.</code></td>
+              <td>Serves the self-contained offline PulseMesh Web Node and cached map tiles to any browser on the local Wi-Fi Direct / Hotspot subnet.</td>
+            </tr>
+            <tr>
               <td><strong>USB-C &amp; Ethernet Auto-Bridge</strong></td>
               <td><code>usb0</code> / <code>rndis0</code> / <code>eth0</code> / IPv6 <code>ff02::1</code></td>
               <td>Zero-RF wired tactical tethering between devices or field routers.</td>
@@ -788,14 +805,15 @@ cd PulseMesh
   <footer>
     <div class="container footer-row">
       <div>
-        <strong>PulseMesh</strong> (<code>com.KostadinosK.pulsemesh</code>) &bull; Released under the <a href="https://github.com/Kostadinosk/PulseMesh/blob/main/LICENSE">MIT License</a>.
+        <strong>PulseMesh</strong> (<code>com.KostadinosK.pulsemesh</code>) &bull; Released under <a href="https://github.com/Kostadinosk/PulseMesh/blob/main/LICENSE">GNU GPL-3.0-only</a> (<a href="https://github.com/Kostadinosk/PulseMesh/blob/main/TRADEMARK.md">Trademark Policy</a>).
         Not for primary life-safety use; provided "AS IS" for educational and research purposes.
         Independent open-source project by Konstantinos Kourtis; not affiliated with <code>pulsemesh.io</code> or any commercial entity.
       </div>
       <div>
+        <a href="web/">Web App</a> &bull;
         <a href="contact.html">Contact</a> &bull;
         <a href="https://github.com/Kostadinosk/PulseMesh">Repository</a> &bull;
-        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.1">Release v1.1</a>
+        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2">Release v1.2</a>
       </div>
     </div>
   </footer>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Konstantinos Kourtis
+// SPDX-License-Identifier: GPL-3.0-only
+
 package com.example.viewmodel
 
 import android.app.Application
@@ -221,6 +224,9 @@ data class MeshUiState(
     val hasDuressPin: Boolean = false,
     val p2pTileSyncStatus: String = "Ready to beam cached map tiles over local mesh",
 
+    // PulseMesh v1.2 Wi-Fi Direct Embedded Web Portal State
+    val webPortalStatus: com.example.service.WebPortalStatus = com.example.service.WebPortalStatus(),
+
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Sim, 4: Root)
     val selectedTabIndex: Int = 0
 )
@@ -327,6 +333,20 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private var rootRadioBoostApplied = false
 
     val hotspotManager = com.example.util.LocalHotspotManager(application)
+    @Volatile
+    private var manualWebPortalPinned: Boolean = false
+    private val webVoiceSeqCounter = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile
+    private var latestWebVoiceFrame: Triple<Int, Pair<String, String>, String>? = null
+
+    val pulseMeshWebServer: com.example.service.PulseMeshWebServer = com.example.service.PulseMeshWebServer(
+        context = application,
+        scope = viewModelScope,
+        buildInfoJson = { portalUrl, webClientCount -> buildWebPortalInfoJson(portalUrl, webClientCount) },
+        buildStateJson = { clientNodeId -> buildWebPortalStateJson(clientNodeId) },
+        onClientRegistered = { reg -> handleWebClientRegistration(reg) },
+        onWebPacketSubmitted = { submitted -> handleWebSubmittedPacket(submitted) }
+    )
     val offGridBleEngine: com.example.service.OffGridBleMeshEngine = com.example.service.OffGridBleMeshEngine(
         context = application,
         scope = viewModelScope,
@@ -754,14 +774,25 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         hotspotManager.onHotspotStartedCallback = { ssid, pass, hostIp ->
             autoHotspotNegotiator.onExternalLocalHotspotStarted(ssid, pass, hostIp)
+            pulseMeshWebServer.start(hostIp)
         }
         hotspotManager.onHotspotStoppedCallback = {
             autoHotspotNegotiator.stopHotspotGroup()
+            if (!manualWebPortalPinned) {
+                pulseMeshWebServer.stop()
+            }
         }
         autoHotspotNegotiator.onFallbackToLocalHotspotCallback = {
             hotspotManager.startLocalHotspot()
         }
         offGridBleEngine.start()
+
+        // Collect v1.2 Wi-Fi Direct Embedded Web Portal Status
+        viewModelScope.launch {
+            pulseMeshWebServer.status.collect { wStatus ->
+                _uiState.update { it.copy(webPortalStatus = wStatus) }
+            }
+        }
 
         // Collect BLE mesh telemetry
         viewModelScope.launch {
@@ -785,6 +816,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // Collect Local-Only & P2P Wi-Fi Hotspot State
         viewModelScope.launch {
             autoHotspotNegotiator.status.collect { aStatus ->
+                if (aStatus.isHotspotHost || aStatus.isConnected) {
+                    val hintIp = aStatus.hostIp.ifBlank { com.example.service.AutoHotspotNegotiator.P2P_GO_IP }
+                    if (!pulseMeshWebServer.isRunning()) {
+                        pulseMeshWebServer.start(hintIp)
+                    } else {
+                        pulseMeshWebServer.updateHostIpHint(hintIp)
+                    }
+                } else if (!hotspotManager.hotspotState.value.isActive && !manualWebPortalPinned && pulseMeshWebServer.isRunning()) {
+                    pulseMeshWebServer.stop()
+                }
                 _uiState.update { current ->
                     current.copy(
                         hotspotButtonText = aStatus.buttonStateText,
@@ -1213,6 +1254,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val nextBtnState = autoHotspotNegotiator.hostHotspotExplicitly(
             onFallbackToLocalHotspot = { hotspotManager.startLocalHotspot() }
         )
+        pulseMeshWebServer.start(com.example.service.AutoHotspotNegotiator.P2P_GO_IP)
         _uiState.update { it.copy(hotspotButtonText = nextBtnState) }
         triggerHaptic(50)
     }
@@ -1236,6 +1278,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val nextBtnState = autoHotspotNegotiator.stopHotspotExplicitly(
             onStopLocalHotspot = { hotspotManager.stopLocalHotspot() }
         )
+        if (!manualWebPortalPinned) {
+            pulseMeshWebServer.stop()
+        }
         _uiState.update { it.copy(hotspotButtonText = nextBtnState) }
         triggerHaptic(50)
     }
@@ -3839,6 +3884,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         if (state.isInternetEnabled) {
             meshNetworkService.broadcastPacket(filteredPacket)
         }
+
+        // 4. Wi-Fi Direct Embedded Web Portal SSE Push
+        pulseMeshWebServer.notifyStateChanged()
     }
 
     /**
@@ -4575,6 +4623,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                             tacticalCallService.recordIncomingFramePlayed()
                         }
                     }
+                    val vSeq = webVoiceSeqCounter.incrementAndGet()
+                    latestWebVoiceFrame = Triple(vSeq, canonicalSrcId to effectiveCallsign, packet.payload)
+                    pulseMeshWebServer.notifyVoiceFrame(canonicalSrcId, effectiveCallsign, packet.payload)
                 }
                 val speakerLabel = "SPEAKING: $effectiveCallsign (Hop ${packet.hops})"
                 speakingBannerClearJob?.cancel()
@@ -5068,6 +5119,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 // For background HEARTBEAT / GPS_BEACON, registerOrUpdatePeerInstant already handled throttled UI updates
             }
         }
+        pulseMeshWebServer.notifyStateChanged()
     }
 
     fun pingMeshNow() {
@@ -6431,8 +6483,382 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    // =========================================================================
+    // PULSEMESH v1.2 WI-FI DIRECT EMBEDDED WEB PORTAL BRIDGE
+    // =========================================================================
+
+    fun toggleWebPortal() {
+        if (pulseMeshWebServer.isRunning()) {
+            manualWebPortalPinned = false
+            pulseMeshWebServer.stop()
+        } else {
+            manualWebPortalPinned = true
+            val hintIp = autoHotspotNegotiator.status.value.hostIp
+                .ifBlank { autoHotspotNegotiator.myLocalIp }
+                .ifBlank { com.example.service.AutoHotspotNegotiator.P2P_GO_IP }
+            pulseMeshWebServer.start(hintIp)
+        }
+        triggerHaptic(35)
+    }
+
+    private fun buildWebPortalInfoJson(portalUrl: String, webClientCount: Int): org.json.JSONObject {
+        val state = _uiState.value
+        return org.json.JSONObject().apply {
+            put("pulsemeshHost", true)
+            put("version", "1.2")
+            put("hostNodeId", state.localNodeId)
+            put("hostCallsign", state.operatorCallsign)
+            put("ssid", state.hotspotState.ssid)
+            put("portalUrl", portalUrl)
+            put("offGrid", !state.isInternetEnabled)
+            put("peerCount", state.activePeerCount)
+            put("webClientCount", webClientCount)
+        }
+    }
+
+    private fun buildWebPortalStateJson(clientNodeId: String): org.json.JSONObject {
+        val state = _uiState.value
+        val normClient = normalizeId(clientNodeId)
+        val normSelf = normalizeId(state.localNodeId)
+
+        val hostObj = org.json.JSONObject().apply {
+            put("id", state.localNodeId)
+            put("callsign", state.operatorCallsign)
+            put("batteryPercent", state.realBatteryPercent)
+            put("latitude", state.userLatitude ?: 0.0)
+            put("longitude", state.userLongitude ?: 0.0)
+            put("publicKeyBase64", state.x25519PublicKey)
+        }
+
+        val nodesArr = org.json.JSONArray()
+        for (n in state.nodes) {
+            if (n.isSelf) continue
+            nodesArr.put(org.json.JSONObject().apply {
+                put("id", n.id)
+                put("callsign", n.callsign)
+                put("batteryPercent", n.batteryPercent)
+                put("rssiDbm", n.rssiDbm)
+                put("hopCount", n.hopCount)
+                put("latitude", n.latitude)
+                put("longitude", n.longitude)
+                put("publicKeyBase64", n.publicKeyBase64)
+                val tArr = org.json.JSONArray()
+                n.transports.forEach { tArr.put(it) }
+                put("transports", tArr)
+            })
+        }
+
+        val groupsArr = org.json.JSONArray()
+        for (g in state.meshGroups) {
+            groupsArr.put(org.json.JSONObject().apply {
+                put("groupId", g.groupId)
+                put("groupName", g.groupName)
+                val mArr = org.json.JSONArray()
+                g.memberIds.forEach { mArr.put(it) }
+                put("memberIds", mArr)
+            })
+        }
+
+        val wpArr = org.json.JSONArray()
+        for (wp in state.waypoints) {
+            wpArr.put(org.json.JSONObject().apply {
+                put("id", wp.id)
+                put("title", wp.title)
+                put("type", wp.type.name)
+                put("latitude", wp.latitude)
+                put("longitude", wp.longitude)
+                put("creatorCallsign", wp.creatorCallsign)
+                put("timestamp", wp.timestamp)
+            })
+        }
+
+        val pktsArr = org.json.JSONArray()
+        val recentPackets = state.packets.take(160).reversed()
+        for (p in recentPackets) {
+            val dst = p.destId
+            val srcNorm = normalizeId(p.sourceId)
+            val dstNorm = normalizeId(dst)
+            val threadId = when {
+                dst.equals("ALL", ignoreCase = true) || dst.equals("BROADCAST", ignoreCase = true) -> "channel_primary"
+                dst.equals("ENC_TACNET", ignoreCase = true) -> "channel_encrypted"
+                state.meshGroups.any { it.groupId == dst } -> "group_$dst"
+                normClient.isNotBlank() && (dstNorm == normClient || srcNorm == normClient) -> {
+                    val peerId = if (srcNorm == normClient) dst else p.sourceId
+                    "dm_$peerId"
+                }
+                dstNorm == normSelf && normClient.isNotBlank() && srcNorm == normClient -> "dm_${state.localNodeId}"
+                else -> continue
+            }
+            pktsArr.put(org.json.JSONObject().apply {
+                put("id", p.id)
+                put("threadId", threadId)
+                put("sourceId", p.sourceId)
+                put("destId", p.destId)
+                put("sourceCallsign", p.sourceCallsign)
+                put("type", p.type.name)
+                put("content", p.content)
+                put("hops", p.hops)
+                put("transport", p.transport)
+                put("timestamp", p.timestamp)
+            })
+        }
+
+        val root = org.json.JSONObject().apply {
+            put("hostNode", hostObj)
+            put("nodes", nodesArr)
+            put("groups", groupsArr)
+            put("waypoints", wpArr)
+            put("packets", pktsArr)
+            put("isSosActive", state.isSosActive)
+        }
+        latestWebVoiceFrame?.let { (seq, who, b64) ->
+            root.put("recentVoice", org.json.JSONObject().apply {
+                put("seq", seq)
+                put("srcNodeId", who.first)
+                put("srcCallsign", who.second)
+                put("payload", b64)
+            })
+        }
+        return root
+    }
+
+    private fun handleWebClientRegistration(reg: com.example.service.WebClientRegistration) {
+        viewModelScope.launch(Dispatchers.Main) {
+            val cleanId = reg.nodeId.trim()
+            if (cleanId.isBlank()) return@launch
+            val norm = normalizeId(cleanId)
+            if (reg.publicKeyBase64.isNotBlank() && TacticalE2eeManager.isValidEcPublicKeyBase64(reg.publicKeyBase64)) {
+                prefs.verifyOrTrustPeerPublicKey(cleanId, reg.publicKeyBase64)
+            }
+            val now = System.currentTimeMillis()
+            val prev = peersBackingMap[norm]
+            val updated = (prev ?: MeshNode(
+                id = cleanId,
+                callsign = reg.callsign,
+                model = "Web Portal Client",
+                batteryPercent = 100,
+                rssiDbm = -32,
+                hopCount = 1
+            )).copy(
+                callsign = reg.callsign.ifBlank { prev?.callsign ?: cleanId },
+                latitude = reg.lat ?: prev?.latitude ?: 0.0,
+                longitude = reg.lng ?: prev?.longitude ?: 0.0,
+                lastSeenMs = now,
+                lastHeardAgoSec = 0,
+                publicKeyBase64 = reg.publicKeyBase64.ifBlank { prev?.publicKeyBase64 ?: "" },
+                transports = (prev?.transports ?: emptySet()) + "WEB PORTAL"
+            )
+            peersBackingMap[norm] = updated
+            val snapshotNodes = peersBackingMap.values.sortedByDescending { it.lastSeenMs }
+            _uiState.update { it.copy(nodes = snapshotNodes, activePeerCount = snapshotNodes.size) }
+            refreshConversationsList()
+
+            // Announce web peer presence to the rest of the BLE / Wi-Fi / Relay mesh
+            val presencePkt = com.example.service.WireMeshPacket(
+                packetId = "web_hb_${norm}_$now",
+                srcNodeId = cleanId,
+                srcCallsign = reg.callsign,
+                dstNodeId = "BROADCAST",
+                type = if (reg.lat != null && reg.lng != null) "GPS_BEACON" else "HEARTBEAT",
+                payload = "PulseMesh Web Portal Client",
+                ttl = 7,
+                hops = 1,
+                lat = reg.lat,
+                lng = reg.lng,
+                battery = 100,
+                senderPubKey = reg.publicKeyBase64,
+                timestamp = now
+            )
+            sendOmniPacket(presencePkt)
+        }
+    }
+
+    private fun handleWebSubmittedPacket(submitted: com.example.service.WebSubmittedPacket) {
+        viewModelScope.launch(Dispatchers.Main) {
+            val now = System.currentTimeMillis()
+            val srcId = submitted.clientNodeId.ifBlank { _uiState.value.localNodeId }
+            val srcCallsign = submitted.callsign.ifBlank { "WebNode" }
+
+            when (submitted.type) {
+                "VOICE_PTT", "VOICE" -> {
+                    val b64 = submitted.payload.trim()
+                    if (b64.isBlank()) return@launch
+                    runCatching { audioService.playAudioBase64(b64, isCallAudio = false) }
+                    val vSeq = webVoiceSeqCounter.incrementAndGet()
+                    latestWebVoiceFrame = Triple(vSeq, srcId to srcCallsign, b64)
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = "ALL",
+                        type = "VOICE_PTT",
+                        payload = b64,
+                        ttl = 5,
+                        hops = 1,
+                        timestamp = now
+                    )
+                    sendVoiceAudioPacket(wire)
+                }
+                "WAYPOINT" -> {
+                    val lat = submitted.waypointLat ?: submitted.lat ?: return@launch
+                    val lng = submitted.waypointLng ?: submitted.lng ?: return@launch
+                    val wpType = runCatching { WaypointType.valueOf(submitted.waypointType) }.getOrDefault(WaypointType.RALLY)
+                    val title = submitted.waypointTitle.ifBlank { wpType.label }
+                    val wpId = "wp_web_$now"
+                    val wp = TacticalWaypoint(
+                        id = wpId,
+                        title = title,
+                        type = wpType,
+                        latitude = lat,
+                        longitude = lng,
+                        creatorCallsign = srcCallsign,
+                        timestamp = now,
+                        payloadHex = "0x${wpId.hashCode().toUInt().toString(16).uppercase()}"
+                    )
+                    val pkt = MeshPacket(
+                        id = submitted.packetId,
+                        sourceId = srcId,
+                        destId = "ALL",
+                        sourceCallsign = srcCallsign,
+                        type = PacketType.WAYPOINT,
+                        content = "SHARED PIN [${wpType.name}]: $title @ ${String.format("%.4f", lat)}, ${String.format("%.4f", lng)}",
+                        hops = 1,
+                        rssiDbm = -32,
+                        transport = "WEB PORTAL",
+                        rawHexBadge = "[WAYPOINT | $srcId->ALL | WEB PORTAL]",
+                        isIncoming = true,
+                        waypointData = wp,
+                        timestamp = now
+                    )
+                    _uiState.update { cur ->
+                        cur.copy(
+                            waypoints = cur.waypoints.filterNot { it.id == wpId } + wp,
+                            packets = listOf(pkt) + cur.packets
+                        )
+                    }
+                    val wpJson = org.json.JSONObject().apply {
+                        put("id", wpId)
+                        put("title", title)
+                        put("type", wpType.name)
+                        put("lat", lat)
+                        put("lon", lng)
+                        put("creator", srcCallsign)
+                        put("ts", now)
+                    }.toString()
+                    sendOmniPacket(
+                        com.example.service.WireMeshPacket(
+                            packetId = submitted.packetId,
+                            srcNodeId = srcId,
+                            srcCallsign = srcCallsign,
+                            dstNodeId = "ALL",
+                            type = "WAYPOINT",
+                            payload = wpJson,
+                            ttl = 7,
+                            hops = 1,
+                            lat = lat,
+                            lng = lng,
+                            timestamp = now
+                        )
+                    )
+                }
+                "SOS" -> {
+                    val content = submitted.text.ifBlank { "PRIORITY SOS FROM $srcCallsign (WEB PORTAL)" }
+                    val pkt = MeshPacket(
+                        id = submitted.packetId,
+                        sourceId = srcId,
+                        destId = "ALL",
+                        sourceCallsign = srcCallsign,
+                        type = PacketType.SOS,
+                        content = content,
+                        hops = 1,
+                        rssiDbm = -32,
+                        transport = "WEB PORTAL",
+                        rawHexBadge = "[SOS | $srcId->ALL | WEB PORTAL]",
+                        isIncoming = true,
+                        timestamp = now
+                    )
+                    _uiState.update { it.copy(packets = listOf(pkt) + it.packets) }
+                    refreshConversationsList()
+                    sendOmniPacket(
+                        com.example.service.WireMeshPacket(
+                            packetId = submitted.packetId,
+                            srcNodeId = srcId,
+                            srcCallsign = srcCallsign,
+                            dstNodeId = "ALL",
+                            type = "SOS",
+                            payload = content,
+                            ttl = 7,
+                            hops = 1,
+                            lat = submitted.lat,
+                            lng = submitted.lng,
+                            timestamp = now
+                        )
+                    )
+                    triggerHaptic(160)
+                }
+                else -> {
+                    val text = submitted.text.ifBlank { submitted.payload }.trim()
+                    if (text.isBlank()) return@launch
+                    val tid = submitted.threadId
+                    val isEnc = tid == "channel_encrypted"
+                    val isGroup = tid.startsWith("group_")
+                    val isDm = tid.startsWith("dm_")
+                    val dstNodeId = when {
+                        isEnc -> "ENC_TACNET"
+                        isGroup -> tid.removePrefix("group_")
+                        isDm -> tid.removePrefix("dm_")
+                        else -> "ALL"
+                    }
+                    val meshPkt = MeshPacket(
+                        id = submitted.packetId,
+                        sourceId = srcId,
+                        destId = dstNodeId,
+                        sourceCallsign = srcCallsign,
+                        type = PacketType.TEXT,
+                        content = text,
+                        hops = 1,
+                        rssiDbm = -32,
+                        transport = "WEB PORTAL",
+                        rawHexBadge = "[${submitted.packetId} | $srcId->$dstNodeId | WEB PORTAL]",
+                        isIncoming = true,
+                        timestamp = now
+                    )
+                    _uiState.update { it.copy(packets = listOf(meshPkt) + it.packets) }
+                    persistentChatManager.savePacket(tid, meshPkt)
+                    refreshConversationsList()
+
+                    val wireType = when {
+                        isDm -> "E2EE_DM"
+                        isGroup -> "GROUP_CHAT"
+                        else -> "CHAT"
+                    }
+                    val wirePayload = when {
+                        isDm -> "PLAINTEXT:$text"
+                        else -> text
+                    }
+                    sendOmniPacket(
+                        com.example.service.WireMeshPacket(
+                            packetId = submitted.packetId,
+                            srcNodeId = srcId,
+                            srcCallsign = srcCallsign,
+                            dstNodeId = dstNodeId,
+                            type = wireType,
+                            payload = wirePayload,
+                            ttl = 7,
+                            hops = 1,
+                            groupId = if (isGroup) dstNodeId else "",
+                            senderPubKey = submitted.publicKeyBase64,
+                            timestamp = now
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        pulseMeshWebServer.stop()
         internetNetworkCallback?.let { cb ->
             runCatching {
                 val cm = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
