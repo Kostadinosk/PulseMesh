@@ -555,6 +555,48 @@ class DevicePreferences(context: Context) {
         prefs.edit().putString("breadcrumbs_json", arr.toString()).apply()
     }
 
+    fun deleteAccountInformation(targetUsername: String = ""): Boolean {
+        val normTarget = TacticalE2eeManager.normalizeUsername(targetUsername)
+        val normActive = TacticalE2eeManager.normalizeUsername(claimedUsername)
+        val isDeletingActive = normTarget.isBlank() || normTarget == normActive
+
+        // Filter out any cached known claims matching the target username
+        val filteredClaims = getAllKnownUsernameClaims().filterNot { claim ->
+            val cNorm = TacticalE2eeManager.normalizeUsername(claim.username)
+            (normTarget.isNotBlank() && cNorm == normTarget) ||
+                (isDeletingActive && normActive.isNotBlank() && cNorm == normActive)
+        }
+        val arr = org.json.JSONArray()
+        for (item in filteredClaims) arr.put(item.toJson())
+
+        val editor = prefs.edit()
+            .putString("known_username_claims_json", arr.toString())
+
+        if (isDeletingActive) {
+            val newId = generateRandomNodeId()
+            val kp = TacticalE2eeManager.generateKeyPair()
+            editor
+                .remove("claimed_username")
+                .remove("account_salt_hex")
+                .remove("account_pin_hash")
+                .remove("account_recovery_key")
+                .remove("account_recovery_hash")
+                .remove("pending_username_hold")
+                .remove("is_username_on_hold")
+                .remove("account_auth_token")
+                .remove("pending_dtn_packets_json")
+                .remove("mesh_groups_json")
+                .remove("breadcrumbs_json")
+                .putString("node_id", newId)
+                .putString("callsign", "User-" + newId.takeLast(4))
+                .putString("x25519_pub", kp.publicKeyBase64)
+                .putString("x25519_priv", kp.privateKeyBase64)
+                .putString("x25519_fp", kp.fingerprint)
+        }
+        editor.apply()
+        return isDeletingActive
+    }
+
     fun wipeSensitiveVaultForDuress() {
         val newId = generateRandomNodeId()
         val kp = TacticalE2eeManager.generateKeyPair()

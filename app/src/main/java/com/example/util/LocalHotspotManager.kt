@@ -70,13 +70,26 @@ class LocalHotspotManager(private val context: Context) {
                         reservation = res
                         val ssid = extractSsid(res) ?: "PulseMesh-AP"
                         val pass = extractPassphrase(res) ?: "pulsemesh2026"
+                        val initialIp = detectActiveApIpv4() ?: "192.168.43.1"
                         _hotspotState.value = HotspotState(
                             isActive = true,
                             ssid = ssid,
                             passphrase = pass,
-                            statusMessage = "Local Hotspot Active ($ssid) • 192.168.43.1"
+                            statusMessage = "Local Hotspot Active ($ssid) • $initialIp"
                         )
-                        onHotspotStartedCallback?.invoke(ssid, pass, "192.168.43.1")
+                        onHotspotStartedCallback?.invoke(ssid, pass, initialIp)
+                        // Re-probe interface IP after 1.2s since Android 11-16 assigns random SoftAP IPs asynchronously
+                        mainHandler.postDelayed({
+                            if (_hotspotState.value.isActive) {
+                                val resolvedIp = detectActiveApIpv4() ?: initialIp
+                                if (resolvedIp != initialIp) {
+                                    _hotspotState.value = _hotspotState.value.copy(
+                                        statusMessage = "Local Hotspot Active ($ssid) • $resolvedIp"
+                                    )
+                                    onHotspotStartedCallback?.invoke(ssid, pass, resolvedIp)
+                                }
+                            }
+                        }, 1200L)
                     }
 
                     override fun onStopped() {
@@ -164,6 +177,38 @@ class LocalHotspotManager(private val context: Context) {
                 }
             }
         }
+    }
+
+    private fun detectActiveApIpv4(): String? {
+        return runCatching {
+            val ifaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return@runCatching null
+            val candidates = mutableListOf<Pair<Int, String>>()
+            while (ifaces.hasMoreElements()) {
+                val iface = ifaces.nextElement()
+                if (!iface.isUp || iface.isLoopback) continue
+                val name = iface.name.lowercase()
+                if (name.startsWith("rmnet") || name.startsWith("ccmni") || name.startsWith("tun") ||
+                    name.startsWith("ppp") || name.startsWith("dummy") || name.startsWith("epdg") || name.startsWith("iwlan")
+                ) continue
+                val addrs = iface.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
+                        val ip = addr.hostAddress ?: continue
+                        val prio = when {
+                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") -> 120
+                            name.startsWith("p2p") || ip == "192.168.49.1" -> 115
+                            (name.startsWith("wlan") && name != "wlan0") -> 110
+                            name.startsWith("wlan") && ip.endsWith(".1") -> 105
+                            name.startsWith("wlan") -> 70
+                            else -> 0
+                        }
+                        if (prio > 0) candidates.add(prio to ip)
+                    }
+                }
+            }
+            candidates.maxByOrNull { it.first }?.second
+        }.getOrNull()
     }
 
     private fun extractSsid(res: WifiManager.LocalOnlyHotspotReservation?): String? {

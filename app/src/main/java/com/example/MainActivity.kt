@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -224,6 +225,7 @@ class MainActivity : ComponentActivity() {
                                 onRequestPermissions = { permissionLauncher.launch(permissionsToRequest) },
                                 onOpenSetupWizard = { viewModel.openSetupWizard() },
                                 onToggleSos = { viewModel.toggleSosBeacon() },
+                                onDismissIncomingSos = { viewModel.dismissIncomingSosAlert() },
                                 onAutoConnectHotspot = { viewModel.toggleOrConnectHotspot() },
                             )
                             PersistentMiniCallBar(
@@ -501,6 +503,7 @@ class MainActivity : ComponentActivity() {
                                             viewModel.syncAccountBackupNow(cb)
                                         },
                                         onToggleWebPortal = { viewModel.toggleWebPortal() },
+                                        onDeleteAccountInfo = { u -> viewModel.deleteAllAccountInformation(u) },
                                     )
                                 } else {
                                     Column(
@@ -667,6 +670,7 @@ class MainActivity : ComponentActivity() {
                                                 onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
                                                 onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
                                                 onToggleWebPortal = { viewModel.toggleWebPortal() },
+                                                onDeleteAccountInfo = { u -> viewModel.deleteAllAccountInformation(u) },
                                             )
                                         } else {
                                             RootBoosterScreen(
@@ -699,26 +703,29 @@ class MainActivity : ComponentActivity() {
                         var showSosConfirmDialog by remember { mutableStateOf(false) }
                         val isOnActiveCallScreen = (state.selectedTabIndex == 2) && (effectiveCallSignaling != CallSignalingState.IDLE)
                         if (!isInsideChatThread && !isOnActiveCallScreen) {
-                            val sosAccent = if (state.isSosActive) Color(0xFFFF9800) else Color(0xFFE51937)
+                            val sosPulseAnim = androidx.compose.animation.core.rememberInfiniteTransition(label = "sos_fab_pulse")
+                            val sosGlow by sosPulseAnim.animateFloat(
+                                initialValue = 0.55f,
+                                targetValue = 1f,
+                                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                    animation = androidx.compose.animation.core.tween(if (state.isSosActive) 450 else 1200),
+                                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                                ),
+                                label = "sos_glow"
+                            )
+                            val sosAccent = if (state.isSosActive) Color(0xFFFF1744) else Color(0xFFE51937)
                             val sosShape = RoundedCornerShape(50)
                             Surface(
-                                color = if (p.isAero) Color.Transparent else sosAccent,
+                                color = sosAccent,
                                 shape = sosShape,
-                                shadowElevation = 8.dp,
+                                shadowElevation = 12.dp,
                                 border = BorderStroke(
-                                    width = 1.5.dp,
-                                    color = if (p.isAero) Color.White.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.45f)
+                                    width = if (state.isSosActive) 3.dp else 2.dp,
+                                    color = Color.White.copy(alpha = sosGlow)
                                 ),
                                 modifier = Modifier
                                     .align(Alignment.BottomStart)
                                     .padding(start = 14.dp, bottom = 14.dp)
-                                    .then(
-                                        if (p.isAero) {
-                                            Modifier.aeroGlossOverlay(p, sosAccent, sosShape, cornerRadius = 26.dp)
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
                                     .clickable {
                                         if (state.isSosActive) {
                                             viewModel.toggleSosBeacon()
@@ -729,32 +736,22 @@ class MainActivity : ComponentActivity() {
                                     .testTag("sos_corner_button")
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    if (p.isAero) {
-                                        AeroGlossBadgeIcon(
-                                            imageVector = Icons.Default.Sos,
-                                            accentColor = sosAccent,
-                                            contentDescription = "SOS Beacon",
-                                            badgeSize = 26.dp,
-                                            iconSize = 15.dp,
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.Sos,
-                                            contentDescription = "SOS Beacon",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Sos,
+                                        contentDescription = "SOS Beacon",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
                                     Text(
-                                        text = if (state.isSosActive) "SOS ACTIVE" else "SOS",
+                                        text = if (state.isSosActive) "⚠ SOS BROADCASTING" else "⚠ SOS",
                                         color = Color.White,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp
+                                        fontSize = 13.sp
                                     )
                                 }
                             }

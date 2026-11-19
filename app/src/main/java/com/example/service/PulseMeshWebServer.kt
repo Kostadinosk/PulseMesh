@@ -6,6 +6,8 @@ package com.example.service
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
+import android.os.Build
 import com.example.util.NativeTileMapManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +24,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
 import java.net.Inet4Address
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
@@ -36,6 +39,7 @@ data class WebPortalStatus(
     val port: Int = 8080,
     val hostIp: String = "",
     val portalUrl: String = "",
+    val allReachableUrls: List<String> = emptyList(),
     val activeClientCount: Int = 0,
     val statusMessage: String = "Wi-Fi Direct Web Portal Idle"
 )
@@ -54,6 +58,7 @@ data class WebSubmittedPacket(
     val callsign: String,
     val publicKeyBase64: String,
     val threadId: String,
+    val dstNodeId: String,
     val type: String,
     val text: String,
     val payload: String,
@@ -66,11 +71,12 @@ data class WebSubmittedPacket(
 )
 
 /**
- * Pure-Kotlin/Java Embedded HTTP/1.1 + SSE Web Server for PulseMesh v1.2.
- * Automatically hosts the full offline PulseMesh Web Node whenever Wi-Fi Direct (192.168.49.1)
- * or Local Hotspot (192.168.43.1) is active, so any nearby phone/laptop browser can join the
- * mesh (Chat, E2EE DMs, Offline Cached Map Tiles, Shared Waypoints, PTT Voice & SOS) with zero
- * internet and zero app installation.
+ * Pure-Kotlin/Java Embedded HTTP/1.1 + SSE Web Server for PulseMesh v1.2.5.
+ * - Binds wildcard dual-stack ServerSocket exclusively on Dispatchers.IO (never on Main Thread).
+ * - Automatically detects dynamic Android 11-16 SoftAP / Wi-Fi Direct gateway IPs (p2p*, ap*, swlan*, softap*, wlan1/2)
+ *   while strictly filtering out unreachable cellular (rmnet/ccmni) and VPN (tun) interfaces.
+ * - Holds a Wi-Fi High-Performance / Low-Latency lock so incoming browser TCP connections never stall.
+ * - Bridges Chat, E2EE DMs, Offline Map Tiles, Shared Waypoints, SOS, PTT Voice, and full 1-on-1 Voice Calls.
  */
 class PulseMeshWebServer(
     private val context: Context,
@@ -81,16 +87,20 @@ class PulseMeshWebServer(
     private val onWebPacketSubmitted: (WebSubmittedPacket) -> Unit
 ) {
     companion object {
-        private val PREFERRED_PORTS = intArrayOf(8080, 8081, 8082, 8083, 8084, 8085)
-        private const val MAX_POST_BODY_BYTES = 512 * 1024 // 512 KB cap (fits 200px JPEG photos)
+        private val PREFERRED_PORTS = intArrayOf(8080, 8081, 8082, 8083, 8084, 8085, 8888, 9090)
+        private const val MAX_POST_BODY_BYTES = 512 * 1024 // 512 KB cap
         private const val CLIENT_STALE_MS = 90_000L
         private val TILE_PATH_REGEX = Regex("^/api/tiles/(\\d{1,2})/(\\d+)/(\\d+)\\.png$")
+        private val EXCLUDED_IFACE_PREFIXES = listOf(
+            "rmnet", "r_rmnet", "ccmni", "tun", "tap", "ppp", "dummy", "lo", "epdg", "iwlan", "v4-rmnet", "clat"
+        )
     }
 
     private val _status = MutableStateFlow(WebPortalStatus())
     val status: StateFlow<WebPortalStatus> = _status.asStateFlow()
 
     private val running = AtomicBoolean(false)
+    private val starting = AtomicBoolean(false)
     @Volatile
     private var serverSocket: ServerSocket? = null
     @Volatile
@@ -98,6 +108,7 @@ class PulseMeshWebServer(
     @Volatile
     private var preferredHostIp: String = ""
 
+    private var startJob: Job? = null
     private var acceptJob: Job? = null
     private var maintenanceJob: Job? = null
     private val workerExecutor = Executors.newCachedThreadPool()
@@ -107,6 +118,7 @@ class PulseMeshWebServer(
 
     private var nsdManager: NsdManager? = null
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     private val cachedHtmlBytes: ByteArray by lazy {
         runCatching {
@@ -128,7 +140,9 @@ class PulseMeshWebServer(
                 .toString(Charsets.UTF_8)
                 .replace("../assets/pulsemesh-logo.png", "/api/icon.png")
                 .toByteArray(Charsets.UTF_8)
-        }.getOrElse { """{"name":"PulseMesh","short_name":"PulseMesh","display":"standalone","start_url":"/"}""".toByteArray(Charsets.UTF_8) }
+        }.getOrElse {
+            """{"name":"PulseMesh","short_name":"PulseMesh","display":"standalone","start_url":"/"}""".toByteArray(Charsets.UTF_8)
+        }
     }
 
     private val cachedSwBytes: ByteArray by lazy {
@@ -148,55 +162,69 @@ class PulseMeshWebServer(
             preferredHostIp = hostIpHint.trim()
         }
         if (running.get()) {
-            refreshPortalUrl()
+            scope.launch(Dispatchers.IO) { refreshPortalUrl() }
             return
         }
+        if (!starting.compareAndSet(false, true)) return
 
-        val ss = openServerSocket()
-        if (ss == null) {
-            _status.value = WebPortalStatus(
-                isRunning = false,
-                statusMessage = "Web Portal failed to bind port 8080-8085"
-            )
-            return
-        }
-
-        serverSocket = ss
-        boundPort = ss.localPort
-        running.set(true)
-
-        val ip = resolveBestHostIp()
-        val url = "http://$ip:$boundPort"
-        _status.value = WebPortalStatus(
-            isRunning = true,
-            port = boundPort,
-            hostIp = ip,
-            portalUrl = url,
-            activeClientCount = activeClients.size,
-            statusMessage = "Web Portal LIVE at $url"
+        _status.value = _status.value.copy(
+            statusMessage = "Starting Wi-Fi Direct Web Server..."
         )
 
-        registerNsdService(boundPort)
-
-        acceptJob?.cancel()
-        acceptJob = scope.launch(Dispatchers.IO) {
-            while (isActive && running.get()) {
-                try {
-                    val client = ss.accept()
-                    workerExecutor.execute { handleClientSocket(client) }
-                } catch (_: Exception) {
-                    if (!running.get()) break
+        startJob?.cancel()
+        startJob = scope.launch(Dispatchers.IO) {
+            try {
+                val ss = openServerSocket()
+                if (ss == null) {
+                    _status.value = WebPortalStatus(
+                        isRunning = false,
+                        statusMessage = "Web Portal failed to bind ports 8080-9090"
+                    )
+                    return@launch
                 }
-            }
-        }
 
-        maintenanceJob?.cancel()
-        maintenanceJob = scope.launch(Dispatchers.IO) {
-            while (isActive && running.get()) {
-                delay(15_000L)
-                pruneStaleClients()
+                serverSocket = ss
+                boundPort = ss.localPort
+                running.set(true)
+                acquireWifiLock()
                 refreshPortalUrl()
-                sendSseKeepAlive()
+                registerNsdService(boundPort)
+
+                acceptJob?.cancel()
+                acceptJob = scope.launch(Dispatchers.IO) {
+                    while (isActive && running.get()) {
+                        try {
+                            val client = ss.accept()
+                            client.tcpNoDelay = true
+                            workerExecutor.execute { handleClientSocket(client) }
+                        } catch (_: Exception) {
+                            if (!running.get()) break
+                        }
+                    }
+                }
+
+                // Rapid IP probe bursts while Android brings up SoftAP / Wi-Fi Direct IPv4 addresses, then steady 3s poll
+                maintenanceJob?.cancel()
+                maintenanceJob = scope.launch(Dispatchers.IO) {
+                    val quickProbes = longArrayOf(350L, 900L, 1500L, 2500L)
+                    for (ms in quickProbes) {
+                        delay(ms)
+                        if (!isActive || !running.get()) return@launch
+                        refreshPortalUrl()
+                    }
+                    var tick = 0
+                    while (isActive && running.get()) {
+                        delay(3_000L)
+                        tick++
+                        refreshPortalUrl()
+                        if (tick % 5 == 0) {
+                            pruneStaleClients()
+                            sendSseKeepAlive()
+                        }
+                    }
+                }
+            } finally {
+                starting.set(false)
             }
         }
     }
@@ -204,17 +232,26 @@ class PulseMeshWebServer(
     fun updateHostIpHint(hostIpHint: String) {
         if (hostIpHint.isNotBlank()) {
             preferredHostIp = hostIpHint.trim()
-            if (running.get()) refreshPortalUrl()
+            if (running.get()) {
+                scope.launch(Dispatchers.IO) { refreshPortalUrl() }
+            }
         }
     }
 
     fun stop() {
-        if (!running.getAndSet(false)) return
+        startJob?.cancel()
+        startJob = null
+        starting.set(false)
+        if (!running.getAndSet(false)) {
+            releaseWifiLock()
+            return
+        }
         acceptJob?.cancel()
         acceptJob = null
         maintenanceJob?.cancel()
         maintenanceJob = null
         unregisterNsdService()
+        releaseWifiLock()
         for (sse in sseStreams) {
             runCatching { sse.socket.close() }
         }
@@ -237,13 +274,28 @@ class PulseMeshWebServer(
         broadcastSseBytes(frame)
     }
 
-    fun notifyVoiceFrame(srcNodeId: String, srcCallsign: String, payloadBase64: String) {
+    fun notifyVoiceFrame(srcNodeId: String, srcCallsign: String, payloadBase64: String, isCallAudio: Boolean = false) {
         if (!running.get() || sseStreams.isEmpty() || payloadBase64.isBlank()) return
         val json = JSONObject().apply {
             put("event", "voice")
             put("srcNodeId", srcNodeId)
             put("srcCallsign", srcCallsign)
             put("payload", payloadBase64)
+            put("isCallAudio", isCallAudio)
+        }.toString()
+        broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+    }
+
+    fun notifyCallSignal(type: String, srcNodeId: String, srcCallsign: String, dstNodeId: String, payload: String = "") {
+        if (!running.get() || sseStreams.isEmpty()) return
+        val json = JSONObject().apply {
+            put("event", "call")
+            put("type", type)
+            put("srcNodeId", srcNodeId)
+            put("srcCallsign", srcCallsign)
+            put("dstNodeId", dstNodeId)
+            put("payload", payload)
+            put("timestamp", System.currentTimeMillis())
         }.toString()
         broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
     }
@@ -253,7 +305,8 @@ class PulseMeshWebServer(
             val sock = runCatching {
                 ServerSocket().apply {
                     reuseAddress = true
-                    bind(java.net.InetSocketAddress("0.0.0.0", port), 32)
+                    // Wildcard bind (no specific IP) listens on ALL active IPv4/IPv6 local interfaces (p2p, ap, wlan, usb)
+                    bind(InetSocketAddress(port), 64)
                 }
             }.getOrNull()
             if (sock != null) return sock
@@ -261,22 +314,52 @@ class PulseMeshWebServer(
         return null
     }
 
+    private fun acquireWifiLock() {
+        runCatching {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+            if (wifiLock == null) {
+                val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                wifiLock = wm.createWifiLock(mode, "PulseMesh:WebPortalLock").apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (wifiLock?.isHeld != true) wifiLock?.acquire()
+        }
+    }
+
+    private fun releaseWifiLock() {
+        runCatching {
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        }
+    }
+
     private fun refreshPortalUrl() {
         if (!running.get()) return
-        val ip = resolveBestHostIp()
-        val url = "http://$ip:$boundPort"
+        val rankedIps = resolveRankedLocalIpv4s()
+        val bestIp = rankedIps.firstOrNull()
+            ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.P2P_GO_IP }
+        val primaryUrl = "http://$bestIp:$boundPort"
+        val allUrls = rankedIps.map { "http://$it:$boundPort" }.ifEmpty { listOf(primaryUrl) }
         val cur = _status.value
-        if (cur.portalUrl != url || cur.activeClientCount != activeClients.size) {
-            _status.value = cur.copy(
-                hostIp = ip,
-                portalUrl = url,
+        if (cur.portalUrl != primaryUrl || cur.allReachableUrls != allUrls || cur.activeClientCount != activeClients.size || !cur.isRunning) {
+            _status.value = WebPortalStatus(
+                isRunning = true,
+                port = boundPort,
+                hostIp = bestIp,
+                portalUrl = primaryUrl,
+                allReachableUrls = allUrls,
                 activeClientCount = activeClients.size,
-                statusMessage = "Web Portal LIVE at $url"
+                statusMessage = "Web Portal LIVE at $primaryUrl"
             )
         }
     }
 
-    private fun resolveBestHostIp(): String {
+    private fun resolveRankedLocalIpv4s(): List<String> {
         val candidates = mutableListOf<Pair<Int, String>>()
         runCatching {
             val ifaces = NetworkInterface.getNetworkInterfaces() ?: return@runCatching
@@ -284,25 +367,35 @@ class PulseMeshWebServer(
                 val iface = ifaces.nextElement()
                 if (!iface.isUp || iface.isLoopback) continue
                 val name = iface.name.lowercase()
+                if (EXCLUDED_IFACE_PREFIXES.any { name.startsWith(it) }) continue
                 val addrs = iface.inetAddresses
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
-                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                    if (addr is Inet4Address && !addr.isLoopbackAddress && !addr.isLinkLocalAddress) {
                         val ip = addr.hostAddress ?: continue
+                        val isPrivate = ip.startsWith("192.168.") || ip.startsWith("10.") ||
+                            (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
+                        if (!isPrivate) continue
                         val priority = when {
-                            name.startsWith("p2p") || ip == "192.168.49.1" -> 100
-                            name.startsWith("ap") || name.startsWith("swlan") || ip == "192.168.43.1" -> 95
-                            name.startsWith("wlan") -> 80
-                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("eth") -> 70
-                            else -> 40
+                            name.startsWith("p2p") || ip == "192.168.49.1" -> 130
+                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") -> 125
+                            name.startsWith("wlan") && name != "wlan0" -> 120
+                            name.startsWith("wlan") && ip.endsWith(".1") -> 115
+                            name.startsWith("wlan") -> 85
+                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("eth") -> 70
+                            else -> 0
                         }
-                        candidates.add(priority to ip)
+                        if (priority > 0) {
+                            candidates.add(priority to ip)
+                        }
                     }
                 }
             }
         }
-        val best = candidates.maxByOrNull { it.first }?.second
-        return best ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.P2P_GO_IP }
+        return candidates
+            .sortedByDescending { it.first }
+            .map { it.second }
+            .distinct()
     }
 
     private fun pruneStaleClients() {
@@ -336,7 +429,7 @@ class PulseMeshWebServer(
     private fun handleClientSocket(socket: Socket) {
         var keepOpenForSse = false
         try {
-            socket.soTimeout = 12_000
+            socket.soTimeout = 15_000
             val input = BufferedInputStream(socket.getInputStream())
             val output = socket.getOutputStream()
 
@@ -373,37 +466,38 @@ class PulseMeshWebServer(
                 ByteArray(0)
             }
 
+            val isHead = method == "HEAD"
+
             when {
-                method == "GET" && (path == "/" || path == "/index.html" || path == "/web" || path == "/web/") -> {
-                    writeResponse(output, 200, "OK", "text/html; charset=utf-8", cachedHtmlBytes)
+                (method == "GET" || isHead) && (path == "/" || path == "/index.html" || path == "/web" || path == "/web/" || path == "/app" || path == "/app/") -> {
+                    writeResponse(output, 200, "OK", "text/html; charset=utf-8", cachedHtmlBytes, headOnly = isHead)
                 }
 
-                method == "GET" && (path == "/manifest.json" || path == "/web/manifest.json") -> {
-                    writeResponse(output, 200, "OK", "application/manifest+json; charset=utf-8", cachedManifestBytes)
+                (method == "GET" || isHead) && (path == "/manifest.json" || path == "/web/manifest.json") -> {
+                    writeResponse(output, 200, "OK", "application/manifest+json; charset=utf-8", cachedManifestBytes, headOnly = isHead)
                 }
 
-                method == "GET" && (path == "/sw.js" || path == "/web/sw.js") -> {
-                    writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes)
+                (method == "GET" || isHead) && (path == "/sw.js" || path == "/web/sw.js") -> {
+                    writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes, headOnly = isHead)
                 }
 
-                method == "GET" && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png") -> {
+                (method == "GET" || isHead) && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png") -> {
                     if (cachedIconBytes.isNotEmpty()) {
-                        writeResponse(output, 200, "OK", "image/png", cachedIconBytes)
+                        writeResponse(output, 200, "OK", "image/png", cachedIconBytes, headOnly = isHead)
                     } else {
-                        writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0))
+                        writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead)
                     }
                 }
 
-                method == "GET" && path == "/api/info" -> {
+                (method == "GET" || isHead) && path == "/api/info" -> {
                     val info = buildInfoJson(_status.value.portalUrl, activeClients.size)
-                    writeJson(output, 200, info.toString())
+                    writeJson(output, 200, info.toString(), headOnly = isHead)
                 }
 
                 method == "GET" && path == "/api/state" -> {
                     val clientId = query["clientNodeId"].orEmpty()
                     if (clientId.isNotBlank()) {
                         activeClients[clientId] = System.currentTimeMillis()
-                        refreshPortalUrl()
                     }
                     val snap = buildStateJson(clientId)
                     writeJson(output, 200, snap.toString())
@@ -463,7 +557,6 @@ class PulseMeshWebServer(
                     val clientId = obj.optString("clientNodeId").trim()
                     if (clientId.isNotBlank()) {
                         activeClients[clientId] = System.currentTimeMillis()
-                        refreshPortalUrl()
                     }
                     val submitted = WebSubmittedPacket(
                         packetId = obj.optString("packetId").ifBlank { "web_${System.currentTimeMillis()}" },
@@ -471,6 +564,7 @@ class PulseMeshWebServer(
                         callsign = obj.optString("callsign").ifBlank { "WebNode" },
                         publicKeyBase64 = obj.optString("publicKeyBase64", ""),
                         threadId = obj.optString("threadId", "channel_primary"),
+                        dstNodeId = obj.optString("dstNodeId", ""),
                         type = obj.optString("type", "CHAT").uppercase(),
                         text = obj.optString("text", ""),
                         payload = obj.optString("payload", ""),
@@ -482,10 +576,25 @@ class PulseMeshWebServer(
                         waypointLng = if (obj.has("waypointLng") && !obj.isNull("waypointLng")) obj.optDouble("waypointLng") else null
                     )
                     onWebPacketSubmitted(submitted)
-                    if (submitted.type == "VOICE_PTT" || submitted.type == "VOICE") {
-                        notifyVoiceFrame(submitted.clientNodeId, submitted.callsign, submitted.payload)
-                    } else {
-                        notifyStateChanged()
+                    when (submitted.type) {
+                        "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
+                            notifyVoiceFrame(
+                                submitted.clientNodeId,
+                                submitted.callsign,
+                                submitted.payload,
+                                isCallAudio = submitted.type == "CALL_AUDIO"
+                            )
+                        }
+                        "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
+                            notifyCallSignal(
+                                submitted.type,
+                                submitted.clientNodeId,
+                                submitted.callsign,
+                                submitted.dstNodeId.ifBlank { "ALL" },
+                                submitted.payload
+                            )
+                        }
+                        else -> notifyStateChanged()
                     }
                     writeJson(output, 200, """{"ok":true}""")
                 }
@@ -518,6 +627,7 @@ class PulseMeshWebServer(
             // Connection dropped cleanly
         } finally {
             if (!keepOpenForSse) {
+                runCatching { socket.shutdownOutput() }
                 runCatching { socket.close() }
             }
         }
@@ -532,9 +642,9 @@ class PulseMeshWebServer(
         return null
     }
 
-    private fun writeJson(output: OutputStream, code: Int, json: String) {
+    private fun writeJson(output: OutputStream, code: Int, json: String, headOnly: Boolean = false) {
         val reason = if (code == 200) "OK" else "Bad Request"
-        writeResponse(output, code, reason, "application/json; charset=utf-8", json.toByteArray(Charsets.UTF_8))
+        writeResponse(output, code, reason, "application/json; charset=utf-8", json.toByteArray(Charsets.UTF_8), headOnly = headOnly)
     }
 
     private fun writeResponse(
@@ -543,7 +653,8 @@ class PulseMeshWebServer(
         reason: String,
         contentType: String,
         body: ByteArray,
-        cacheControl: String = "no-store"
+        cacheControl: String = "no-store",
+        headOnly: Boolean = false
     ) {
         val header = buildString {
             append("HTTP/1.1 $code $reason\r\n")
@@ -551,12 +662,12 @@ class PulseMeshWebServer(
             append("Content-Length: ${body.size}\r\n")
             append("Cache-Control: $cacheControl\r\n")
             append("Access-Control-Allow-Origin: *\r\n")
-            append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n")
+            append("Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\n")
             append("Access-Control-Allow-Headers: Content-Type\r\n")
             append("Connection: close\r\n\r\n")
         }
         output.write(header.toByteArray(Charsets.UTF_8))
-        if (body.isNotEmpty()) output.write(body)
+        if (!headOnly && body.isNotEmpty()) output.write(body)
         output.flush()
     }
 

@@ -224,8 +224,9 @@ data class MeshUiState(
     val hasDuressPin: Boolean = false,
     val p2pTileSyncStatus: String = "Ready to beam cached map tiles over local mesh",
 
-    // PulseMesh v1.2 Wi-Fi Direct Embedded Web Portal State
+    // PulseMesh v1.2.5 Wi-Fi Direct Embedded Web Portal & High-Visibility SOS State
     val webPortalStatus: com.example.service.WebPortalStatus = com.example.service.WebPortalStatus(),
+    val incomingSosAlert: String = "",
 
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Sim, 4: Root)
     val selectedTabIndex: Int = 0
@@ -1679,8 +1680,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleSosBeacon() {
         val nowActive = !_uiState.value.isSosActive
-        _uiState.update { it.copy(isSosActive = nowActive) }
-        triggerHaptic(if (nowActive) 180 else 60)
+        _uiState.update { it.copy(isSosActive = nowActive, incomingSosAlert = if (!nowActive) "" else it.incomingSosAlert) }
+        triggerHaptic(if (nowActive) 320 else 60)
+        if (nowActive) {
+            audioService.playSosAlarmPulse()
+        }
 
         val state = _uiState.value
         val now = System.currentTimeMillis()
@@ -3079,19 +3083,29 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        // 3. 1-on-1 Direct Chats (E2EE DMs + Connected @Usernames)
+        // 3. 1-on-1 Direct Chats (E2EE DMs + Connected @Usernames) — strictly NEVER allow self-chat!
+        val selfNormId = normalizeId(state.localNodeId)
         val peerNodes = (state.nodes.filter { !it.isSelf } + peersBackingMap.values)
+            .filter { normalizeId(it.id) != selfNormId }
             .distinctBy { normalizeId(it.id) }
             .filter { !isBlockedFakeCallsign(it.callsign) }
-        val savedDmThreads = persistentChatManager.getAllThreadIds().filter { it.startsWith("dm_") }
+        val savedDmThreads = persistentChatManager.getAllThreadIds()
+            .filter { it.startsWith("dm_") }
+            .filter { tid ->
+                val isSelfDm = normalizeId(tid.removePrefix("dm_")) == selfNormId
+                if (isSelfDm) persistentChatManager.deleteThread(tid)
+                !isSelfDm
+            }
         val knownClaims = prefs.getAllKnownUsernameClaims().filter { claim ->
-            normalizeId(claim.nodeId) != normalizeId(state.localNodeId)
+            normalizeId(claim.nodeId) != selfNormId
         }
         val allPeerIds = (
             peerNodes.map { it.id } +
                 savedDmThreads.map { it.removePrefix("dm_") } +
                 knownClaims.map { it.nodeId }
-            ).distinctBy { normalizeId(it) }
+            )
+            .filter { it.isNotBlank() && normalizeId(it) != selfNormId }
+            .distinctBy { normalizeId(it) }
 
         for (peerId in allPeerIds) {
             val threadId = "dm_$peerId"
@@ -3172,6 +3186,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectThread(threadId: String?) {
+        if (threadId != null && threadId.startsWith("dm_")) {
+            val targetNorm = normalizeId(threadId.removePrefix("dm_"))
+            if (targetNorm == normalizeId(_uiState.value.localNodeId)) {
+                persistentChatManager.deleteThread(threadId)
+                return
+            }
+        }
         if (!threadId.isNullOrBlank()) {
             unreadCountsByThread[threadId] = 0
             notificationManager.cancelChatNotificationForThread(threadId)
@@ -3209,6 +3230,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val isEncChannel = threadId == "channel_encrypted"
         val isGroupChat = threadId.startsWith("group_")
         val isDm = threadId.startsWith("dm_")
+        if (isDm && normalizeId(threadId.removePrefix("dm_")) == normalizeId(state.localNodeId)) {
+            persistentChatManager.deleteThread(threadId)
+            return
+        }
 
         val groupObj = if (isGroupChat) {
             val gId = threadId.removePrefix("group_")
@@ -3417,6 +3442,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         val isGroupChat = threadId.startsWith("group_")
         val isDm = threadId.startsWith("dm_")
+        if (isDm && normalizeId(threadId.removePrefix("dm_")) == normalizeId(state.localNodeId)) {
+            persistentChatManager.deleteThread(threadId)
+            return
+        }
         val targetDest = packet.destId.ifBlank { "ALL" }
         val groupObj = if (isGroupChat) {
             state.meshGroups.find { it.groupId == targetDest } ?: prefs.loadMeshGroups().find { it.groupId == targetDest }
@@ -3767,6 +3796,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }.toString()
 
         // 1. Local Hotspot UDP (45888): send zero-bloat raw binary "PA" frame for ADPCM8K payloads
+        if (pulseMeshWebServer.isRunning() && packet.payload.isNotBlank()) {
+            val vSeq = webVoiceSeqCounter.incrementAndGet()
+            latestWebVoiceFrame = Triple(vSeq, packet.srcNodeId to packet.srcCallsign, packet.payload)
+            pulseMeshWebServer.notifyVoiceFrame(
+                packet.srcNodeId,
+                packet.srcCallsign,
+                packet.payload,
+                isCallAudio = packet.type == "CALL_AUDIO" || state.duplexCallState.isInCall
+            )
+        }
         if (packet.payload.startsWith("ADPCM8K:")) {
             val rawAdpcm = runCatching {
                 android.util.Base64.decode(packet.payload.removePrefix("ADPCM8K:"), android.util.Base64.DEFAULT)
@@ -5033,9 +5072,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         nodes = updatedNodes,
                         activePeerCount = peerCount,
                         waypoints = updatedWps,
-                        packets = listOf(sosPkt) + it.packets
+                        packets = listOf(sosPkt) + it.packets,
+                        incomingSosAlert = "SOS FROM $effectiveCallsign: ${packet.payload.ifBlank { "EMERGENCY DISTRESS" }}"
                     )
                 }
+                audioService.playSosAlarmPulse()
                 if (!appInForeground || _uiState.value.selectedTabIndex != 1) {
                     notificationManager.showChatNotification(
                         threadId = "channel_primary",
@@ -5046,7 +5087,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 refreshConversationsList()
-                triggerHaptic(180)
+                triggerHaptic(320)
             }
             "MAP_TILE_SYNC" -> {
                 runCatching {
@@ -5325,6 +5366,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val state = _uiState.value
         offGridBleEngine.clearPendingBleVoiceQueue()
+        pulseMeshWebServer.notifyCallSignal(type, state.localNodeId, state.operatorCallsign, targetNodeId, payload)
         viewModelScope.launch(Dispatchers.IO) {
             repeat(repeatCount) { idx ->
                 val pkt = com.example.service.WireMeshPacket(
@@ -6501,11 +6543,71 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(35)
     }
 
+    fun dismissIncomingSosAlert() {
+        _uiState.update { it.copy(incomingSosAlert = "") }
+    }
+
+    /**
+     * Permanently deletes ALL local account information associated with [targetUsername] (or the active account if blank):
+     * username claims, PIN/recovery hashes, auth tokens, messages/threads mentioning that account/node, DTN outbox,
+     * groups, breadcrumbs, and generates a fresh anonymous Node ID + fresh ECDH P-256 keypair when deleting active account.
+     */
+    fun deleteAllAccountInformation(targetUsername: String = ""): String {
+        val state = _uiState.value
+        val normTarget = TacticalE2eeManager.normalizeUsername(targetUsername)
+        val effectiveUser = normTarget.ifBlank { TacticalE2eeManager.normalizeUsername(state.claimedUsername) }
+        val matchingClaim = if (effectiveUser.isNotBlank()) {
+            prefs.getAllKnownUsernameClaims().firstOrNull {
+                TacticalE2eeManager.normalizeUsername(it.username) == effectiveUser
+            }
+        } else null
+        val targetNodeId = matchingClaim?.nodeId ?: if (normTarget.isBlank() || normTarget == TacticalE2eeManager.normalizeUsername(state.claimedUsername)) state.localNodeId else ""
+
+        val erasedMsgs = persistentChatManager.deleteAllDataMatchingAccount(effectiveUser, targetNodeId)
+        val deletedActive = prefs.deleteAccountInformation(effectiveUser)
+
+        if (deletedActive) {
+            synchronized(pendingDtnPackets) { pendingDtnPackets.clear() }
+            peersBackingMap.entries.removeIf { (_, node) ->
+                val normN = normalizeId(node.id)
+                (targetNodeId.isNotBlank() && normN == normalizeId(targetNodeId)) ||
+                    (effectiveUser.isNotBlank() && node.callsign.contains("@$effectiveUser", ignoreCase = true))
+            }
+            _uiState.update { cur ->
+                cur.copy(
+                    localNodeId = prefs.nodeId,
+                    operatorCallsign = prefs.operatorCallsign,
+                    x25519PublicKey = prefs.x25519PublicKey,
+                    x25519Fingerprint = prefs.fingerprint,
+                    claimedUsername = "",
+                    accountRecoveryKey = "",
+                    hasAccountPin = false,
+                    isUsernameOnHold = false,
+                    pendingUsernameHold = "",
+                    usernameAuthStatus = "Account data permanently erased",
+                    pendingDtnCount = 0,
+                    breadcrumbs = emptyList(),
+                    meshGroups = emptyList(),
+                    selectedThreadId = null
+                )
+            }
+        } else {
+            peersBackingMap.entries.removeIf { (_, node) ->
+                (targetNodeId.isNotBlank() && normalizeId(node.id) == normalizeId(targetNodeId)) ||
+                    (effectiveUser.isNotBlank() && node.callsign.contains("@$effectiveUser", ignoreCase = true))
+            }
+        }
+        refreshConversationsList()
+        triggerHaptic(80)
+        val label = if (effectiveUser.isNotBlank()) "@$effectiveUser" else "active account"
+        return "Deleted all local account data for $label ($erasedMsgs message(s) removed)."
+    }
+
     private fun buildWebPortalInfoJson(portalUrl: String, webClientCount: Int): org.json.JSONObject {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2.1")
+            put("version", "1.2.5")
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)
@@ -6680,18 +6782,38 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             val srcCallsign = submitted.callsign.ifBlank { "WebNode" }
 
             when (submitted.type) {
-                "VOICE_PTT", "VOICE" -> {
+                "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
+                    val targetDst = submitted.dstNodeId.ifBlank { _uiState.value.localNodeId }
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = targetDst,
+                        type = submitted.type,
+                        payload = submitted.payload.ifBlank { submitted.type },
+                        ttl = 7,
+                        hops = 1,
+                        sourceTransport = "WEB PORTAL",
+                        timestamp = now
+                    )
+                    handleIncomingPacket(wire)
+                    if (normalizeId(targetDst) != normalizeId(_uiState.value.localNodeId)) {
+                        sendOmniPacket(wire)
+                    }
+                }
+                "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
                     val b64 = submitted.payload.trim()
                     if (b64.isBlank()) return@launch
-                    runCatching { audioService.playAudioBase64(b64, isCallAudio = false) }
+                    val isCall = submitted.type == "CALL_AUDIO"
+                    runCatching { audioService.playAudioBase64(b64, isCallAudio = isCall) }
                     val vSeq = webVoiceSeqCounter.incrementAndGet()
                     latestWebVoiceFrame = Triple(vSeq, srcId to srcCallsign, b64)
                     val wire = com.example.service.WireMeshPacket(
                         packetId = submitted.packetId,
                         srcNodeId = srcId,
                         srcCallsign = srcCallsign,
-                        dstNodeId = "ALL",
-                        type = "VOICE_PTT",
+                        dstNodeId = submitted.dstNodeId.ifBlank { "ALL" },
+                        type = if (isCall) "CALL_AUDIO" else "VOICE_PTT",
                         payload = b64,
                         ttl = 5,
                         hops = 1,
@@ -6777,7 +6899,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         isIncoming = true,
                         timestamp = now
                     )
-                    _uiState.update { it.copy(packets = listOf(pkt) + it.packets) }
+                    _uiState.update {
+                        it.copy(
+                            packets = listOf(pkt) + it.packets,
+                            incomingSosAlert = content
+                        )
+                    }
+                    audioService.playSosAlarmPulse()
                     refreshConversationsList()
                     sendOmniPacket(
                         com.example.service.WireMeshPacket(

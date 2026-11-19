@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.1)</title>
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.5)</title>
   <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -100,31 +100,111 @@
       flex-shrink: 0;
     }
 
-    /* SOS Banner */
+    /* High-Visibility Strobing SOS Banner */
+    @keyframes sosStrobe {
+      0%, 100% { background: #c80e2e; border-color: rgba(255,255,255,0.95); }
+      50% { background: #ff1744; border-color: #ffd600; }
+    }
     .sos-banner {
       display: none;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 14px;
-      background: linear-gradient(90deg, #b91c1c, #ff1744, #b91c1c);
+      padding: 11px 14px;
+      border-bottom: 3px solid #fff;
+      animation: sosStrobe 0.55s infinite;
       color: #fff;
       font-family: var(--mono);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      z-index: 50;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      z-index: 55;
+      box-shadow: 0 6px 24px rgba(255, 23, 68, 0.55);
     }
     .sos-banner.active { display: flex; }
     .sos-banner button {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(255, 255, 255, 0.65);
+      background: rgba(0, 0, 0, 0.45);
+      border: 2px solid #fff;
       color: #fff;
-      padding: 3px 10px;
-      border-radius: 6px;
+      padding: 5px 12px;
+      border-radius: 8px;
       font-family: var(--mono);
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
+    }
+
+    /* Packet-Reactive Wavy Top Ribbon */
+    #waveRibbon {
+      width: 100%;
+      height: 18px;
+      display: block;
+      background: var(--glass-card);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Horizontal Quick-Settings Stack */
+    .h-stack {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .h-tile {
+      flex: 0 0 132px;
+      background: var(--glass-card);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--mono);
+    }
+    .h-tile:hover { border-color: var(--cyan); }
+    .h-tile .ht-lbl { font-size: 9px; color: var(--text-muted); font-weight: 700; }
+    .h-tile .ht-val { font-size: 12px; font-weight: 800; color: var(--emerald); }
+
+    /* Voice Call Overlay */
+    .call-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 115;
+      background: rgba(3, 14, 24, 0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .call-overlay.open { display: flex; }
+    .call-card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--glass-card);
+      border: 2px solid var(--emerald);
+      border-radius: 24px;
+      padding: 26px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+    }
+    .call-avatar {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: var(--emerald-dim);
+      border: 3px solid var(--emerald);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
     }
 
     /* Top Bar (with iOS notch safe area) */
@@ -800,15 +880,16 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.2.1</span>
+      <span class="version-tag">v1.2.5</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
       <span class="pill emerald" id="peerCountPill">PEERS: 0</span>
-      <button type="button" class="pill red" id="topSosBtn" title="Broadcast Priority SOS">SOS</button>
+      <button type="button" class="pill red" id="topSosBtn" title="Broadcast Priority SOS" style="border-width:2px;font-weight:900;">⚠ SOS</button>
       <button type="button" class="icon-btn" id="themeToggleBtn">☀ Aero</button>
     </div>
   </header>
+  <canvas id="waveRibbon"></canvas>
 
   <!-- Main Workspace -->
   <main class="workspace">
@@ -853,7 +934,10 @@
               <p id="activeThreadSub">Broadcast mesh channel (TTL=7 flood)</p>
             </div>
           </div>
-          <span class="badge-e2ee" id="activeThreadBadge">MESH</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="btn btn-emerald" id="chatHeaderCallBtn" style="display:none;padding:5px 10px;font-size:11px;">📞 Call</button>
+            <span class="badge-e2ee" id="activeThreadBadge">MESH</span>
+          </div>
         </div>
         <div class="messages-list" id="messagesList"></div>
         <form class="chat-composer" id="chatForm">
@@ -924,6 +1008,15 @@
     <!-- TAB 5: SETTINGS & PORTAL -->
     <section class="tab-view scroll-panel" id="tab-settings">
       <div class="panel-container">
+        <div class="h-stack" id="quickSettingsStack">
+          <div class="h-tile" id="qsThemeTile"><span class="ht-lbl">THEME</span><span class="ht-val" id="qsThemeVal">DARK</span></div>
+          <div class="h-tile" id="qsLocTile"><span class="ht-lbl">GPS PRIVACY</span><span class="ht-val" id="qsLocVal">EXACT</span></div>
+          <div class="h-tile" id="qsAudioTile"><span class="ht-lbl">VOICE RX</span><span class="ht-val" id="qsAudioVal">ON</span></div>
+          <div class="h-tile" id="qsLoginTile"><span class="ht-lbl">ACCOUNT</span><span class="ht-val" style="color:var(--cyan);">LOGIN / SETUP</span></div>
+          <div class="h-tile" id="qsPingTile"><span class="ht-lbl">MESH PING</span><span class="ht-val">PING NOW</span></div>
+          <div class="h-tile" id="qsDeleteTile" style="border-color:var(--red);"><span class="ht-lbl">ERASE DATA</span><span class="ht-val" style="color:var(--red);">DELETE ACCT</span></div>
+        </div>
+
         <div class="card" id="localPortalCard" style="display:none;border-color:var(--emerald);">
           <h3 style="color:var(--emerald);">WI-FI DIRECT / HOTSPOT PORTAL HOST</h3>
           <p id="localPortalDetails" style="font-size:13px;color:var(--text-secondary);line-height:1.5;"></p>
@@ -973,11 +1066,23 @@
           </div>
         </div>
 
+        <div class="card" style="border-color:var(--red);">
+          <h3 style="color:var(--red);">DELETE ACCOUNT INFORMATION</h3>
+          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
+            Permanently erase all saved account data, keys, username references, and local chat history for a specific <code>@username</code> (or leave blank to erase your active browser account).
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="deleteAccountInput" placeholder="@username to delete (optional)" style="flex:1;min-width:180px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
+            <button type="button" class="btn btn-danger" id="deleteAccountBtn">🗑 Delete All Account Data</button>
+          </div>
+          <div id="deleteAccountStatus" style="font-family:var(--mono);font-size:11px;color:var(--emerald);margin-top:8px;"></div>
+        </div>
+
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.1)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.5)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
-            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>) for live hybrid relay compatibility and connects 100% offline to any Android Wi-Fi Direct Web Portal.<br /><br />
-            <strong>PulseMesh v1.2.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>).<br /><br />
+            <strong>PulseMesh v1.2.5 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -999,7 +1104,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.2.1 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.2.5 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -1081,6 +1186,25 @@
       <div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:10px;color:var(--text-muted);">
         <span>ECDH P-256 • AES-256-GCM • GNU GPL-3.0</span>
         <button type="button" class="icon-btn" id="wizSkipBtn" style="font-size:10px;">Skip for now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOICE CALL OVERLAY (1-ON-1 FULL-DUPLEX CALLS) -->
+  <div class="call-overlay" id="callOverlay">
+    <div class="call-card">
+      <div class="call-avatar" id="callAvatar">📞</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--emerald);font-weight:800;" id="callStateLabel">VOICE CALL</div>
+      <div style="font-size:20px;font-weight:800;" id="callPeerName">Peer</div>
+      <div style="font-family:var(--mono);font-size:24px;color:var(--cyan);font-weight:800;" id="callTimerLabel">00:00</div>
+      <div id="callHintLabel" style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">8 kHz HD IMA-ADPCM / G.711 μ-law</div>
+      <div id="incomingCallBtns" style="display:none;gap:12px;width:100%;">
+        <button type="button" class="btn btn-emerald" id="btnAcceptCall" style="flex:1;padding:13px;">✓ ACCEPT</button>
+        <button type="button" class="btn btn-danger" id="btnDeclineCall" style="flex:1;padding:13px;">✕ DECLINE</button>
+      </div>
+      <div id="activeCallBtns" style="display:none;gap:10px;width:100%;">
+        <button type="button" class="btn" id="btnMuteCall" style="flex:1;padding:12px;">🎙 Mute</button>
+        <button type="button" class="btn btn-danger" id="btnHangupCall" style="flex:1;padding:12px;">📵 Hang Up</button>
       </div>
     </div>
   </div>
@@ -1578,6 +1702,135 @@
     });
 
     // =========================================================================
+    // PACKET-REACTIVE TOP WAVY RIBBON + MORSE SOS AUDIO + 8kHz IMA-ADPCM / MU-LAW
+    // =========================================================================
+    let waveEnergy = 0.0;
+    let wavePhase = 0.0;
+    function spikeWaveRibbon() { waveEnergy = 1.0; }
+
+    (function startWaveRibbonLoop() {
+      const cvs = document.getElementById("waveRibbon");
+      if (!cvs) return;
+      const ctx = cvs.getContext("2d");
+      function tick() {
+        const w = cvs.clientWidth || window.innerWidth;
+        const h = cvs.clientHeight || 18;
+        if (cvs.width !== w || cvs.height !== h) { cvs.width = w; cvs.height = h; }
+        ctx.clearRect(0, 0, w, h);
+        wavePhase += 0.055 + 0.14 * waveEnergy;
+        waveEnergy = Math.max(0, waveEnergy - 0.014);
+        const effEnergy = state.isSosActive ? 1.0 : waveEnergy;
+        const col = state.isSosActive ? "#FF1744" : (state.mode === "LOCAL_DIRECT" ? "#38CFFF" : "#19E68C");
+        const midY = h * 0.52;
+        const amp = (h * 0.22) + (h * 0.24 * effEnergy);
+        const freq = 10 + 26 * effEnergy;
+        const sweep = (wavePhase * 0.08) % 1;
+
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.6 + effEnergy * 1.1;
+        ctx.beginPath();
+        for (let i = 0; i <= 90; i++) {
+          const u = i / 90;
+          let d = u - sweep;
+          if (d < -0.5) d += 1; if (d > 0.5) d -= 1;
+          const env = Math.exp(-(d * d) / (0.008 + 0.12 * effEnergy));
+          const wave = Math.sin(u * freq * Math.PI - wavePhase * 2) * (0.28 * effEnergy + env);
+          const y = midY - Math.max(-1, Math.min(1, wave)) * amp;
+          if (i === 0) ctx.moveTo(u * w, y); else ctx.lineTo(u * w, y);
+        }
+        ctx.stroke();
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
+
+    const IMA_INDEX_TABLE = [-1,-1,-1,-1,2,4,6,8,-1,-1,-1,-1,2,4,6,8];
+    const IMA_STEP_TABLE = [
+      7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,
+      130,143,157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,
+      1060,1166,1282,1411,1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,
+      5894,6484,7132,7845,8630,9493,10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,
+      27086,29794,32767
+    ];
+
+    function decodeImaAdpcm8kHz(bytes) {
+      if (!bytes || bytes.length <= 4) return new Float32Array(0);
+      let pred = (bytes[0] | (bytes[1] << 8));
+      if (pred >= 32768) pred -= 65536;
+      let stepIdx = Math.max(0, Math.min(88, bytes[2]));
+      const odd = (bytes[3] & 1) !== 0;
+      const count = (bytes.length - 4) * 2 - (odd ? 1 : 0);
+      const out = new Float32Array(Math.max(0, count));
+      let sIdx = 0;
+      for (let b = 4; b < bytes.length; b++) {
+        const packed = bytes[b];
+        for (let half = 0; half < 2 && sIdx < count; half++) {
+          const code = half === 0 ? (packed & 0x0F) : ((packed >> 4) & 0x0F);
+          const step = IMA_STEP_TABLE[stepIdx];
+          let delta = step >> 3;
+          if (code & 4) delta += step;
+          if (code & 2) delta += (step >> 1);
+          if (code & 1) delta += (step >> 2);
+          pred = (code & 8) ? (pred - delta) : (pred + delta);
+          pred = Math.max(-32768, Math.min(32767, pred));
+          stepIdx = Math.max(0, Math.min(88, stepIdx + IMA_INDEX_TABLE[code]));
+          out[sIdx++] = pred / 32768.0;
+        }
+      }
+      return out;
+    }
+
+    function encodeImaAdpcm8kHz(pcm16) {
+      const n = pcm16.length;
+      if (!n) return new Uint8Array(0);
+      const out = new Uint8Array(4 + ((n + 1) >> 1));
+      let pred = pcm16[0] | 0, stepIdx = 16;
+      out[0] = pred & 0xFF; out[1] = (pred >> 8) & 0xFF; out[2] = stepIdx; out[3] = (n & 1) ? 1 : 0;
+      let pos = 4, curByte = 0;
+      for (let i = 0; i < n; i++) {
+        const step = IMA_STEP_TABLE[stepIdx];
+        let diff = pcm16[i] - pred, code = 0;
+        if (diff < 0) { code = 8; diff = -diff; }
+        let ts = step;
+        if (diff >= ts) { code |= 4; diff -= ts; }
+        ts >>= 1; if (diff >= ts) { code |= 2; diff -= ts; }
+        ts >>= 1; if (diff >= ts) { code |= 1; }
+        let delta = step >> 3;
+        if (code & 4) delta += step;
+        if (code & 2) delta += (step >> 1);
+        if (code & 1) delta += (step >> 2);
+        pred = Math.max(-32768, Math.min(32767, (code & 8) ? pred - delta : pred + delta));
+        stepIdx = Math.max(0, Math.min(88, stepIdx + IMA_INDEX_TABLE[code]));
+        if ((i & 1) === 0) curByte = code & 0x0F;
+        else out[pos++] = curByte | ((code & 0x0F) << 4);
+      }
+      if ((n & 1) && pos < out.length) out[pos] = curByte;
+      return out;
+    }
+
+    function playSosSiren() {
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const seq = [0.11,0.07,0.11,0.07,0.11,0.16, 0.26,0.08,0.26,0.08,0.26,0.16, 0.11,0.07,0.11,0.07,0.11];
+        let t = ctx.currentTime + 0.02;
+        for (let i = 0; i < seq.length; i++) {
+          if (i % 2 === 0) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.frequency.value = 980;
+            g.gain.setValueAtTime(0.001, t);
+            g.gain.linearRampToValueAtTime(0.28, t + 0.015);
+            g.gain.linearRampToValueAtTime(0.001, t + seq[i]);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(t); osc.stop(t + seq[i] + 0.01);
+          }
+          t += seq[i];
+        }
+      } catch (_) {}
+    }
+
+    // =========================================================================
     // ITU-T G.711 MU-LAW CODEC (COMPATIBLE WITH Android TacticalAudioService.kt)
     // =========================================================================
     function pcm16ToMuLaw(sample) {
@@ -1616,17 +1869,36 @@
       try {
         const ctx = getAudioCtx();
         if (!ctx) return;
-        const raw = b64ToBytes(b64);
-        if (!raw.length) return;
-        const sampleRate = raw.length <= 1000 ? 4000 : 8000;
-        const buf = ctx.createBuffer(1, raw.length, sampleRate);
-        const ch = buf.getChannelData(0);
-        for (let i = 0; i < raw.length; i++) ch[i] = muLawToPcm16(raw[i]) / 32768.0;
+        const trimmed = String(b64).trim();
+        let floats = null, sampleRate = 8000;
+        if (trimmed.startsWith("ADPCM8K:")) {
+          floats = decodeImaAdpcm8kHz(b64ToBytes(trimmed.slice(8)));
+          sampleRate = 8000;
+        } else {
+          const cleanB64 = trimmed.replace(/^ULAW8K:|^ULAW:/, "");
+          const raw = b64ToBytes(cleanB64);
+          if (!raw.length) return;
+          sampleRate = trimmed.startsWith("ULAW8K:") || raw.length > 1000 ? 8000 : 4000;
+          floats = new Float32Array(raw.length);
+          for (let i = 0; i < raw.length; i++) floats[i] = muLawToPcm16(raw[i]) / 32768.0;
+        }
+        if (!floats || !floats.length) return;
+        // Gentle 3-tap de-hiss smoothing + edge anti-click ramp
+        for (let i = 1; i < floats.length - 1; i++) {
+          floats[i] = (floats[i - 1] + floats[i] * 6 + floats[i + 1]) / 8;
+        }
+        const fade = Math.min(24, Math.floor(floats.length / 8));
+        for (let i = 0; i < fade; i++) {
+          floats[i] *= (i / fade);
+          floats[floats.length - 1 - i] *= (i / fade);
+        }
+        const buf = ctx.createBuffer(1, floats.length, sampleRate);
+        buf.getChannelData(0).set(floats);
         const src = ctx.createBufferSource();
         src.buffer = buf;
         src.connect(ctx.destination);
         const now = ctx.currentTime;
-        const startAt = Math.max(now + 0.02, nextPlayTime);
+        const startAt = Math.max(now + 0.015, nextPlayTime);
         src.start(startAt);
         nextPlayTime = startAt + buf.duration;
       } catch (_) {}
@@ -1656,6 +1928,7 @@
     async function ingestWirePacket(pkt, sourceTransportLabel) {
       if (!pkt || !pkt.packetId || state.seenIds.has(pkt.packetId)) return;
       state.seenIds.add(pkt.packetId);
+      spikeWaveRibbon();
       if (state.seenIds.size > 2000) state.seenIds.delete(state.seenIds.values().next().value);
 
       const srcNorm = normId(pkt.srcNodeId);
@@ -1713,9 +1986,14 @@
         });
         drawMap(); return;
       }
+      if (type === "CALL_RING" || type === "CALL_INVITE" || type === "CALL_ACCEPT" || type === "CALL_DECLINE" || type === "CALL_END") {
+        if (!isSelf) handleIncomingCallSignal(type, pkt.srcNodeId, pkt.srcCallsign || pkt.srcNodeId, pkt.dstNodeId || "ALL");
+        return;
+      }
       if (type === "SOS") {
         document.getElementById("sosBanner").classList.add("active");
-        document.getElementById("sosBannerText").textContent = `⚠ SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "EMERGENCY DISTRESS"}`;
+        document.getElementById("sosBannerText").textContent = `⚠ EMERGENCY SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "DISTRESS"}`;
+        playSosSiren();
         addChatMessage({
           id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
           srcNodeId: pkt.srcNodeId, text: `⚠ SOS DISTRESS: ${pkt.payload || "EMERGENCY ALERT"}`,
@@ -1730,6 +2008,7 @@
           const dstNorm = normId(dst);
           if (!isSelf && dstNorm !== myNorm) return;
           const peerId = isSelf ? dst : pkt.srcNodeId;
+          if (normId(peerId) === myNorm) return; // Strictly block self-chats
           threadId = "dm_" + peerId;
           const peer = state.nodes.get(normId(peerId));
           const peerPub = pkt.pk || (peer && peer.publicKeyBase64) || "";
@@ -1783,7 +2062,10 @@
                 <div style="font-weight:800;font-size:13.5px;color:var(--emerald);">${escapeHtml(n.callsign)} <span style="color:var(--text-muted);font-family:var(--mono);font-size:11px;">(${safeId})</span></div>
                 <div class="node-meta">${escapeHtml(transports)} • RSSI ${n.rssiDbm || -55} dBm • Bat ${n.batteryPercent || 100}% • Hops ${n.hopCount || 1}${distStr}</div>
               </div>
-              <button type="button" class="btn btn-primary" onclick="window.__openDm('${safeId}')" style="padding:6px 11px;font-size:11px;">E2EE DM</button>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn btn-emerald" onclick="window.__startVoiceCall('${safeId}','${escapeHtml(n.callsign)}')" style="padding:6px 10px;font-size:11px;">📞 Call</button>
+                <button type="button" class="btn btn-primary" onclick="window.__openDm('${safeId}')" style="padding:6px 11px;font-size:11px;">DM</button>
+              </div>
             </div>
           `;
         }).join("");
@@ -1801,6 +2083,7 @@
         threads.push({ id: "group_" + g.groupId, title: "👥 " + g.groupName, sub: "Multi-Mesh E2EE Group", badge: "GROUP" });
       }
       for (const n of state.nodes.values()) {
+        if (normId(n.id) === normId(state.nodeId)) continue; // Never render self-chat thread
         threads.push({
           id: "dm_" + n.id, title: n.callsign,
           sub: `${n.id} • ${n.publicKeyBase64 ? "ECDH P-256 Ready" : "Direct Mesh"}`,
@@ -1828,6 +2111,15 @@
         document.getElementById("activeThreadTitle").textContent = active.title;
         document.getElementById("activeThreadSub").textContent = active.sub;
         document.getElementById("activeThreadBadge").textContent = active.badge;
+        const callBtn = document.getElementById("chatHeaderCallBtn");
+        if (callBtn) {
+          if (active.id.startsWith("dm_")) {
+            callBtn.style.display = "inline-flex";
+            callBtn.onclick = () => startVoiceCall(active.id.slice(3), active.title);
+          } else {
+            callBtn.style.display = "none";
+          }
+        }
       }
     }
 
@@ -1861,8 +2153,18 @@
       list.scrollTop = list.scrollHeight;
     }
 
-    function selectThread(threadId) { state.selectedThreadId = threadId; renderThreads(); renderMessages(); }
-    window.__openDm = function (peerId) { selectThread("dm_" + peerId); switchTab("chat"); };
+    function selectThread(threadId) {
+      if (threadId && threadId.startsWith("dm_") && normId(threadId.slice(3)) === normId(state.nodeId)) return;
+      state.selectedThreadId = threadId; renderThreads(); renderMessages();
+    }
+    window.__openDm = function (peerId) {
+      if (normId(peerId) === normId(state.nodeId)) return;
+      selectThread("dm_" + peerId); switchTab("chat");
+    };
+    window.__startVoiceCall = function (peerId, peerName) {
+      if (normId(peerId) === normId(state.nodeId)) return;
+      startVoiceCall(peerId, peerName);
+    };
     function escapeHtml(s) {
       return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
@@ -1870,9 +2172,10 @@
     // =========================================================================
     // OUTBOUND SENDING
     // =========================================================================
-    async function sendMeshAction({ type = "CHAT", threadId = state.selectedThreadId, text = "", payload = "", wp = null }) {
+    async function sendMeshAction({ type = "CHAT", threadId = state.selectedThreadId, dstNodeId = "", text = "", payload = "", wp = null }) {
       const pktId = `web_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`;
       const loc = getEffectiveLocation();
+      spikeWaveRibbon();
 
       if (state.mode === "LOCAL_DIRECT") {
         const res = await fetch("/api/send", {
@@ -1880,7 +2183,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             packetId: pktId, clientNodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64,
-            threadId: threadId || "channel_primary", type, text, payload: payload || text, lat: loc.lat, lng: loc.lng,
+            threadId: threadId || "channel_primary", dstNodeId: dstNodeId || "", type, text, payload: payload || text, lat: loc.lat, lng: loc.lng,
             waypointTitle: wp ? wp.title : "", waypointType: wp ? wp.type : "",
             waypointLat: wp ? wp.latitude : null, waypointLng: wp ? wp.longitude : null
           })
@@ -1898,22 +2201,23 @@
         return;
       }
 
-      let dstNodeId = "ALL", wireType = type, wirePayload = payload || text, groupId = "";
+      let resolvedDst = dstNodeId || "ALL", wireType = type, wirePayload = payload || text, groupId = "";
       if (type === "CHAT") {
-        if (threadId === "channel_encrypted") dstNodeId = "ENC_TACNET";
+        if (threadId === "channel_encrypted") resolvedDst = "ENC_TACNET";
         else if (threadId.startsWith("dm_")) {
-          dstNodeId = threadId.slice(3); wireType = "E2EE_DM";
-          const peer = state.nodes.get(normId(dstNodeId));
+          resolvedDst = threadId.slice(3); wireType = "E2EE_DM";
+          if (normId(resolvedDst) === normId(state.nodeId)) return;
+          const peer = state.nodes.get(normId(resolvedDst));
           wirePayload = (peer && peer.publicKeyBase64) ? (await encryptDmEcdh(text, peer.publicKeyBase64) || ("PLAINTEXT:" + text)) : ("PLAINTEXT:" + text);
         } else if (threadId.startsWith("group_")) {
-          groupId = threadId.slice(6); dstNodeId = groupId; wireType = "GROUP_CHAT";
+          groupId = threadId.slice(6); resolvedDst = groupId; wireType = "GROUP_CHAT";
         }
       } else if (type === "WAYPOINT" && wp) {
         wirePayload = JSON.stringify({ id: wp.id, title: wp.title, type: wp.type, lat: wp.latitude, lon: wp.longitude, creator: state.callsign, ts: wp.timestamp });
       }
 
       const wirePkt = {
-        packetId: pktId, srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId,
+        packetId: pktId, srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: resolvedDst,
         type: wireType, payload: wirePayload, ttl: 7, hops: 0, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { wirePkt.lat = loc.lat; wirePkt.lng = loc.lng; }
@@ -2052,8 +2356,11 @@
           try {
             const msg = JSON.parse(ev.data);
             if (msg.event === "voice" && msg.payload && normId(msg.srcNodeId) !== normId(state.nodeId)) {
+              spikeWaveRibbon();
               playMuLawBase64(msg.payload);
               document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
+            } else if (msg.event === "call" && normId(msg.srcNodeId) !== normId(state.nodeId)) {
+              handleIncomingCallSignal(msg.type, msg.srcNodeId, msg.srcCallsign || msg.srcNodeId, msg.dstNodeId || "ALL");
             } else if (msg.event === "refresh") pullLocalState();
           } catch (_) {}
         };
@@ -2513,12 +2820,189 @@
       e.target.value = "";
     });
 
+    // =========================================================================
+    // FULL-DUPLEX 1-ON-1 WEB VOICE CALLS (8kHz HD IMA-ADPCM + SIGNALING)
+    // =========================================================================
+    const callState = {
+      status: "IDLE", // IDLE | RINGING_OUT | RINGING_IN | ACTIVE
+      peerId: "",
+      peerName: "",
+      muted: false,
+      startedAt: 0,
+      timerId: null,
+      ringInterval: null,
+      stream: null,
+      proc: null,
+      srcNode: null,
+      pcmBuf: []
+    };
+
+    function playRingTonePulse() {
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const t = ctx.currentTime + 0.02;
+        [440, 480].forEach((f) => {
+          const osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.frequency.value = f;
+          g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+          osc.connect(g); g.connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.46);
+        });
+      } catch (_) {}
+    }
+
+    function updateCallUi() {
+      const ov = document.getElementById("callOverlay");
+      if (callState.status === "IDLE") { ov.classList.remove("open"); return; }
+      ov.classList.add("open");
+      document.getElementById("callPeerName").textContent = callState.peerName || callState.peerId;
+      const inBtns = document.getElementById("incomingCallBtns");
+      const actBtns = document.getElementById("activeCallBtns");
+      if (callState.status === "RINGING_IN") {
+        document.getElementById("callStateLabel").textContent = "INCOMING MESH VOICE CALL";
+        document.getElementById("callTimerLabel").textContent = "RINGING...";
+        inBtns.style.display = "flex"; actBtns.style.display = "none";
+      } else if (callState.status === "RINGING_OUT") {
+        document.getElementById("callStateLabel").textContent = "CALLING PEER...";
+        document.getElementById("callTimerLabel").textContent = "RINGING...";
+        inBtns.style.display = "none"; actBtns.style.display = "flex";
+      } else {
+        document.getElementById("callStateLabel").textContent = "LIVE FULL-DUPLEX CALL";
+        inBtns.style.display = "none"; actBtns.style.display = "flex";
+        document.getElementById("btnMuteCall").textContent = callState.muted ? "🔇 Unmute" : "🎙 Mute";
+      }
+    }
+
+    async function startCallMicStreaming() {
+      if (!hasMicApi) {
+        document.getElementById("callHintLabel").textContent = "RX Audio Live (HTTPS required for browser mic TX)";
+        return;
+      }
+      try {
+        const ctx = getAudioCtx();
+        callState.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+        callState.srcNode = ctx.createMediaStreamSource(callState.stream);
+        callState.proc = ctx.createScriptProcessor(4096, 1, 1);
+        callState.pcmBuf = [];
+        const step = ctx.sampleRate / 8000;
+        let phase = 0;
+        callState.proc.onaudioprocess = (ev) => {
+          if (callState.status !== "ACTIVE" || callState.muted) return;
+          const inp = ev.inputBuffer.getChannelData(0);
+          while (phase < inp.length) {
+            const s16 = Math.max(-32768, Math.min(32767, Math.round(inp[Math.floor(phase)] * 32767 * 1.25)));
+            callState.pcmBuf.push(s16);
+            phase += step;
+          }
+          phase -= inp.length;
+          while (callState.pcmBuf.length >= 960) {
+            const slice = callState.pcmBuf.splice(0, 960);
+            const adpcm = encodeImaAdpcm8kHz(slice);
+            sendMeshAction({ type: "CALL_AUDIO", dstNodeId: callState.peerId, payload: "ADPCM8K:" + bytesToB64(adpcm) }).catch(() => {});
+          }
+        };
+        callState.srcNode.connect(callState.proc);
+        callState.proc.connect(ctx.destination);
+        document.getElementById("callHintLabel").textContent = "8 kHz HD IMA-ADPCM Duplex Active";
+      } catch (e) {
+        document.getElementById("callHintLabel").textContent = "Mic denied — listening in RX-only mode";
+      }
+    }
+
+    function stopCallMediaAndTimers() {
+      if (callState.timerId) { clearInterval(callState.timerId); callState.timerId = null; }
+      if (callState.ringInterval) { clearInterval(callState.ringInterval); callState.ringInterval = null; }
+      try { if (callState.proc) callState.proc.disconnect(); } catch (_) {}
+      try { if (callState.srcNode) callState.srcNode.disconnect(); } catch (_) {}
+      try { if (callState.stream) callState.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+      callState.proc = null; callState.srcNode = null; callState.stream = null;
+    }
+
+    function enterActiveCallState() {
+      if (callState.ringInterval) { clearInterval(callState.ringInterval); callState.ringInterval = null; }
+      callState.status = "ACTIVE";
+      callState.startedAt = Date.now();
+      updateCallUi();
+      if (callState.timerId) clearInterval(callState.timerId);
+      callState.timerId = setInterval(() => {
+        const s = Math.floor((Date.now() - callState.startedAt) / 1000);
+        const mm = String(Math.floor(s / 60)).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+        document.getElementById("callTimerLabel").textContent = `${mm}:${ss}`;
+      }, 500);
+      startCallMicStreaming();
+    }
+
+    async function startVoiceCall(peerId, peerName) {
+      if (callState.status !== "IDLE") return;
+      callState.status = "RINGING_OUT";
+      callState.peerId = peerId;
+      callState.peerName = peerName || peerId;
+      callState.muted = false;
+      updateCallUi();
+      playRingTonePulse();
+      await sendMeshAction({ type: "CALL_RING", dstNodeId: peerId, payload: "RING" }).catch(() => {});
+      callState.ringInterval = setInterval(() => {
+        if (callState.status === "RINGING_OUT") {
+          playRingTonePulse();
+          sendMeshAction({ type: "CALL_RING", dstNodeId: peerId, payload: "RING" }).catch(() => {});
+        }
+      }, 2800);
+      logLine("CALL", `Calling ${callState.peerName} (${peerId})...`);
+    }
+
+    function handleIncomingCallSignal(type, srcId, srcName, dstId) {
+      const myNorm = normId(state.nodeId);
+      const targetedToMe = dstId === "ALL" || dstId === "BROADCAST" || normId(dstId) === myNorm;
+      if (!targetedToMe) return;
+
+      if ((type === "CALL_RING" || type === "CALL_INVITE") && callState.status === "IDLE") {
+        callState.status = "RINGING_IN";
+        callState.peerId = srcId;
+        callState.peerName = srcName || srcId;
+        callState.muted = false;
+        updateCallUi();
+        playRingTonePulse();
+        callState.ringInterval = setInterval(playRingTonePulse, 2400);
+        logLine("CALL", `Incoming call from ${callState.peerName}`);
+      } else if (type === "CALL_ACCEPT" && callState.status === "RINGING_OUT") {
+        enterActiveCallState();
+        logLine("CALL", `${callState.peerName} accepted call!`);
+      } else if ((type === "CALL_END" || type === "CALL_DECLINE") && callState.status !== "IDLE") {
+        stopCallMediaAndTimers();
+        callState.status = "IDLE";
+        updateCallUi();
+        logLine("CALL", `Call ended by ${srcName}`);
+      }
+    }
+
+    document.getElementById("btnAcceptCall").addEventListener("click", async () => {
+      await sendMeshAction({ type: "CALL_ACCEPT", dstNodeId: callState.peerId, payload: "ACCEPT" }).catch(() => {});
+      enterActiveCallState();
+    });
+    document.getElementById("btnDeclineCall").addEventListener("click", async () => {
+      const pid = callState.peerId;
+      stopCallMediaAndTimers(); callState.status = "IDLE"; updateCallUi();
+      await sendMeshAction({ type: "CALL_DECLINE", dstNodeId: pid, payload: "DECLINE" }).catch(() => {});
+    });
+    document.getElementById("btnHangupCall").addEventListener("click", async () => {
+      const pid = callState.peerId;
+      stopCallMediaAndTimers(); callState.status = "IDLE"; updateCallUi();
+      await sendMeshAction({ type: "CALL_END", dstNodeId: pid, payload: "END" }).catch(() => {});
+    });
+    document.getElementById("btnMuteCall").addEventListener("click", () => {
+      callState.muted = !callState.muted;
+      updateCallUi();
+    });
+
     async function triggerSos() {
       state.isSosActive = true;
       const loc = getEffectiveLocation();
       const locStr = (loc.lat != null && loc.lng != null) ? ` @ ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : "";
       document.getElementById("sosBanner").classList.add("active");
-      document.getElementById("sosBannerText").textContent = `⚠ PRIORITY SOS ACTIVE (${state.callsign}${locStr})`;
+      document.getElementById("sosBannerText").textContent = `⚠ EMERGENCY SOS BROADCASTING (${state.callsign}${locStr})`;
+      playSosSiren();
+      spikeWaveRibbon();
       await sendMeshAction({ type: "SOS", text: `PRIORITY SOS FROM ${state.callsign}${locStr}` }).catch(() => {});
     }
     document.getElementById("topSosBtn").addEventListener("click", triggerSos);
@@ -2557,8 +3041,63 @@
       document.getElementById("setCallsign").value = state.callsign;
       document.getElementById("setPassphrase").value = state.passphrase;
       document.getElementById("setLocMode").value = state.locationMode;
+      const qsTheme = document.getElementById("qsThemeVal");
+      if (qsTheme) qsTheme.textContent = (document.documentElement.getAttribute("data-theme") || "dark").toUpperCase();
+      const qsLoc = document.getElementById("qsLocVal");
+      if (qsLoc) qsLoc.textContent = state.locationMode;
+      const qsAud = document.getElementById("qsAudioVal");
+      if (qsAud) qsAud.textContent = state.voiceRxEnabled ? "ON" : "MUTED";
     }
     syncSettingsInputs();
+
+    // Horizontal Quick-Settings Stack Handlers
+    document.getElementById("qsThemeTile").addEventListener("click", () => { document.getElementById("themeToggleBtn").click(); syncSettingsInputs(); });
+    document.getElementById("qsLocTile").addEventListener("click", () => {
+      const order = ["EXACT", "COARSE", "OFF"];
+      state.locationMode = order[(order.indexOf(state.locationMode) + 1) % order.length];
+      saveConfig({ locationMode: state.locationMode });
+      syncSettingsInputs();
+    });
+    document.getElementById("qsAudioTile").addEventListener("click", () => { document.getElementById("voiceRxToggleBtn").click(); syncSettingsInputs(); });
+    document.getElementById("qsLoginTile").addEventListener("click", () => openSetupOverlay("login"));
+    document.getElementById("qsPingTile").addEventListener("click", () => { sendPresencePing(); spikeWaveRibbon(); logLine("PING", "Presence beacon sent."); });
+    document.getElementById("qsDeleteTile").addEventListener("click", () => {
+      document.getElementById("deleteAccountInput").focus();
+      document.getElementById("deleteAccountInput").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    // Delete All Account Information Handler
+    document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
+      const rawTarget = document.getElementById("deleteAccountInput").value.trim();
+      const normTarget = normalizeUsername(rawTarget);
+      const label = normTarget ? ("@" + normTarget) : "your active browser account";
+      if (!confirm(`Permanently delete ALL local account information, keys, and chat messages for ${label}?`)) return;
+
+      const isActive = !normTarget || normTarget === normalizeUsername(state.claimedUsername) || normTarget === normalizeUsername(state.callsign);
+      // Remove messages referencing this username/account
+      state.packets = state.packets.filter((p) => {
+        if (isActive && p.isSelf) return false;
+        if (normTarget && ((p.sender || "").toLowerCase().includes(normTarget) || (p.text || "").toLowerCase().includes("@" + normTarget))) return false;
+        return true;
+      });
+      if (isActive) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+        state.nodeId = randomNodeId();
+        state.callsign = defaultPrefix + state.nodeId.slice(-2);
+        state.claimedUsername = "";
+        state.pubKeyB64 = "";
+        state.privKeyB64 = "";
+        state.setupDone = false;
+        await ensureEcdhKeys(true);
+        saveConfig({ nodeId: state.nodeId, callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode, setupDone: false });
+      }
+      document.getElementById("deleteAccountInput").value = "";
+      document.getElementById("deleteAccountStatus").textContent = `✓ Erased all local account information for ${label}.`;
+      syncSettingsInputs();
+      renderPeersAndHeader();
+      renderMessages();
+      if (isActive) openSetupOverlay("quick");
+    });
 
     document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
       state.callsign = document.getElementById("setCallsign").value.trim() || state.callsign;

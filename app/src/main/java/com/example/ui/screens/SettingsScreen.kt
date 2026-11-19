@@ -7,6 +7,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -90,6 +91,7 @@ fun SettingsScreen(
     onExportGpx: () -> String = { "" },
     onImportGpx: (String) -> Int = { 0 },
     onToggleWebPortal: () -> Unit = {},
+    onDeleteAccountInfo: (String) -> String = { "" },
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -132,6 +134,9 @@ fun SettingsScreen(
     var accountRecoveryKeyInput by remember { mutableStateOf("") }
     var accountDialogStatus by remember { mutableStateOf("") }
     var accountDialogSuccess by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var deleteAccountUsernameInput by remember(state.claimedUsername) { mutableStateOf(state.claimedUsername) }
+    var deleteAccountFeedback by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -141,8 +146,140 @@ fun SettingsScreen(
             .navigationBarsPadding()
             .verticalScroll(scrollState)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // -------------------------------------------------------------
+        // v1.2.5 SIMPLIFIED HORIZONTAL QUICK-SETTINGS STACK
+        // -------------------------------------------------------------
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "QUICK SETTINGS STACK (SWIPE HORIZONTALLY)",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = p.textMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp
+                )
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                @Composable
+                fun QuickSettingTile(
+                    title: String,
+                    value: String,
+                    accent: Color,
+                    icon: androidx.compose.ui.graphics.vector.ImageVector,
+                    onClick: () -> Unit,
+                    tag: String = ""
+                ) {
+                    Surface(
+                        color = p.card,
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.2.dp, accent.copy(alpha = 0.7f)),
+                        modifier = Modifier
+                            .width(128.dp)
+                            .clickable { onClick() }
+                            .then(if (tag.isNotBlank()) Modifier.testTag(tag) else Modifier)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(icon, contentDescription = title, tint = accent, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = title,
+                                color = p.textMuted,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = value,
+                                color = accent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                QuickSettingTile(
+                    title = "TRANSPORT",
+                    value = if (state.isInternetEnabled) "HYBRID" else "OFF-GRID",
+                    accent = if (state.isInternetEnabled) AmberRootBoost else EmeraldMesh,
+                    icon = Icons.Default.Sensors,
+                    onClick = onToggleInternetEnabled
+                )
+                QuickSettingTile(
+                    title = "HOTSPOT",
+                    value = if (state.hotspotState.isActive) "ACTIVE" else "HOST AP",
+                    accent = if (state.hotspotState.isActive) EmeraldMesh else CyanGateway,
+                    icon = Icons.Default.WifiTethering,
+                    onClick = { if (state.hotspotState.isActive) onStopHotspot() else onHostHotspot() }
+                )
+                QuickSettingTile(
+                    title = "WEB PORTAL",
+                    value = if (state.webPortalStatus.isRunning) ":${state.webPortalStatus.port} ON" else "START",
+                    accent = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
+                    icon = Icons.Default.QrCode2,
+                    onClick = onToggleWebPortal
+                )
+                QuickSettingTile(
+                    title = "GPS PRIVACY",
+                    value = state.locationShareMode.label,
+                    accent = when (state.locationShareMode) {
+                        LocationShareMode.EXACT -> EmeraldMesh
+                        LocationShareMode.COARSE -> AmberRootBoost
+                        LocationShareMode.OFF -> RedSosAlert
+                    },
+                    icon = Icons.Default.LocationOn,
+                    onClick = {
+                        val next = when (state.locationShareMode) {
+                            LocationShareMode.EXACT -> LocationShareMode.COARSE
+                            LocationShareMode.COARSE -> LocationShareMode.OFF
+                            LocationShareMode.OFF -> LocationShareMode.EXACT
+                        }
+                        onSelectLocationShareMode(next)
+                    }
+                )
+                QuickSettingTile(
+                    title = "THEME",
+                    value = state.appTheme.displayName.substringBefore(" ").uppercase(),
+                    accent = CyanGateway,
+                    icon = Icons.Default.Palette,
+                    onClick = onToggleLightMode
+                )
+                QuickSettingTile(
+                    title = "ACCOUNT DATA",
+                    value = "ERASE ALL",
+                    accent = RedSosAlert,
+                    icon = Icons.Default.DeleteForever,
+                    onClick = {
+                        deleteAccountUsernameInput = state.claimedUsername
+                        deleteAccountFeedback = ""
+                        showDeleteAccountDialog = true
+                    },
+                    tag = "quick_delete_account_tile"
+                )
+            }
+            if (deleteAccountFeedback.isNotBlank()) {
+                Text(
+                    text = deleteAccountFeedback,
+                    color = EmeraldMesh,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
         // -------------------------------------------------------------
         // TOP PERMANENT MODE SWITCH PILL: MODE: EASY / MODE: PRO
         // -------------------------------------------------------------
@@ -893,6 +1030,17 @@ fun SettingsScreen(
                                                     fontFamily = FontFamily.Monospace
                                                 )
                                             )
+                                            val altUrls = state.webPortalStatus.allReachableUrls.filter { it != state.webPortalStatus.portalUrl }
+                                            if (altUrls.isNotEmpty()) {
+                                                Text(
+                                                    text = "Alt: ${altUrls.joinToString(" • ")}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = CyanGateway,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 9.sp
+                                                    )
+                                                )
+                                            }
                                             Text(
                                                 text = "Scan 2-step QR on iPhone or open URL in any browser (zero internet)",
                                                 style = MaterialTheme.typography.bodySmall.copy(
@@ -2479,9 +2627,100 @@ fun SettingsScreen(
             }
         }
 
+        // Delete Account Information Card (v1.2.5)
+        Surface(
+            color = p.card,
+            shape = cardShape,
+            border = androidx.compose.foundation.BorderStroke(1.dp, RedSosAlert.copy(alpha = 0.7f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "DELETE ACCOUNT INFORMATION",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = RedSosAlert,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    )
+                    Text(
+                        text = "Permanently erase a username's saved credentials, keys, claims, and local chat history from this device.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary, fontSize = 11.sp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Button(
+                    onClick = {
+                        deleteAccountUsernameInput = state.claimedUsername
+                        deleteAccountFeedback = ""
+                        showDeleteAccountDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedSosAlert, contentColor = Color.White),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("delete_account_info_button")
+                ) {
+                    Text("DELETE", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                }
+            }
+        }
+
+        if (showDeleteAccountDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteAccountDialog = false },
+                containerColor = p.card,
+                title = {
+                    Text(
+                        text = "DELETE ACCOUNT DATA",
+                        color = RedSosAlert,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Enter a @username to purge everything associated with it (or leave blank to erase your active account, keys, and local history).",
+                            color = p.textSecondary,
+                            fontSize = 12.sp
+                        )
+                        OutlinedTextField(
+                            value = deleteAccountUsernameInput,
+                            onValueChange = { deleteAccountUsernameInput = it },
+                            label = { Text("Username to delete (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            deleteAccountFeedback = onDeleteAccountInfo(deleteAccountUsernameInput)
+                            showDeleteAccountDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedSosAlert, contentColor = Color.White)
+                    ) {
+                        Text("ERASE PERMANENTLY", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteAccountDialog = false }) {
+                        Text("Cancel", color = p.textSecondary)
+                    }
+                }
+            )
+        }
+
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.2.5 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

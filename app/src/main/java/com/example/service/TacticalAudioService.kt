@@ -786,30 +786,40 @@ class TacticalAudioService(
                         audioPlayQueue.receive()
                     }
                     if (pcm8k != null) {
-                        // Low-latency anti-drift: if a packet burst queued multiple frames during live voice,
-                        // skip stale backlog frames so speaker playout stays locked to real time.
+                        // Balanced anti-drift jitter queue: play normal 2-3 packet bursts smoothly in order,
+                        // and only skip stale frames if backlog exceeds 3 queued frames (~360-480ms).
                         if (!_isReplayingPttRx.value && !_isReplayingCallRx.value) {
-                            var drained = 0
-                            while (drained < 4) {
-                                val newer = audioPlayQueue.tryReceive().getOrNull() ?: break
-                                pcm8k = newer
-                                drained++
+                            val burst = ArrayList<ShortArray>(4)
+                            burst.add(pcm8k)
+                            while (burst.size < 6) {
+                                val next = audioPlayQueue.tryReceive().getOrNull() ?: break
+                                burst.add(next)
                             }
+                            val startIdx = if (burst.size > 3) burst.size - 2 else 0
+                            for (bIdx in startIdx until burst.size) {
+                                val isBurstStart = !isPlayoutBurstActive
+                                isPlayoutBurstActive = true
+                                val frameToPlay = burst[bIdx]
+                                lastPlayedPcmFrame = frameToPlay
+                                writePcm16ShortsToSpeakerBlocking(frameToPlay, isBurstStart = isBurstStart)
+                            }
+                        } else {
+                            val isBurstStart = !isPlayoutBurstActive
+                            isPlayoutBurstActive = true
+                            val frameToPlay: ShortArray = pcm8k
+                            lastPlayedPcmFrame = frameToPlay
+                            writePcm16ShortsToSpeakerBlocking(frameToPlay, isBurstStart = isBurstStart)
                         }
-                        val isBurstStart = !isPlayoutBurstActive
-                        isPlayoutBurstActive = true
-                        val frameToPlay: ShortArray = pcm8k
-                        lastPlayedPcmFrame = frameToPlay
-                        writePcm16ShortsToSpeakerBlocking(frameToPlay, isBurstStart = isBurstStart)
                     } else {
                         if (isPlayoutBurstActive) {
-                            // Single-frame Packet-Loss Concealment (PLC): if one frame is delayed or lost mid-sentence,
-                            // bridge the gap with an attenuated (55%) tapered copy of the previous frame, then wait 240ms
+                            // Single-frame Packet-Loss Concealment (PLC): bridge a single lost packet smoothly
+                            // with a 55% tapered copy of the previous frame (avoiding integer division truncation to 0!)
                             val prevFrame = lastPlayedPcmFrame
                             val latePcm = if (prevFrame != null && prevFrame.isNotEmpty()) {
+                                val denom = prevFrame.size * 100
                                 val plcFrame = ShortArray(prevFrame.size) { idx ->
-                                    val env = ((prevFrame.size - idx) * 55) / (prevFrame.size * 100)
-                                    (prevFrame[idx].toInt() * env).coerceIn(-32768, 32767).toShort()
+                                    val scaled = (prevFrame[idx].toInt() * (prevFrame.size - idx) * 55) / denom
+                                    scaled.coerceIn(-32768, 32767).toShort()
                                 }
                                 lastPlayedPcmFrame = null
                                 writePcm16ShortsToSpeakerBlocking(plcFrame, isBurstStart = false, countAsFrame = false)
@@ -956,13 +966,18 @@ class TacticalAudioService(
                 }
             }
             VoiceClarityPreset.NATURAL_HD -> {
-                // Natural HD already reconstructed via Catmull-Rom cubic spline
+                // Matched gentle de-emphasis + de-hiss smoothing (balances TX pre-emphasis for fuller, warmer voice)
+                var acc = lastPlayedSampleVal
+                for (i in out.indices) {
+                    acc = ((acc * 2) + (out[i].toInt() * 6)) shr 3
+                    out[i] = acc.coerceIn(-32768, 32767).toShort()
+                }
             }
         }
 
-        // Stateful 10-sample inter-frame cross-stitch from lastPlayedSampleVal to prevent boundary clicks
+        // Stateful 24-sample (3ms) inter-frame cross-stitch from lastPlayedSampleVal to eliminate clicks/pops
         // WITHOUT ever dipping the speech waveform to zero!
-        val stitchLen = minOf(10, out.size)
+        val stitchLen = minOf(24, out.size)
         val startVal = lastPlayedSampleVal
         for (i in 0 until stitchLen) {
             val weightNew = i + 1
@@ -1372,7 +1387,63 @@ class TacticalAudioService(
     }
 
     fun playSosAlarmPulse() {
-        // Synthetic alarm tones intentionally disabled.
+        // Unmistakable high-visibility Morse SOS (... --- ...) 980 Hz emergency chime on a short AudioTrack burst
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                ensureSpeakerphoneAndVolume(true)
+                val sr = SAMPLE_RATE_8KHZ
+                val patternMs = intArrayOf(
+                    110, 75, 110, 75, 110, 170, // S (...)
+                    270, 85, 270, 85, 270, 170, // O (---)
+                    110, 75, 110, 75, 110       // S (...)
+                )
+                val totalSamples = patternMs.sum() * (sr / 1000)
+                val pcm = ShortArray(totalSamples)
+                var pos = 0
+                for (i in patternMs.indices) {
+                    val segLen = patternMs[i] * (sr / 1000)
+                    val isTone = (i % 2 == 0)
+                    if (isTone) {
+                        val fade = minOf(64, segLen / 4)
+                        for (s in 0 until segLen) {
+                            val env = when {
+                                s < fade -> s.toDouble() / fade
+                                s > segLen - fade -> (segLen - s).toDouble() / fade
+                                else -> 1.0
+                            }
+                            val v = (sin(2.0 * PI * 980.0 * s / sr) * 21000.0 * env).toInt()
+                            if (pos + s < totalSamples) pcm[pos + s] = v.coerceIn(-32768, 32767).toShort()
+                        }
+                    }
+                    pos += segLen
+                }
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sr)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(maxOf(pcm.size * 2, 4096))
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                try {
+                    track.write(pcm, 0, pcm.size)
+                    track.play()
+                    delay(patternMs.sum().toLong() + 120L)
+                } finally {
+                    runCatching { track.stop() }
+                    runCatching { track.release() }
+                }
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -1492,6 +1563,18 @@ class TacticalAudioService(
                 audioRecord = rec
 
                 if (rec != null && rec.state == AudioRecord.STATE_INITIALIZED) {
+                    // Attach Android hardware NoiseSuppressor & AutomaticGainControl when supported for clearer voice
+                    val attachedNs = runCatching {
+                        if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
+                            android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.apply { enabled = true }
+                        } else null
+                    }.getOrNull()
+                    val attachedAgc = runCatching {
+                        if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+                            android.media.audiofx.AutomaticGainControl.create(rec.audioSessionId)?.apply { enabled = true }
+                        } else null
+                    }.getOrNull()
+                    try {
                     rec.startRecording()
 
                     while (isActive && _isRecording.value && isCapturePermitted()) {
@@ -1552,6 +1635,10 @@ class TacticalAudioService(
                         } else {
                             delay(5)
                         }
+                    }
+                    } finally {
+                        runCatching { attachedNs?.release() }
+                        runCatching { attachedAgc?.release() }
                     }
                 } else if (isCapturePermitted()) {
                     startSimulatedRfChatter()

@@ -185,6 +185,50 @@ class PersistentChatManager(private val context: Context) {
     }
 
     @Synchronized
+    fun deleteThread(threadId: String): Boolean {
+        val removed = memoryCache.remove(threadId) != null
+        if (removed) persistToDisk()
+        return removed
+    }
+
+    @Synchronized
+    fun deleteAllDataMatchingAccount(username: String, nodeId: String): Int {
+        val normUser = com.example.crypto.TacticalE2eeManager.normalizeUsername(username)
+        val normNode = nodeId.trim().uppercase().removePrefix("0X")
+        var removedCount = 0
+
+        val threadIter = memoryCache.entries.iterator()
+        while (threadIter.hasNext()) {
+            val entry = threadIter.next()
+            val tid = entry.key
+            val tidPeerNorm = tid.removePrefix("dm_").trim().uppercase().removePrefix("0X")
+            if (tid.startsWith("dm_") && normNode.isNotBlank() && tidPeerNorm == normNode) {
+                removedCount += entry.value.size
+                threadIter.remove()
+                continue
+            }
+            val pktIter = entry.value.iterator()
+            while (pktIter.hasNext()) {
+                val p = pktIter.next()
+                val srcNorm = p.sourceId.trim().uppercase().removePrefix("0X")
+                val dstNorm = p.destId.trim().uppercase().removePrefix("0X")
+                val matchesNode = normNode.isNotBlank() && (srcNorm == normNode || dstNorm == normNode)
+                val matchesUser = normUser.isNotBlank() && (
+                    p.sourceCallsign.contains("@$normUser", ignoreCase = true) ||
+                        p.sourceCallsign.equals(normUser, ignoreCase = true) ||
+                        p.content.contains("@$normUser", ignoreCase = true)
+                    )
+                if (matchesNode || matchesUser) {
+                    pktIter.remove()
+                    removedCount++
+                }
+            }
+        }
+        persistToDisk()
+        return removedCount
+    }
+
+    @Synchronized
     fun wipeAllHistoryForDuress() {
         memoryCache.clear()
         runCatching {
