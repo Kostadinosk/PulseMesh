@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.5)</title>
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.7)</title>
   <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -880,7 +880,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.2.5</span>
+      <span class="version-tag">v1.2.7</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
@@ -1069,20 +1069,26 @@
         <div class="card" style="border-color:var(--red);">
           <h3 style="color:var(--red);">DELETE ACCOUNT INFORMATION</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
-            Permanently erase all saved account data, keys, username references, and local chat history for a specific <code>@username</code> (or leave blank to erase your active browser account).
+            Permanently erase saved credentials, keys, and local chat history for an account. You must either be <strong>signed in</strong> to that account, or provide <strong>BOTH its PIN and Recovery Key</strong>.
           </p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input type="text" id="deleteAccountInput" placeholder="@username to delete (optional)" style="flex:1;min-width:180px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
-            <button type="button" class="btn btn-danger" id="deleteAccountBtn">🗑 Delete All Account Data</button>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="text" id="deleteAccountInput" placeholder="Account @username" style="flex:1;min-width:180px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
+              <input type="password" id="deleteAccountPinInput" placeholder="PIN (required if not signed in)" style="flex:1;min-width:150px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="text" id="deleteAccountRecoveryInput" placeholder="Recovery Key PMRK-... (required if not signed in)" style="flex:1;min-width:220px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
+              <button type="button" class="btn btn-danger" id="deleteAccountBtn">🗑 Delete All Account Data</button>
+            </div>
           </div>
           <div id="deleteAccountStatus" style="font-family:var(--mono);font-size:11px;color:var(--emerald);margin-top:8px;"></div>
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.5)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.7)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
             Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>).<br /><br />
-            <strong>PulseMesh v1.2.5 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            <strong>PulseMesh v1.2.7 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1104,7 +1110,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.2.5 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.2.7 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -2483,7 +2489,7 @@
           return;
         }
         // 2. Fetch from local Android host or OSM and store in IndexedDB
-        const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${y}.png` : `https://tile.openstreetmap.org/${z}/${wx}/${y}.png`;
+        const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${y}.png?fetch=1` : `https://tile.openstreetmap.org/${z}/${wx}/${y}.png`;
         try {
           const res = await fetch(url);
           if (!res.ok) return;
@@ -2511,7 +2517,7 @@
             if (wy < 0 || wy >= maxT) continue;
             const key = `${z}/${wx}/${wy}`;
             if (await idbGetTile(key)) { savedCount++; continue; }
-            const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${wy}.png` : `https://tile.openstreetmap.org/${z}/${wx}/${wy}.png`;
+            const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${wy}.png?fetch=1` : `https://tile.openstreetmap.org/${z}/${wx}/${wy}.png`;
             try {
               const res = await fetch(url);
               if (res.ok) { await idbPutTile(key, await res.blob()); savedCount++; }
@@ -3066,18 +3072,66 @@
       document.getElementById("deleteAccountInput").scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
-    // Delete All Account Information Handler
+    // Delete All Account Information Handler (v1.2.7: strictly requires active login OR BOTH PIN + Recovery Key)
     document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
+      const statusEl = document.getElementById("deleteAccountStatus");
       const rawTarget = document.getElementById("deleteAccountInput").value.trim();
+      const pinVal = (document.getElementById("deleteAccountPinInput").value || "").trim();
+      const recVal = (document.getElementById("deleteAccountRecoveryInput").value || "").trim();
       const normTarget = normalizeUsername(rawTarget);
-      const label = normTarget ? ("@" + normTarget) : "your active browser account";
+      const activeUser = normalizeUsername(state.claimedUsername);
+      const effectiveUser = normTarget || activeUser;
+      const isLoggedInToTarget = !!activeUser && (!normTarget || normTarget === activeUser);
+
+      if (!isLoggedInToTarget) {
+        if (!effectiveUser) {
+          statusEl.style.color = "var(--red)";
+          statusEl.textContent = "Deletion denied: Sign in to your account first, or enter @username with BOTH its PIN and Recovery Key.";
+          return;
+        }
+        if (!pinVal || !recVal) {
+          statusEl.style.color = "var(--red)";
+          statusEl.textContent = `Deletion denied: Not signed in as @${effectiveUser}. Provide BOTH PIN and Recovery Key.`;
+          return;
+        }
+        if (!hasSubtle) {
+          statusEl.style.color = "var(--red)";
+          statusEl.textContent = "Deletion denied: PIN + Recovery Key cryptographic verification requires HTTPS (or sign in first).";
+          return;
+        }
+        statusEl.style.color = "var(--amber)";
+        statusEl.textContent = `Verifying PIN & Recovery Key for @${effectiveUser}...`;
+        try {
+          const claim = await pollUsernameClaim(effectiveUser);
+          if (!claim || !claim.saltHex || !claim.pinVault || !claim.recoveryVault) {
+            statusEl.style.color = "var(--red)";
+            statusEl.textContent = `Deletion denied: Could not verify credentials for @${effectiveUser}.`;
+            return;
+          }
+          const pinOk = !!(await decryptAccountVault(effectiveUser, claim.saltHex, pinVal, claim.pinVault));
+          const recOk = !!(
+            await decryptAccountVault(effectiveUser, claim.saltHex, normalizeRecoveryKey(recVal), claim.recoveryVault) ||
+            await decryptAccountVault(effectiveUser, claim.saltHex, recVal.toUpperCase(), claim.recoveryVault)
+          );
+          if (!pinOk || !recOk) {
+            statusEl.style.color = "var(--red)";
+            statusEl.textContent = `Deletion denied: ${!pinOk && !recOk ? "Both PIN and Recovery Key are invalid" : !pinOk ? "Invalid PIN" : "Invalid Recovery Key"} for @${effectiveUser}.`;
+            return;
+          }
+        } catch (err) {
+          statusEl.style.color = "var(--red)";
+          statusEl.textContent = `Deletion denied: Verification failed (${err && err.message ? err.message : "network error"}).`;
+          return;
+        }
+      }
+
+      const label = effectiveUser ? ("@" + effectiveUser) : "your active browser account";
       if (!confirm(`Permanently delete ALL local account information, keys, and chat messages for ${label}?`)) return;
 
-      const isActive = !normTarget || normTarget === normalizeUsername(state.claimedUsername) || normTarget === normalizeUsername(state.callsign);
-      // Remove messages referencing this username/account
+      const isActive = isLoggedInToTarget || (effectiveUser && effectiveUser === activeUser);
       state.packets = state.packets.filter((p) => {
         if (isActive && p.isSelf) return false;
-        if (normTarget && ((p.sender || "").toLowerCase().includes(normTarget) || (p.text || "").toLowerCase().includes("@" + normTarget))) return false;
+        if (effectiveUser && ((p.sender || "").toLowerCase().includes(effectiveUser) || (p.text || "").toLowerCase().includes("@" + effectiveUser))) return false;
         return true;
       });
       if (isActive) {
@@ -3092,7 +3146,10 @@
         saveConfig({ nodeId: state.nodeId, callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode, setupDone: false });
       }
       document.getElementById("deleteAccountInput").value = "";
-      document.getElementById("deleteAccountStatus").textContent = `✓ Erased all local account information for ${label}.`;
+      document.getElementById("deleteAccountPinInput").value = "";
+      document.getElementById("deleteAccountRecoveryInput").value = "";
+      statusEl.style.color = "var(--emerald)";
+      statusEl.textContent = `✓ Erased all local account information for ${label}.`;
       syncSettingsInputs();
       renderPeersAndHeader();
       renderMessages();

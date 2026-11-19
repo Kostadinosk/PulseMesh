@@ -503,7 +503,7 @@ class MainActivity : ComponentActivity() {
                                             viewModel.syncAccountBackupNow(cb)
                                         },
                                         onToggleWebPortal = { viewModel.toggleWebPortal() },
-                                        onDeleteAccountInfo = { u -> viewModel.deleteAllAccountInformation(u) },
+                                        onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
                                     )
                                 } else {
                                     Column(
@@ -670,7 +670,7 @@ class MainActivity : ComponentActivity() {
                                                 onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
                                                 onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
                                                 onToggleWebPortal = { viewModel.toggleWebPortal() },
-                                                onDeleteAccountInfo = { u -> viewModel.deleteAllAccountInformation(u) },
+                                                onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
                                             )
                                         } else {
                                             RootBoosterScreen(

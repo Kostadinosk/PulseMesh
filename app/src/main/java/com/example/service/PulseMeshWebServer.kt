@@ -24,6 +24,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -33,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 data class WebPortalStatus(
     val isRunning: Boolean = false,
@@ -41,6 +43,8 @@ data class WebPortalStatus(
     val portalUrl: String = "",
     val allReachableUrls: List<String> = emptyList(),
     val activeClientCount: Int = 0,
+    val selfTestPassed: Boolean = false,
+    val requestsServed: Int = 0,
     val statusMessage: String = "Wi-Fi Direct Web Portal Idle"
 )
 
@@ -84,7 +88,8 @@ class PulseMeshWebServer(
     private val buildInfoJson: (portalUrl: String, webClientCount: Int) -> JSONObject,
     private val buildStateJson: (clientNodeId: String) -> JSONObject,
     private val onClientRegistered: (WebClientRegistration) -> Unit,
-    private val onWebPacketSubmitted: (WebSubmittedPacket) -> Unit
+    private val onWebPacketSubmitted: (WebSubmittedPacket) -> Unit,
+    private val canFetchOnlineTiles: () -> Boolean = { false }
 ) {
     companion object {
         private val PREFERRED_PORTS = intArrayOf(8080, 8081, 8082, 8083, 8084, 8085, 8888, 9090)
@@ -101,6 +106,8 @@ class PulseMeshWebServer(
 
     private val running = AtomicBoolean(false)
     private val starting = AtomicBoolean(false)
+    private val selfTestPassed = AtomicBoolean(false)
+    private val requestsServed = AtomicInteger(0)
     @Volatile
     private var serverSocket: ServerSocket? = null
     @Volatile
@@ -186,6 +193,8 @@ class PulseMeshWebServer(
                 serverSocket = ss
                 boundPort = ss.localPort
                 running.set(true)
+                selfTestPassed.set(false)
+                requestsServed.set(0)
                 acquireWifiLock()
                 refreshPortalUrl()
                 registerNsdService(boundPort)
@@ -201,6 +210,15 @@ class PulseMeshWebServer(
                             if (!running.get()) break
                         }
                     }
+                }
+
+                // Loopback HTTP self-test right after bind to prove server responds with HTTP 200
+                scope.launch(Dispatchers.IO) {
+                    delay(180L)
+                    if (!running.get()) return@launch
+                    val ok = runLoopbackSelfTest(boundPort)
+                    selfTestPassed.set(ok)
+                    refreshPortalUrl()
                 }
 
                 // Rapid IP probe bursts while Android brings up SoftAP / Wi-Fi Direct IPv4 addresses, then steady 3s poll
@@ -301,17 +319,47 @@ class PulseMeshWebServer(
     }
 
     private fun openServerSocket(): ServerSocket? {
+        val ipv4Any = runCatching { InetAddress.getByName("0.0.0.0") }.getOrNull()
         for (port in PREFERRED_PORTS) {
             val sock = runCatching {
                 ServerSocket().apply {
                     reuseAddress = true
-                    // Wildcard bind (no specific IP) listens on ALL active IPv4/IPv6 local interfaces (p2p, ap, wlan, usb)
-                    bind(InetSocketAddress(port), 64)
+                    // Explicit IPv4 INADDR_ANY (0.0.0.0) binds cleanly across p2p-wlan0-0, ap0, swlan0, wlan*, and loopback
+                    if (ipv4Any != null) {
+                        bind(InetSocketAddress(ipv4Any, port), 64)
+                    } else {
+                        bind(InetSocketAddress(port), 64)
+                    }
                 }
-            }.getOrNull()
+            }.getOrElse {
+                runCatching {
+                    ServerSocket().apply {
+                        reuseAddress = true
+                        bind(InetSocketAddress(port), 64)
+                    }
+                }.getOrNull()
+            }
             if (sock != null) return sock
         }
         return null
+    }
+
+    private fun runLoopbackSelfTest(port: Int): Boolean {
+        return runCatching {
+            val url = java.net.URL("http://127.0.0.1:$port/api/info")
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 1500
+                readTimeout = 1500
+                requestMethod = "GET"
+            }
+            try {
+                val code = conn.responseCode
+                val body = if (code in 200..299) conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) } else ""
+                code == 200 && body.contains("pulsemeshHost")
+            } finally {
+                runCatching { conn.disconnect() }
+            }
+        }.getOrDefault(false)
     }
 
     private fun acquireWifiLock() {
@@ -346,7 +394,15 @@ class PulseMeshWebServer(
         val primaryUrl = "http://$bestIp:$boundPort"
         val allUrls = rankedIps.map { "http://$it:$boundPort" }.ifEmpty { listOf(primaryUrl) }
         val cur = _status.value
-        if (cur.portalUrl != primaryUrl || cur.allReachableUrls != allUrls || cur.activeClientCount != activeClients.size || !cur.isRunning) {
+        val ok = selfTestPassed.get()
+        val hits = requestsServed.get()
+        if (cur.portalUrl != primaryUrl ||
+            cur.allReachableUrls != allUrls ||
+            cur.activeClientCount != activeClients.size ||
+            cur.selfTestPassed != ok ||
+            cur.requestsServed != hits ||
+            !cur.isRunning
+        ) {
             _status.value = WebPortalStatus(
                 isRunning = true,
                 port = boundPort,
@@ -354,7 +410,13 @@ class PulseMeshWebServer(
                 portalUrl = primaryUrl,
                 allReachableUrls = allUrls,
                 activeClientCount = activeClients.size,
-                statusMessage = "Web Portal LIVE at $primaryUrl"
+                selfTestPassed = ok,
+                requestsServed = hits,
+                statusMessage = if (ok) {
+                    "HTTP 200 Verified • LIVE at $primaryUrl"
+                } else {
+                    "Web Portal LIVE at $primaryUrl"
+                }
             )
         }
     }
@@ -377,13 +439,15 @@ class PulseMeshWebServer(
                             (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
                         if (!isPrivate) continue
                         val priority = when {
-                            name.startsWith("p2p") || ip == "192.168.49.1" -> 130
-                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") -> 125
-                            name.startsWith("wlan") && name != "wlan0" -> 120
-                            name.startsWith("wlan") && ip.endsWith(".1") -> 115
-                            name.startsWith("wlan") -> 85
-                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("eth") -> 70
-                            else -> 0
+                            name.startsWith("p2p") || ip == "192.168.49.1" -> 135
+                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") ||
+                                name.startsWith("sap") || name.startsWith("tether") || name.startsWith("br") -> 130
+                            name.startsWith("wlan") && name != "wlan0" -> 125
+                            name.startsWith("wlan") && ip.endsWith(".1") -> 120
+                            ip.endsWith(".1") -> 112
+                            name.startsWith("wlan") -> 88
+                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("eth") -> 75
+                            else -> 50
                         }
                         if (priority > 0) {
                             candidates.add(priority to ip)
@@ -467,6 +531,13 @@ class PulseMeshWebServer(
             }
 
             val isHead = method == "HEAD"
+            if (path != "/api/events") {
+                val isLoopback = socket.inetAddress?.isLoopbackAddress == true
+                if (!isLoopback) {
+                    requestsServed.incrementAndGet()
+                    refreshPortalUrl()
+                }
+            }
 
             when {
                 (method == "GET" || isHead) && (path == "/" || path == "/index.html" || path == "/web" || path == "/web/" || path == "/app" || path == "/app/") -> {
@@ -481,7 +552,7 @@ class PulseMeshWebServer(
                     writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes, headOnly = isHead)
                 }
 
-                (method == "GET" || isHead) && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png") -> {
+                (method == "GET" || isHead) && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png" || path == "/favicon.ico" || path == "/apple-touch-icon.png") -> {
                     if (cachedIconBytes.isNotEmpty()) {
                         writeResponse(output, 200, "OK", "image/png", cachedIconBytes, headOnly = isHead)
                     } else {
@@ -613,6 +684,14 @@ class PulseMeshWebServer(
                         val pngBytes = runCatching { tileFile.readBytes() }.getOrNull()
                         if (pngBytes != null && pngBytes.isNotEmpty()) {
                             writeResponse(output, 200, "OK", "image/png", pngBytes, cacheControl = "public, max-age=86400")
+                            return
+                        }
+                    }
+                    // Gateway Tile Proxy: if this host has internet enabled, fetch from OSM, cache locally, and serve to offline peers!
+                    if (canFetchOnlineTiles()) {
+                        val fetchedBytes = NativeTileMapManager.fetchTileBytesOnline(context, z, x, y)
+                        if (fetchedBytes != null && fetchedBytes.isNotEmpty()) {
+                            writeResponse(output, 200, "OK", "image/png", fetchedBytes, cacheControl = "public, max-age=86400")
                             return
                         }
                     }

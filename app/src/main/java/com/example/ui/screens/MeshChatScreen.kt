@@ -1783,24 +1783,31 @@ private fun MessageBubble(
     var showFullScreenPhoto by remember { mutableStateOf(false) }
     var showRetryConfirmDialog by remember { mutableStateOf(false) }
     var lastRetriedAtMs by remember { mutableLongStateOf(0L) }
+    val retryBaseTimeMs = if (lastRetriedAtMs > 0L) lastRetriedAtMs else packet.timestamp
+    var retryGraceElapsed by remember(packet.id, packet.isDelivered, retryBaseTimeMs) {
+        mutableStateOf(packet.isDelivered || (System.currentTimeMillis() - retryBaseTimeMs) >= 6_000L)
+    }
+    LaunchedEffect(packet.id, packet.isDelivered, retryBaseTimeMs) {
+        if (!packet.isDelivered && isOutgoing) {
+            val elapsed = System.currentTimeMillis() - retryBaseTimeMs
+            val remaining = (6_000L - elapsed).coerceAtLeast(0L)
+            if (remaining > 0L) {
+                retryGraceElapsed = false
+                kotlinx.coroutines.delay(remaining)
+            }
+            retryGraceElapsed = true
+        }
+    }
 
     val transportBadge = remember(packet.transportUsed, packet.transport) {
         val raw = packet.transportUsed.ifBlank { packet.transport }
         when {
             raw.contains("WIFI", ignoreCase = true) || raw.contains("UDP", ignoreCase = true) -> "WIFI"
+            raw.contains("WEB", ignoreCase = true) -> "WEB"
             raw.contains("L2CAP", ignoreCase = true) -> "L2CAP"
-            raw.contains("HYBRID", ignoreCase = true) || raw.contains("NTFY", ignoreCase = true) -> "HYBRID"
-            raw.contains("GATT", ignoreCase = true) -> "GATT"
+            raw.contains("HYBRID", ignoreCase = true) || raw.contains("NTFY", ignoreCase = true) -> "INTERNET"
+            raw.contains("GATT", ignoreCase = true) -> "BLE"
             else -> raw.take(10).uppercase()
-        }
-    }
-    val telemetryLabel = remember(packet.transportUsed, packet.rssiDbm) {
-        val transportName = packet.transportUsed.ifBlank { packet.transport }
-        val rssi = packet.rssiDbm
-        if (rssi != null && !transportName.contains("HYBRID", ignoreCase = true)) {
-            "$transportName • $rssi dBm"
-        } else {
-            transportName
         }
     }
 
@@ -2128,32 +2135,14 @@ private fun MessageBubble(
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
                         }
-                        if (!isSimpleMode || packet.hops > 0) {
+                        if (!isOutgoing && packet.hops > 0) {
                             Surface(
                                 color = p.surfaceVariant,
                                 shape = RoundedCornerShape(4.dp),
                                 border = androidx.compose.foundation.BorderStroke(0.8.dp, p.border)
                             ) {
                                 Text(
-                                    text = "H${packet.hops}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = p.textSecondary
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
-                            }
-                        }
-                        if (packet.rssiDbm != null && transportBadge != "HYBRID") {
-                            Surface(
-                                color = p.surfaceVariant,
-                                shape = RoundedCornerShape(4.dp),
-                                border = androidx.compose.foundation.BorderStroke(0.8.dp, p.border)
-                            ) {
-                                Text(
-                                    text = "${packet.rssiDbm}dBm",
+                                    text = if (packet.hops == 1) "1 HOP" else "${packet.hops} HOPS",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 8.sp,
                                         fontWeight = FontWeight.Bold,
@@ -2168,8 +2157,9 @@ private fun MessageBubble(
 
                     if (isOutgoing) {
                         val isQueuedKeyPending = packet.transport == "ECDH KEY PENDING" || packet.rawHexBadge.contains("KEY EXCHANGE PENDING")
+                        val isInGraceWindow = !packet.isDelivered && !isQueuedKeyPending && !retryGraceElapsed
                         val receiptIcon = when {
-                            isQueuedKeyPending -> Icons.Default.Schedule
+                            isQueuedKeyPending || isInGraceWindow -> Icons.Default.Schedule
                             packet.isDelivered -> Icons.Default.DoneAll
                             else -> Icons.Default.Check
                         }
@@ -2181,14 +2171,15 @@ private fun MessageBubble(
                         val receiptLabel = when {
                             isQueuedKeyPending -> "QUEUED"
                             packet.isDelivered -> if (packet.ackedByCallsign.isNotBlank()) "RECEIVED (${packet.ackedByCallsign})" else "RECEIVED"
-                            else -> "SENT"
+                            isInGraceWindow -> "SENDING"
+                            else -> "NO ACK"
                         }
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            if (!packet.isDelivered) {
+                            if (!packet.isDelivered && !isQueuedKeyPending && retryGraceElapsed) {
                                 Surface(
                                     color = p.amberDim,
                                     shape = RoundedCornerShape(4.dp),
@@ -2209,7 +2200,7 @@ private fun MessageBubble(
                                             modifier = Modifier.size(10.dp)
                                         )
                                         Text(
-                                            text = if (lastRetriedAtMs > 0L) "RETRIED" else "RETRY",
+                                            text = "RETRY",
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.ExtraBold,
@@ -2363,7 +2354,7 @@ private fun MessageBubble(
                         )
                     }
                     Text(
-                        text = "Transport: $telemetryLabel",
+                        text = "Transport: $transportBadge",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = p.emerald,
                             fontFamily = FontFamily.Monospace

@@ -47,7 +47,8 @@ data class WireMeshPacket(
     val senderPubKey: String = "",
     val encryptedKeysJson: String = "",
     val srcUsername: String = "",
-    val dstUsername: String = ""
+    val dstUsername: String = "",
+    val isGateway: Boolean = false
 )
 
 /**
@@ -385,6 +386,7 @@ class LiveMeshNetworkService(
                     if (packet.encryptedKeysJson.isNotBlank()) put("ekeys", packet.encryptedKeysJson)
                     if (packet.srcUsername.isNotBlank()) put("su", packet.srcUsername)
                     if (packet.dstUsername.isNotBlank()) put("du", packet.dstUsername)
+                    if (packet.isGateway) put("gw", true)
                     put("timestamp", packet.timestamp)
                 }
 
@@ -667,7 +669,8 @@ class LiveMeshNetworkService(
                 senderPubKey = inner.optString("pk", "").ifBlank { inner.optString("senderPubKey", "") },
                 encryptedKeysJson = inner.optString("ekeys", "").ifBlank { inner.optString("encryptedKeys", "") },
                 srcUsername = inner.optString("su", ""),
-                dstUsername = inner.optString("du", "")
+                dstUsername = inner.optString("du", ""),
+                isGateway = inner.optBoolean("gw", false)
             )
 
             _incomingPackets.emit(packet)

@@ -22,11 +22,73 @@ object NativeTileMapManager {
     private val tileCache = object : LruCache<String, ImageBitmap>(192) {}
     private val inFlightKeys = mutableSetOf<String>()
 
+    /**
+     * Optional Wi-Fi Direct / Hotspot HTTP proxy URL of an internet-connected Gateway Peer
+     * (e.g. "http://192.168.49.1:8080") so offline phones can download map tiles through it.
+     */
+    @Volatile
+    var gatewayTileProxyBaseUrl: (() -> String?)? = null
+
+    /**
+     * Optional BLE / mesh tile requester callback used when an offline phone is linked to
+     * an internet-connected Gateway Peer without a direct Wi-Fi HTTP IP.
+     */
+    @Volatile
+    var gatewayMeshTileRequester: ((z: Int, x: Int, y: Int) -> Boolean)? = null
+
     private val TILE_SERVERS = listOf(
         "https://tile.openstreetmap.org",
         "https://a.tile.openstreetmap.fr/hot",
         "https://b.tile.openstreetmap.fr/hot"
     )
+
+    /**
+     * Synchronously fetches a PNG tile from OpenStreetMap (or returns disk-cached bytes)
+     * and persists it to `osm_tiles/$z/$x/$y.png`. Used by Gateway Peers serving offline neighbors.
+     */
+    fun fetchTileBytesOnline(context: Context, z: Int, x: Int, y: Int): ByteArray? {
+        if (z !in 0..19) return null
+        val maxTile = (1 shl z)
+        if (x < 0 || x >= maxTile || y < 0 || y >= maxTile) return null
+
+        val primaryFile = getTileFile(context, z, x, y)
+        if (primaryFile.exists() && primaryFile.length() > 32L) {
+            runCatching { return primaryFile.readBytes() }
+        }
+        val legacyFile = getLegacyCacheTileFile(context, z, x, y)
+        if (legacyFile.exists() && legacyFile.length() > 32L) {
+            runCatching { return legacyFile.readBytes() }
+        }
+
+        for (server in TILE_SERVERS) {
+            var conn: HttpURLConnection? = null
+            try {
+                val url = URL("$server/$z/$x/$y.png")
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", "PulseMesh-Tactical-Android/1.2.7")
+                    setRequestProperty("Accept", "image/png,image/*;q=0.8")
+                    connectTimeout = 4500
+                    readTimeout = 5000
+                    instanceFollowRedirects = true
+                }
+                if (conn.responseCode in 200..299) {
+                    val bytes = conn.inputStream.use { it.readBytes() }
+                    if (bytes.size > 32 && BitmapFactory.decodeByteArray(bytes, 0, bytes.size) != null) {
+                        runCatching {
+                            primaryFile.parentFile?.mkdirs()
+                            FileOutputStream(primaryFile).use { out -> out.write(bytes) }
+                        }
+                        return bytes
+                    }
+                }
+            } catch (_: Exception) {
+                // Try next OSM mirror
+            } finally {
+                runCatching { conn?.disconnect() }
+            }
+        }
+        return null
+    }
 
     /**
      * Hierarchical persistent tile path: File(context.filesDir, "osm_tiles/$z/$x/$y.png")
@@ -102,18 +164,26 @@ object NativeTileMapManager {
                     }
                 }
 
-                // If offline and not on disk, do NOT initiate HTTP requests
-                if (!isInternetEnabled) return@launch
+                // If offline and not on disk, check whether an internet-connected Gateway Peer can proxy the tile
+                val gwProxyBase = if (!isInternetEnabled) gatewayTileProxyBaseUrl?.invoke()?.trimEnd('/') else null
+                if (!isInternetEnabled && gwProxyBase.isNullOrBlank()) {
+                    // Fallback: request via BLE/mesh TILE_REQ from any internet-connected Gateway Peer
+                    gatewayMeshTileRequester?.invoke(z, x, y)
+                    return@launch
+                }
 
                 var loadedBitmap: Bitmap? = null
-                for (server in TILE_SERVERS) {
-                    if (!isInternetEnabled) break
+                val candidateUrls = if (isInternetEnabled) {
+                    TILE_SERVERS.map { "$it/$z/$x/$y.png" }
+                } else {
+                    listOf("$gwProxyBase/api/tiles/$z/$x/$y.png?fetch=1")
+                }
+                for (urlStr in candidateUrls) {
                     var conn: HttpURLConnection? = null
                     try {
-                        val urlStr = "$server/$z/$x/$y.png"
                         val url = URL(urlStr)
                         conn = (url.openConnection() as HttpURLConnection).apply {
-                            setRequestProperty("User-Agent", "PulseMesh-Tactical-Android")
+                            setRequestProperty("User-Agent", "PulseMesh-Tactical-Android/1.2.7")
                             setRequestProperty("Accept", "image/png,image/*;q=0.8")
                             connectTimeout = 4000
                             readTimeout = 4500

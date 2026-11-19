@@ -97,6 +97,19 @@ object OfflineRegionDownloader {
     var isInternetEnabled: Boolean = false
 
     @Volatile
+    var gatewayTileProxyBaseUrl: (() -> String?)? = null
+
+    @Volatile
+    var gatewayPeerCallsign: (() -> String?)? = null
+
+    @Volatile
+    var gatewayMeshTileRequester: ((z: Int, x: Int, y: Int) -> Boolean)? = null
+
+    fun hasGatewayMapAccess(): Boolean {
+        return !gatewayTileProxyBaseUrl?.invoke().isNullOrBlank() || !gatewayPeerCallsign?.invoke().isNullOrBlank()
+    }
+
+    @Volatile
     private var activeHttpConnection: HttpURLConnection? = null
 
     @Volatile
@@ -252,11 +265,18 @@ object OfflineRegionDownloader {
         scope: CoroutineScope,
         onFinished: () -> Unit = {}
     ) {
-        if (!isInternetEnabled) {
+        val gwProxyBase = gatewayTileProxyBaseUrl?.invoke()?.trimEnd('/')
+        val gwLabel = gatewayPeerCallsign?.invoke().orEmpty()
+        val hasMeshGateway = gwLabel.isNotBlank() && gatewayMeshTileRequester != null
+        val useDirectInternet = isInternetEnabled
+        val useHttpGateway = !useDirectInternet && !gwProxyBase.isNullOrBlank()
+        val useBleMeshGateway = !useDirectInternet && !useHttpGateway && hasMeshGateway
+
+        if (!useDirectInternet && !useHttpGateway && !useBleMeshGateway) {
             _downloadState.value = DownloadProgress(
                 isRunning = false,
-                statusMessage = "Off-Grid Mode Active: Internet tile downloads blocked",
-                error = "Enable Hybrid Mode to download online OSM tiles"
+                statusMessage = "Off-Grid Mode: Connect to an internet Gateway Peer or enable Hybrid Mode",
+                error = "No direct internet or internet-connected Gateway Peer detected"
             )
             return
         }
@@ -264,14 +284,19 @@ object OfflineRegionDownloader {
 
         downloadJob?.cancel()
         downloadJob = scope.launch(Dispatchers.IO) {
-            if (!isInternetEnabled) return@launch
             val centerLat = if (region.id == "current") actualCenterLat else region.centerLat
             val centerLon = if (region.id == "current") actualCenterLon else region.centerLon
 
-            val tiles = calculateTileList(centerLat, centerLon, region.radiusKm, minZoom, maxZoom)
+            val rawTiles = calculateTileList(centerLat, centerLon, region.radiusKm, minZoom, maxZoom)
+            val tiles = if (useBleMeshGateway) rawTiles.take(36) else rawTiles
             val total = tiles.size
             var cachedBytesAccum = getDiskCacheStats(context).second
             val initialCacheMb = cachedBytesAccum / (1024.0 * 1024.0)
+            val sourcePrefix = when {
+                useHttpGateway -> "Via Gateway ${gwLabel.ifBlank { "Peer" }} (Wi-Fi): "
+                useBleMeshGateway -> "Via Gateway ${gwLabel.ifBlank { "Peer" }} (BLE Mesh): "
+                else -> ""
+            }
 
             _downloadState.value = DownloadProgress(
                 isRunning = true,
@@ -282,7 +307,8 @@ object OfflineRegionDownloader {
                 diskCacheSizeMb = initialCacheMb,
                 statusMessage = String.format(
                     Locale.US,
-                    "Downloaded 0 / %d tiles • %.2f MB stored",
+                    "%sDownloaded 0 / %d tiles • %.2f MB stored",
+                    sourcePrefix,
                     total,
                     initialCacheMb
                 )
@@ -297,7 +323,8 @@ object OfflineRegionDownloader {
             var downloadedCount = 0
 
             for (tile in tiles) {
-                if (!isActive || !isInternetEnabled) break
+                if (!isActive) break
+                if (useDirectInternet && !isInternetEnabled) break
 
                 val (z, x, y) = tile
                 val destFile = File(context.filesDir, "osm_tiles/$z/$x/$y.png")
@@ -314,7 +341,8 @@ object OfflineRegionDownloader {
                         diskCacheSizeMb = cacheMb,
                         statusMessage = String.format(
                             Locale.US,
-                            "Downloaded %d / %d tiles • %.2f MB stored",
+                            "%sDownloaded %d / %d tiles • %.2f MB stored",
+                            sourcePrefix,
                             downloadedCount,
                             total,
                             cacheMb
@@ -324,37 +352,55 @@ object OfflineRegionDownloader {
                 }
 
                 var success = false
-                for (server in tileServers) {
-                    if (!isInternetEnabled) break
-                    var conn: HttpURLConnection? = null
-                    try {
-                        val urlStr = "$server/$z/$x/$y.png"
-                        val url = URL(urlStr)
-                        conn = (url.openConnection() as HttpURLConnection).apply {
-                            setRequestProperty("User-Agent", "PulseMesh-Tactical-Android")
-                            setRequestProperty("Accept", "image/png,image/*;q=0.8")
-                            connectTimeout = 4000
-                            readTimeout = 5000
-                            instanceFollowRedirects = true
-                        }
-                        activeHttpConnection = conn
-
-                        if (conn.responseCode in 200..299) {
-                            val bytes = conn.inputStream.use { it.readBytes() }
-                            if (bytes.isNotEmpty()) {
-                                FileOutputStream(destFile).use { out ->
-                                    out.write(bytes)
-                                }
-                                cachedBytesAccum += bytes.size
+                if (useBleMeshGateway) {
+                    val requested = gatewayMeshTileRequester?.invoke(z, x, y) == true
+                    if (requested) {
+                        repeat(16) {
+                            delay(250L)
+                            if (destFile.exists() && destFile.length() > 32L) {
+                                cachedBytesAccum += destFile.length()
                                 success = true
+                                return@repeat
                             }
                         }
-                        if (success) break
-                    } catch (_: Exception) {
-                        // Retry with next mirror
-                    } finally {
-                        runCatching { conn?.disconnect() }
-                        activeHttpConnection = null
+                    }
+                } else {
+                    val candidateUrls = if (useDirectInternet) {
+                        tileServers.map { "$it/$z/$x/$y.png" }
+                    } else {
+                        listOf("$gwProxyBase/api/tiles/$z/$x/$y.png?fetch=1")
+                    }
+                    for (urlStr in candidateUrls) {
+                        if (useDirectInternet && !isInternetEnabled) break
+                        var conn: HttpURLConnection? = null
+                        try {
+                            val url = URL(urlStr)
+                            conn = (url.openConnection() as HttpURLConnection).apply {
+                                setRequestProperty("User-Agent", "PulseMesh-Tactical-Android/1.2.7")
+                                setRequestProperty("Accept", "image/png,image/*;q=0.8")
+                                connectTimeout = 4500
+                                readTimeout = 6000
+                                instanceFollowRedirects = true
+                            }
+                            activeHttpConnection = conn
+
+                            if (conn.responseCode in 200..299) {
+                                val bytes = conn.inputStream.use { it.readBytes() }
+                                if (bytes.isNotEmpty()) {
+                                    FileOutputStream(destFile).use { out ->
+                                        out.write(bytes)
+                                    }
+                                    cachedBytesAccum += bytes.size
+                                    success = true
+                                }
+                            }
+                            if (success) break
+                        } catch (_: Exception) {
+                            // Retry with next mirror
+                        } finally {
+                            runCatching { conn?.disconnect() }
+                            activeHttpConnection = null
+                        }
                     }
                 }
 
@@ -367,14 +413,15 @@ object OfflineRegionDownloader {
                     diskCacheSizeMb = cacheMb,
                     statusMessage = String.format(
                         Locale.US,
-                        "Downloaded %d / %d tiles • %.2f MB stored",
+                        "%sDownloaded %d / %d tiles • %.2f MB stored",
+                        sourcePrefix,
                         downloadedCount,
                         total,
                         cacheMb
                     )
                 )
 
-                delay(30)
+                delay(if (useBleMeshGateway) 120L else 30L)
             }
 
             val savedRegion = region.copy(centerLat = centerLat, centerLon = centerLon)
@@ -390,7 +437,8 @@ object OfflineRegionDownloader {
                 diskCacheSizeMb = finalCacheMb,
                 statusMessage = String.format(
                     Locale.US,
-                    "Downloaded %d / %d tiles • %.2f MB stored",
+                    "%sDownloaded %d / %d tiles • %.2f MB stored",
+                    sourcePrefix,
                     downloadedCount,
                     total,
                     finalCacheMb

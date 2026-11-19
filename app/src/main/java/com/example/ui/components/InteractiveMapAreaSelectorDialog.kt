@@ -254,14 +254,14 @@ fun InteractiveMapAreaSelectorDialog(
                                             size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
                                             style = Stroke(width = 1f)
                                         )
-                                        if (OfflineRegionDownloader.isInternetEnabled) {
+                                        if (OfflineRegionDownloader.isInternetEnabled || OfflineRegionDownloader.hasGatewayMapAccess()) {
                                             NativeTileMapManager.fetchTileAsync(
                                                 context = context,
                                                 z = intZ,
                                                 x = tx,
                                                 y = ty,
                                                 scope = coroutineScope,
-                                                isInternetEnabled = true
+                                                isInternetEnabled = OfflineRegionDownloader.isInternetEnabled
                                             ) { _, _, _, _ ->
                                                 dialogTileRefreshCounter++
                                             }
@@ -626,13 +626,23 @@ fun InteractiveMapAreaSelectorDialog(
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
+                            val gwPeerName = if (!OfflineRegionDownloader.isInternetEnabled) OfflineRegionDownloader.gatewayPeerCallsign?.invoke() else null
                             Text(
-                                text = String.format(
-                                    Locale.US,
-                                    "DOWNLOAD OFFLINE AREA (%d TILES • %.1f MB)",
-                                    plannedTiles.size,
-                                    estimatedSizeMb
-                                ),
+                                text = if (!gwPeerName.isNullOrBlank()) {
+                                    String.format(
+                                        Locale.US,
+                                        "DOWNLOAD VIA GATEWAY %s (%d TILES)",
+                                        gwPeerName.uppercase(),
+                                        plannedTiles.size
+                                    )
+                                } else {
+                                    String.format(
+                                        Locale.US,
+                                        "DOWNLOAD OFFLINE AREA (%d TILES • %.1f MB)",
+                                        plannedTiles.size,
+                                        estimatedSizeMb
+                                    )
+                                },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = Color.Black,

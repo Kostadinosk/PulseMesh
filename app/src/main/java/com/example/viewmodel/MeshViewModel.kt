@@ -336,9 +336,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     val hotspotManager = com.example.util.LocalHotspotManager(application)
     @Volatile
     private var manualWebPortalPinned: Boolean = false
+    @Volatile
+    private var hotspotWebPortalRequested: Boolean = false
     private val webVoiceSeqCounter = java.util.concurrent.atomic.AtomicInteger(0)
     @Volatile
     private var latestWebVoiceFrame: Triple<Int, Pair<String, String>, String>? = null
+    private val lastGatewayHeartbeatBridgeMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lastGatewayTileRequestMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     val pulseMeshWebServer: com.example.service.PulseMeshWebServer = com.example.service.PulseMeshWebServer(
         context = application,
@@ -346,7 +350,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         buildInfoJson = { portalUrl, webClientCount -> buildWebPortalInfoJson(portalUrl, webClientCount) },
         buildStateJson = { clientNodeId -> buildWebPortalStateJson(clientNodeId) },
         onClientRegistered = { reg -> handleWebClientRegistration(reg) },
-        onWebPacketSubmitted = { submitted -> handleWebSubmittedPacket(submitted) }
+        onWebPacketSubmitted = { submitted -> handleWebSubmittedPacket(submitted) },
+        canFetchOnlineTiles = { _uiState.value.isInternetEnabled && hasValidatedOsInternet() }
     )
     val offGridBleEngine: com.example.service.OffGridBleMeshEngine = com.example.service.OffGridBleMeshEngine(
         context = application,
@@ -788,10 +793,43 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         offGridBleEngine.start()
 
+        // Wire Offline-to-Internet Gateway Map Tile Bridge (HTTP proxy over Wi-Fi Direct/Hotspot + BLE mesh TILE_REQ fallback)
+        val resolveGatewayProxyUrl: () -> String? = {
+            val gwPeer = peersBackingMap.values
+                .filter { it.isGateway && it.ipAddress.isNotBlank() }
+                .minByOrNull { it.hopCount }
+            val fallbackHostIp = autoHotspotNegotiator.status.value.hostIp
+                .takeIf { it.isNotBlank() && autoHotspotNegotiator.status.value.isConnected && !autoHotspotNegotiator.status.value.isHotspotHost && peersBackingMap.values.any { p -> p.isGateway } }
+            val targetIp = gwPeer?.ipAddress?.ifBlank { fallbackHostIp.orEmpty() } ?: fallbackHostIp.orEmpty()
+            if (targetIp.isNotBlank()) "http://$targetIp:8080" else null
+        }
+        val resolveGatewayCallsign: () -> String? = {
+            peersBackingMap.values
+                .filter { it.isGateway }
+                .minByOrNull { it.hopCount }
+                ?.callsign
+        }
+        val requestTileViaBleGateway: (Int, Int, Int) -> Boolean = { z, x, y ->
+            requestMapTileFromGatewayPeer(z, x, y)
+        }
+        com.example.util.NativeTileMapManager.gatewayTileProxyBaseUrl = resolveGatewayProxyUrl
+        com.example.util.NativeTileMapManager.gatewayMeshTileRequester = requestTileViaBleGateway
+        com.example.util.OfflineRegionDownloader.gatewayTileProxyBaseUrl = resolveGatewayProxyUrl
+        com.example.util.OfflineRegionDownloader.gatewayPeerCallsign = resolveGatewayCallsign
+        com.example.util.OfflineRegionDownloader.gatewayMeshTileRequester = requestTileViaBleGateway
+
         // Collect v1.2 Wi-Fi Direct Embedded Web Portal Status
         viewModelScope.launch {
             pulseMeshWebServer.status.collect { wStatus ->
                 _uiState.update { it.copy(webPortalStatus = wStatus) }
+                if (wStatus.isRunning) {
+                    com.example.service.MeshForegroundRelayService.startOrUpdate(
+                        context = getApplication(),
+                        peerCount = _uiState.value.activePeerCount,
+                        dtnCount = _uiState.value.pendingDtnCount,
+                        statusSummary = "Hotspot Web Portal LIVE at ${wStatus.portalUrl.ifBlank { ":${wStatus.port}" }}"
+                    )
+                }
             }
         }
 
@@ -817,14 +855,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // Collect Local-Only & P2P Wi-Fi Hotspot State
         viewModelScope.launch {
             autoHotspotNegotiator.status.collect { aStatus ->
-                if (aStatus.isHotspotHost || aStatus.isConnected) {
+                val isStartingHotspot = aStatus.buttonStateText.contains("STARTING", ignoreCase = true) ||
+                    aStatus.role == "P2P_GO" ||
+                    aStatus.role == "HOST_AP"
+                if (aStatus.isHotspotHost || aStatus.isConnected || hotspotWebPortalRequested) {
                     val hintIp = aStatus.hostIp.ifBlank { com.example.service.AutoHotspotNegotiator.P2P_GO_IP }
                     if (!pulseMeshWebServer.isRunning()) {
                         pulseMeshWebServer.start(hintIp)
                     } else {
                         pulseMeshWebServer.updateHostIpHint(hintIp)
                     }
-                } else if (!hotspotManager.hotspotState.value.isActive && !manualWebPortalPinned && pulseMeshWebServer.isRunning()) {
+                } else if (!isStartingHotspot &&
+                    !hotspotManager.hotspotState.value.isActive &&
+                    !manualWebPortalPinned &&
+                    !hotspotWebPortalRequested &&
+                    pulseMeshWebServer.isRunning()
+                ) {
                     pulseMeshWebServer.stop()
                 }
                 _uiState.update { current ->
@@ -1095,7 +1141,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         isHotspotHost: Boolean = false,
         sourceTransport: String = "BLE",
         nowMs: Long = System.currentTimeMillis(),
-        forceImmediateUiUpdate: Boolean = false
+        forceImmediateUiUpdate: Boolean = false,
+        hopCount: Int? = null,
+        isGateway: Boolean = false
     ) {
         val normSrc = normalizeId(peerNodeId)
         val normSelf = normalizeId(_uiState.value.localNodeId)
@@ -1137,6 +1185,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         val storedKeyWarning = prefs.isPeerKeyChanged(canonicalSrcId) || (existingPeer?.isKeyChangedWarning == true)
 
+        val resolvedHopCount = when {
+            hopCount != null -> {
+                val cleanHop = hopCount.coerceIn(1, 7)
+                // If we recently heard this peer directly (1 hop within 15s), prefer the shorter hop count
+                if (existingPeer != null &&
+                    existingPeer.hopCount < cleanHop &&
+                    (nowMs - existingPeer.lastSeenMs) < 15_000L
+                ) {
+                    existingPeer.hopCount
+                } else {
+                    cleanHop
+                }
+            }
+            else -> existingPeer?.hopCount ?: 1
+        }
+
         val updatedPeer = MeshNode(
             id = existingPeer?.id ?: canonicalSrcId,
             callsign = resolvedCallsign,
@@ -1148,10 +1212,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             batteryPercent = battery ?: existingPeer?.batteryPercent ?: 85,
             rssiDbm = if (rssiDbm != 0) rssiDbm else (existingPeer?.rssiDbm ?: -55),
             snrDb = existingPeer?.snrDb ?: 14.0,
-            hopCount = existingPeer?.hopCount ?: 1,
+            hopCount = resolvedHopCount,
             lastHeardAgoSec = 0,
             lastSeenMs = nowMs,
             isSelf = false,
+            isGateway = isGateway || (existingPeer?.isGateway == true),
             distanceMeters = distance,
             ipAddress = ipAddress.ifBlank { existingPeer?.ipAddress.orEmpty() },
             isHotspotHost = isHotspotHost || (existingPeer?.isHotspotHost == true),
@@ -1252,6 +1317,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
      * - Case 3: If already hosting or linked, stops the group and resets the button to `"HOTSPOT: OFF"`.
      */
     fun hostHotspotExplicitly() {
+        hotspotWebPortalRequested = true
         val nextBtnState = autoHotspotNegotiator.hostHotspotExplicitly(
             onFallbackToLocalHotspot = { hotspotManager.startLocalHotspot() }
         )
@@ -1276,6 +1342,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopHotspotExplicitly() {
+        hotspotWebPortalRequested = false
         val nextBtnState = autoHotspotNegotiator.stopHotspotExplicitly(
             onStopLocalHotspot = { hotspotManager.stopLocalHotspot() }
         )
@@ -3385,14 +3452,19 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             offGridBleEngine.broadcastShortChatInScanResponse(trimmed)
         }
 
-        // Fast 900ms Automatic Chat Retry if no CHAT_ACK is received
+        // Smart 2-step Automatic Chat Retry (1.2s and 3.5s) if no CHAT_ACK has arrived yet and peers/internet are active
         viewModelScope.launch(Dispatchers.IO) {
-            delay(CHAT_ACK_RETRY_DELAY_MS)
-            if (pendingChatAcks[pktId] != true) {
+            val retryDelays = longArrayOf(1_200L, 2_300L)
+            for (waitMs in retryDelays) {
+                delay(waitMs)
+                if (pendingChatAcks[pktId] == true) break
+                val cur = _uiState.value
+                val hasActiveRoute = cur.activePeerCount > 0 || cur.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink()
+                if (!hasActiveRoute) break
                 if (!inboxOnlyWithoutEcdh) {
                     sendOmniPacket(wirePacket)
                 }
-                if (isDm && recipientClaim != null && (_uiState.value.isInternetEnabled || hasValidatedOsInternet())) {
+                if (isDm && recipientClaim != null && (cur.isInternetEnabled || hasValidatedOsInternet())) {
                     meshNetworkService.sendDirectPacketToUsername(
                         recipientClaim.username,
                         wirePacket,
@@ -3875,6 +3947,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             Pair(null, null)
         }
+        val isLocalGateway = state.isInternetEnabled && state.internetGatewayBridgeEnabled && hasValidatedOsInternet()
+        val effectiveIsGateway = packet.isGateway || (normalizeId(packet.srcNodeId) == normalizeId(state.localNodeId) && isLocalGateway)
         val json = org.json.JSONObject().apply {
             put("id", packet.packetId)
             put("packetId", packet.packetId)
@@ -3903,6 +3977,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             if (packet.memberIdsCsv.isNotBlank()) put("memberIds", packet.memberIdsCsv)
             if (packet.senderPubKey.isNotBlank()) put("pk", packet.senderPubKey)
             if (packet.encryptedKeysJson.isNotBlank()) put("ekeys", packet.encryptedKeysJson)
+            if (packet.srcUsername.isNotBlank()) put("su", packet.srcUsername)
+            if (packet.dstUsername.isNotBlank()) put("du", packet.dstUsername)
+            if (effectiveIsGateway) put("gw", true)
             put("ts", packet.timestamp)
         }.toString()
 
@@ -3910,7 +3987,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             lat = outLat,
             lng = outLng,
             accuracy = gpsAcc,
-            altitude = packet.altitude ?: state.barometricAltitudeMeters
+            altitude = packet.altitude ?: state.barometricAltitudeMeters,
+            isGateway = effectiveIsGateway
         )
 
         // 1. Bidirectional BLE GATT (strictly filtered for non-heartbeat packets) + 12B 0xCAFE beacon
@@ -4000,7 +4078,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 groupName = root.optString("groupName", ""),
                 memberIdsCsv = root.optString("memberIds", ""),
                 senderPubKey = root.optString("pk", "").ifBlank { root.optString("senderPubKey", "") },
-                encryptedKeysJson = root.optString("ekeys", "").ifBlank { root.optString("encryptedKeys", "") }
+                encryptedKeysJson = root.optString("ekeys", "").ifBlank { root.optString("encryptedKeys", "") },
+                srcUsername = root.optString("su", ""),
+                dstUsername = root.optString("du", ""),
+                isGateway = root.optBoolean("gw", false)
             )
             viewModelScope.launch(Dispatchers.Main) {
                 handleIncomingPacket(packet)
@@ -4084,6 +4165,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
         val allowedRelayType = packet.type == "CHAT" ||
             packet.type == "E2EE_DM" ||
+            packet.type == "CHAT_ACK" ||
             packet.type == "GROUP_INVITE" ||
             packet.type == "GROUP_CHAT" ||
             packet.type == "WAYPOINT" ||
@@ -4096,7 +4178,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             packet.type == "CALL_DECLINE" ||
             packet.type == "KEY_ANNOUNCE" ||
             packet.type == "USERNAME_CLAIM" ||
-            packet.type == "USERNAME_LOOKUP"
+            packet.type == "USERNAME_LOOKUP" ||
+            packet.type == "TILE_REQ"
         if (!allowedRelayType) return null
 
         synchronized(relayedPacketIds) {
@@ -4150,10 +4233,72 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Universal Multi-Hop Flood Relay Rule (TTL = 7) for eligible user packets only
+        val isFromInternet = packet.sourceTransport == "HYBRID CELL"
+        val isActiveGateway = state.isInternetEnabled && state.internetGatewayBridgeEnabled && hasValidatedOsInternet()
         buildRelayedPacketIfEligible(packet, state.localNodeId)?.let { relayed ->
             viewModelScope.launch(Dispatchers.IO) {
                 delay(Random.nextLong(30L, 81L))
                 sendMeshPacket(relayed)
+                // If an offline neighbor sent a DM targeting a remote @username, bridge it to their direct internet inbox!
+                if (isActiveGateway && !isFromInternet && relayed.dstUsername.isNotBlank()) {
+                    meshNetworkService.sendDirectPacketToUsername(
+                        relayed.dstUsername,
+                        relayed,
+                        allowDirectSend = true
+                    )
+                }
+            }
+        }
+
+        // Bidirectional Offline-to-Internet Presence Gateway Bridge:
+        // Periodically bridge HEARTBEAT/GPS_BEACON (max 1 per 20s per peer) between local BLE/Wi-Fi and Internet
+        // so offline users discover distant internet peers and distant internet peers discover offline users.
+        if (isActiveGateway && (packet.type == "HEARTBEAT" || packet.type == "GPS_BEACON") && packet.ttl > 1) {
+            val nowBridge = System.currentTimeMillis()
+            val bridgeKey = "${if (isFromInternet) "in" else "out"}_$normSrc"
+            val lastBridge = lastGatewayHeartbeatBridgeMs[bridgeKey] ?: 0L
+            if (nowBridge - lastBridge >= 20_000L) {
+                lastGatewayHeartbeatBridgeMs[bridgeKey] = nowBridge
+                val bridgedPresence = packet.copy(
+                    packetId = "gw_${if (isFromInternet) "dl" else "ul"}_${normSrc}_${nowBridge and 0xFFFFF}",
+                    ttl = (packet.ttl - 1).coerceAtLeast(1),
+                    hops = packet.hops + 1
+                )
+                viewModelScope.launch(Dispatchers.IO) {
+                    if (!isFromInternet) {
+                        // Offline local peer -> Internet mesh
+                        meshNetworkService.broadcastPacket(bridgedPresence)
+                    } else if (peersBackingMap.values.any { !it.transports.contains("HYBRID CELL") } ||
+                        autoHotspotNegotiator.hasHighSpeedLink() ||
+                        pulseMeshWebServer.isRunning()
+                    ) {
+                        // Distant internet peer -> Local BLE/Wi-Fi Direct mesh
+                        offGridBleEngine.broadcastPacketChunked(bridgedPresence)
+                        val bridgeJson = org.json.JSONObject().apply {
+                            put("id", bridgedPresence.packetId)
+                            put("packetId", bridgedPresence.packetId)
+                            put("type", bridgedPresence.type)
+                            put("t", bridgedPresence.type)
+                            put("srcId", bridgedPresence.srcNodeId)
+                            put("src", bridgedPresence.srcNodeId)
+                            put("srcName", bridgedPresence.srcCallsign)
+                            put("cs", bridgedPresence.srcCallsign)
+                            put("dstId", bridgedPresence.dstNodeId)
+                            put("dst", bridgedPresence.dstNodeId)
+                            put("ttl", bridgedPresence.ttl)
+                            put("hops", bridgedPresence.hops)
+                            put("payload", bridgedPresence.payload)
+                            put("p", bridgedPresence.payload)
+                            bridgedPresence.lat?.let { put("lat", it) }
+                            bridgedPresence.lng?.let { put("lng", it) }
+                            bridgedPresence.battery?.let { put("bat", it) }
+                            if (bridgedPresence.senderPubKey.isNotBlank()) put("pk", bridgedPresence.senderPubKey)
+                            if (bridgedPresence.isGateway) put("gw", true)
+                            put("ts", bridgedPresence.timestamp)
+                        }.toString()
+                        autoHotspotNegotiator.sendPacket(bridgeJson)
+                    }
+                }
             }
         }
 
@@ -4211,6 +4356,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 ?: if (resolvedTransport == "HOTSPOT WIFI") autoHotspotNegotiator.getRealWifiRssiDbm() else null
         }
 
+        // True hop count: direct neighbor sends hops=0 on wire -> 1 hop away; each relay adds +1 hop.
+        val receivedHops = (packet.hops + 1).coerceIn(1, 7)
+
         registerOrUpdatePeerInstant(
             peerNodeId = canonicalSrcId,
             callsign = packet.srcCallsign,
@@ -4222,7 +4370,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             ipAddress = extractedIp.orEmpty(),
             isHotspotHost = peerReportsHost,
             sourceTransport = resolvedTransport,
-            forceImmediateUiUpdate = isNewPeer || isHighPriorityUserEvent
+            forceImmediateUiUpdate = isNewPeer || isHighPriorityUserEvent,
+            hopCount = receivedHops,
+            isGateway = packet.isGateway || resolvedTransport == "HYBRID CELL"
         )
 
         val peerNode = peersBackingMap[normSrc]
@@ -4309,12 +4459,32 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     val updated = persistentChatManager.markPacketDelivered(ackedId, effectiveCallsign)
+                    // Immediately update in-memory UI packets so the checkmark flips to RECEIVED without delay
+                    _uiState.update { cur ->
+                        val updatedPkts = cur.packets.map { mp ->
+                            if (mp.id == ackedId && (!mp.isDelivered || (effectiveCallsign.isNotBlank() && mp.ackedByCallsign.isBlank()))) {
+                                mp.copy(
+                                    isDelivered = true,
+                                    ackedByCallsign = effectiveCallsign.ifBlank { mp.ackedByCallsign }
+                                )
+                            } else mp
+                        }
+                        val updatedThreadPkts = cur.activeThreadPackets.map { mp ->
+                            if (mp.id == ackedId && (!mp.isDelivered || (effectiveCallsign.isNotBlank() && mp.ackedByCallsign.isBlank()))) {
+                                mp.copy(
+                                    isDelivered = true,
+                                    ackedByCallsign = effectiveCallsign.ifBlank { mp.ackedByCallsign }
+                                )
+                            } else mp
+                        }
+                        cur.copy(
+                            packets = updatedPkts,
+                            activeThreadPackets = updatedThreadPkts,
+                            pendingDtnCount = pendingDtnPackets.size
+                        )
+                    }
                     if (updated) {
                         refreshConversationsList()
-                    } else {
-                        _uiState.update { cur ->
-                            cur.copy(pendingDtnCount = pendingDtnPackets.size)
-                        }
                     }
                 }
             }
@@ -4415,10 +4585,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         dstNodeId = packet.srcNodeId,
                         type = "CHAT_ACK",
                         payload = packet.packetId,
-                        ttl = 2,
-                        hops = 0
+                        ttl = 5,
+                        hops = 0,
+                        srcUsername = state.claimedUsername,
+                        dstUsername = packet.srcUsername
                     )
                     sendMeshPacket(ackPkt)
+                    if (packet.srcUsername.isNotBlank() && state.isInternetEnabled) {
+                        meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
+                    }
                 }
 
                 val decryptedText = TacticalE2eeManager.decryptWithGroupKey(packet.payload, activeGroupKey)
@@ -4430,10 +4605,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     sourceCallsign = effectiveCallsign,
                     type = PacketType.TEXT,
                     content = decryptedText,
-                    hops = maxOf(1, packet.hops),
+                    hops = receivedHops,
                     rssiDbm = resolvedRssiDbm,
                     transport = resolvedTransport,
-                    rawHexBadge = "[${packet.packetId} | $canonicalSrcId->$grpId | Hop ${packet.hops}]",
+                    rawHexBadge = "[${packet.packetId} | $canonicalSrcId->$grpId | Hop $receivedHops]",
                     isIncoming = true,
                     timestamp = packet.timestamp
                 )
@@ -4466,7 +4641,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (isPublic || isEncryptedChannel || isDirectedToMe) {
-                    // Immediately send back a lightweight CHAT_ACK to the sender
+                    // Immediately send back a lightweight CHAT_ACK to the sender (multi-hop TTL=5 + direct inbox if online)
                     if (packet.packetId.isNotBlank()) {
                         val ackPkt = com.example.service.WireMeshPacket(
                             packetId = "ack_${packet.packetId}_${state.localNodeId}",
@@ -4475,10 +4650,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                             dstNodeId = packet.srcNodeId,
                             type = "CHAT_ACK",
                             payload = packet.packetId,
-                            ttl = 2,
-                            hops = 0
+                            ttl = 5,
+                            hops = 0,
+                            srcUsername = state.claimedUsername,
+                            dstUsername = packet.srcUsername
                         )
                         sendMeshPacket(ackPkt)
+                        if (packet.srcUsername.isNotBlank() && state.isInternetEnabled) {
+                            meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
+                        }
                     }
 
                     val threadId = when {
@@ -4526,10 +4706,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         sourceCallsign = effectiveCallsign,
                         type = PacketType.TEXT,
                         content = displayContent,
-                        hops = maxOf(1, packet.hops),
+                        hops = receivedHops,
                         rssiDbm = resolvedRssiDbm,
                         transport = resolvedTransport,
-                        rawHexBadge = "[${packet.packetId} | $canonicalSrcId->${packet.dstNodeId} | Hop ${packet.hops}]",
+                        rawHexBadge = "[${packet.packetId} | $canonicalSrcId->${packet.dstNodeId} | Hop $receivedHops]",
                         isIncoming = true,
                         timestamp = packet.timestamp
                     )
@@ -5088,6 +5268,66 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 refreshConversationsList()
                 triggerHaptic(320)
+            }
+            "TILE_REQ" -> {
+                // Gateway Peer serves offline neighbors' map tile requests over BLE/Wi-Fi Direct!
+                if (state.isInternetEnabled && state.internetGatewayBridgeEnabled && hasValidatedOsInternet()) {
+                    runCatching {
+                        val obj = org.json.JSONObject(packet.payload)
+                        val z = obj.optInt("z", -1)
+                        val x = obj.optInt("x", -1)
+                        val y = obj.optInt("y", -1)
+                        if (z in 0..19 && x >= 0 && y >= 0) {
+                            viewModelScope.launch(Dispatchers.IO) {
+                                val pngBytes = com.example.util.NativeTileMapManager.fetchTileBytesOnline(
+                                    context = getApplication(),
+                                    z = z,
+                                    x = x,
+                                    y = y
+                                )
+                                if (pngBytes != null && pngBytes.size in 32..65536) {
+                                    val b64 = android.util.Base64.encodeToString(pngBytes, android.util.Base64.NO_WRAP)
+                                    val payloadJson = org.json.JSONObject().apply {
+                                        put("z", z)
+                                        put("x", x)
+                                        put("y", y)
+                                        put("b64", b64)
+                                    }.toString()
+                                    val replyPkt = com.example.service.WireMeshPacket(
+                                        packetId = "tile_${z}_${x}_${y}_${System.currentTimeMillis() and 0xFFFF}",
+                                        srcNodeId = state.localNodeId,
+                                        srcCallsign = state.operatorCallsign,
+                                        dstNodeId = canonicalSrcId,
+                                        type = "MAP_TILE_SYNC",
+                                        payload = payloadJson,
+                                        ttl = 3,
+                                        hops = 0,
+                                        isGateway = true
+                                    )
+                                    val replyJson = org.json.JSONObject().apply {
+                                        put("id", replyPkt.packetId)
+                                        put("packetId", replyPkt.packetId)
+                                        put("type", "MAP_TILE_SYNC")
+                                        put("t", "MAP_TILE_SYNC")
+                                        put("srcId", replyPkt.srcNodeId)
+                                        put("src", replyPkt.srcNodeId)
+                                        put("srcName", replyPkt.srcCallsign)
+                                        put("cs", replyPkt.srcCallsign)
+                                        put("dstId", replyPkt.dstNodeId)
+                                        put("dst", replyPkt.dstNodeId)
+                                        put("ttl", replyPkt.ttl)
+                                        put("hops", 0)
+                                        put("gw", true)
+                                        put("payload", payloadJson)
+                                        put("p", payloadJson)
+                                    }.toString()
+                                    autoHotspotNegotiator.sendPacket(replyJson)
+                                    offGridBleEngine.broadcastPacketChunked(replyPkt)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             "MAP_TILE_SYNC" -> {
                 runCatching {
@@ -6547,21 +6787,109 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(incomingSosAlert = "") }
     }
 
+    private fun requestMapTileFromGatewayPeer(z: Int, x: Int, y: Int): Boolean {
+        val gwPeer = peersBackingMap.values
+            .filter { it.isGateway }
+            .minByOrNull { it.hopCount } ?: return false
+        val key = "$z/$x/$y"
+        val now = System.currentTimeMillis()
+        val prev = lastGatewayTileRequestMs[key] ?: 0L
+        if (now - prev < 15_000L) return false
+        lastGatewayTileRequestMs[key] = now
+
+        val st = _uiState.value
+        val payloadJson = org.json.JSONObject().apply {
+            put("z", z)
+            put("x", x)
+            put("y", y)
+        }.toString()
+        val reqPkt = com.example.service.WireMeshPacket(
+            packetId = "treq_${z}_${x}_${y}_${now and 0xFFFF}",
+            srcNodeId = st.localNodeId,
+            srcCallsign = st.operatorCallsign,
+            dstNodeId = gwPeer.id,
+            type = "TILE_REQ",
+            payload = payloadJson,
+            ttl = 2,
+            hops = 0
+        )
+        sendMeshPacket(reqPkt)
+        return true
+    }
+
     /**
-     * Permanently deletes ALL local account information associated with [targetUsername] (or the active account if blank):
-     * username claims, PIN/recovery hashes, auth tokens, messages/threads mentioning that account/node, DTN outbox,
-     * groups, breadcrumbs, and generates a fresh anonymous Node ID + fresh ECDH P-256 keypair when deleting active account.
+     * Permanently deletes ALL local account information associated with [targetUsername] (or the active account if blank).
+     * SECURITY RULE (v1.2.7): Deletion is ONLY permitted if:
+     *  1. The user is currently logged in to that exact account, OR
+     *  2. The user provides BOTH the valid PIN AND the valid Recovery Key (`PMRK-...`) for that account.
      */
-    fun deleteAllAccountInformation(targetUsername: String = ""): String {
+    fun deleteAllAccountInformation(
+        targetUsername: String = "",
+        pinInput: String = "",
+        recoveryKeyInput: String = ""
+    ): Pair<Boolean, String> {
         val state = _uiState.value
+        val activeUser = TacticalE2eeManager.normalizeUsername(state.claimedUsername)
         val normTarget = TacticalE2eeManager.normalizeUsername(targetUsername)
-        val effectiveUser = normTarget.ifBlank { TacticalE2eeManager.normalizeUsername(state.claimedUsername) }
+        val effectiveUser = normTarget.ifBlank { activeUser }
+
+        val isLoggedInToTarget = activeUser.isNotBlank() && (normTarget.isBlank() || normTarget == activeUser)
+
         val matchingClaim = if (effectiveUser.isNotBlank()) {
             prefs.getAllKnownUsernameClaims().firstOrNull {
                 TacticalE2eeManager.normalizeUsername(it.username) == effectiveUser
             }
         } else null
-        val targetNodeId = matchingClaim?.nodeId ?: if (normTarget.isBlank() || normTarget == TacticalE2eeManager.normalizeUsername(state.claimedUsername)) state.localNodeId else ""
+
+        if (!isLoggedInToTarget) {
+            if (effectiveUser.isBlank()) {
+                return Pair(false, "Sign in to an account first, or enter a @username with BOTH its PIN and Recovery Key.")
+            }
+            val cleanPin = pinInput.trim()
+            val cleanRecovery = recoveryKeyInput.trim()
+            if (cleanPin.isBlank() || cleanRecovery.isBlank()) {
+                return Pair(false, "Authentication required: provide BOTH the PIN and Recovery Key for @$effectiveUser (or sign in first).")
+            }
+            if (matchingClaim == null) {
+                return Pair(false, "No local credentials found for @$effectiveUser to verify PIN + Recovery Key.")
+            }
+            val salt = matchingClaim.saltHex.ifBlank { prefs.accountSaltHex }
+            val pinVaultOk = matchingClaim.pinVault.isNotBlank() &&
+                TacticalE2eeManager.decryptAccountVault(effectiveUser, salt, cleanPin, matchingClaim.pinVault) != null
+            val pinHashOk = matchingClaim.pinHash.isNotBlank() &&
+                TacticalE2eeManager.isValidAccountPin(cleanPin) &&
+                TacticalE2eeManager.hashAccountPin(effectiveUser, salt, cleanPin) == matchingClaim.pinHash
+            val pinValid = pinVaultOk || pinHashOk
+
+            val recoveryVaultOk = matchingClaim.recoveryVault.isNotBlank() && (
+                TacticalE2eeManager.decryptAccountVault(
+                    effectiveUser,
+                    salt,
+                    TacticalE2eeManager.normalizeRecoveryKey(cleanRecovery),
+                    matchingClaim.recoveryVault
+                ) != null ||
+                    TacticalE2eeManager.decryptAccountVault(
+                        effectiveUser,
+                        salt,
+                        cleanRecovery.uppercase(),
+                        matchingClaim.recoveryVault
+                    ) != null
+                )
+            val recoveryHashOk = matchingClaim.recoveryHash.isNotBlank() &&
+                TacticalE2eeManager.hashRecoveryKey(effectiveUser, cleanRecovery) == matchingClaim.recoveryHash
+            val recoveryValid = recoveryVaultOk || recoveryHashOk
+
+            if (!pinValid || !recoveryValid) {
+                val reason = when {
+                    !pinValid && !recoveryValid -> "Both PIN and Recovery Key are invalid for @$effectiveUser."
+                    !pinValid -> "Invalid PIN for @$effectiveUser (BOTH PIN and Recovery Key must match)."
+                    else -> "Invalid Recovery Key for @$effectiveUser (BOTH PIN and Recovery Key must match)."
+                }
+                return Pair(false, "Deletion denied: $reason")
+            }
+        }
+
+        val targetNodeId = matchingClaim?.nodeId ?: if (isLoggedInToTarget) state.localNodeId else ""
 
         val erasedMsgs = persistentChatManager.deleteAllDataMatchingAccount(effectiveUser, targetNodeId)
         val deletedActive = prefs.deleteAccountInformation(effectiveUser)
@@ -6600,14 +6928,14 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         refreshConversationsList()
         triggerHaptic(80)
         val label = if (effectiveUser.isNotBlank()) "@$effectiveUser" else "active account"
-        return "Deleted all local account data for $label ($erasedMsgs message(s) removed)."
+        return Pair(true, "Deleted all local account data for $label ($erasedMsgs message(s) removed).")
     }
 
     private fun buildWebPortalInfoJson(portalUrl: String, webClientCount: Int): org.json.JSONObject {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2.5")
+            put("version", "1.2.7")
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)

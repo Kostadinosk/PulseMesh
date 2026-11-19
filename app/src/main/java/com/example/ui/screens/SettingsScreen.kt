@@ -91,7 +91,7 @@ fun SettingsScreen(
     onExportGpx: () -> String = { "" },
     onImportGpx: (String) -> Int = { 0 },
     onToggleWebPortal: () -> Unit = {},
-    onDeleteAccountInfo: (String) -> String = { "" },
+    onDeleteAccountInfo: (username: String, pin: String, recoveryKey: String) -> Pair<Boolean, String> = { _, _, _ -> Pair(false, "") },
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -136,7 +136,10 @@ fun SettingsScreen(
     var accountDialogSuccess by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var deleteAccountUsernameInput by remember(state.claimedUsername) { mutableStateOf(state.claimedUsername) }
+    var deleteAccountPinInput by remember { mutableStateOf("") }
+    var deleteAccountRecoveryInput by remember { mutableStateOf("") }
     var deleteAccountFeedback by remember { mutableStateOf("") }
+    var deleteAccountError by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -971,7 +974,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.2.1 WI-FI DIRECT PORTAL & iPHONE QR",
+                                    text = "v1.2.7 WI-FI DIRECT PORTAL & iPHONE QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -980,7 +983,8 @@ fun SettingsScreen(
                                 )
                                 Text(
                                     text = if (state.webPortalStatus.isRunning) {
-                                        "ACTIVE • ${state.webPortalStatus.activeClientCount} browser/iPhone client(s) linked"
+                                        val verifiedStr = if (state.webPortalStatus.selfTestPassed) "HTTP 200 OK" else "STARTING"
+                                        "$verifiedStr • ${state.webPortalStatus.activeClientCount} linked • ${state.webPortalStatus.requestsServed} hits"
                                     } else {
                                         "Auto-hosts the PulseMesh Web/iPhone PWA when Wi-Fi Direct / Hotspot starts"
                                     },
@@ -1042,25 +1046,40 @@ fun SettingsScreen(
                                                 )
                                             }
                                             Text(
-                                                text = "Scan 2-step QR on iPhone or open URL in any browser (zero internet)",
+                                                text = "Scan 2-step QR on iPhone/Android or tap TEST. If connecting phone stays on 4G/5G, tap 'Keep Wi-Fi without Internet' or pause mobile data.",
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     color = p.textSecondary,
                                                     fontSize = 9.sp
                                                 )
                                             )
                                         }
-                                        TextButton(
-                                            onClick = {
-                                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                                cm?.setPrimaryClip(
-                                                    android.content.ClipData.newPlainText(
-                                                        "PulseMesh Web Portal URL",
-                                                        state.webPortalStatus.portalUrl
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            TextButton(
+                                                onClick = {
+                                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                    cm?.setPrimaryClip(
+                                                        android.content.ClipData.newPlainText(
+                                                            "PulseMesh Web Portal URL",
+                                                            state.webPortalStatus.portalUrl
+                                                        )
                                                     )
-                                                )
+                                                }
+                                            ) {
+                                                Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                                             }
-                                        ) {
-                                            Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                            TextButton(
+                                                onClick = {
+                                                    runCatching {
+                                                        val intent = android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            android.net.Uri.parse(state.webPortalStatus.portalUrl)
+                                                        )
+                                                        context.startActivity(intent)
+                                                    }
+                                                }
+                                            ) {
+                                                Text("TEST", color = EmeraldMesh, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                            }
                                         }
                                     }
 
@@ -2659,7 +2678,10 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         deleteAccountUsernameInput = state.claimedUsername
+                        deleteAccountPinInput = ""
+                        deleteAccountRecoveryInput = ""
                         deleteAccountFeedback = ""
+                        deleteAccountError = ""
                         showDeleteAccountDialog = true
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RedSosAlert, contentColor = Color.White),
@@ -2669,9 +2691,22 @@ fun SettingsScreen(
                     Text("DELETE", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
+            if (deleteAccountFeedback.isNotBlank()) {
+                Text(
+                    text = deleteAccountFeedback,
+                    color = EmeraldMesh,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
+                )
+            }
         }
 
         if (showDeleteAccountDialog) {
+            val activeNormUser = com.example.crypto.TacticalE2eeManager.normalizeUsername(state.claimedUsername)
+            val inputNormUser = com.example.crypto.TacticalE2eeManager.normalizeUsername(deleteAccountUsernameInput)
+            val isAuthenticatedBySession = activeNormUser.isNotBlank() && (inputNormUser.isBlank() || inputNormUser == activeNormUser)
+
             AlertDialog(
                 onDismissRequest = { showDeleteAccountDialog = false },
                 containerColor = p.card,
@@ -2686,24 +2721,77 @@ fun SettingsScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "Enter a @username to purge everything associated with it (or leave blank to erase your active account, keys, and local history).",
-                            color = p.textSecondary,
-                            fontSize = 12.sp
+                            text = if (isAuthenticatedBySession) {
+                                "Signed in as @$activeNormUser. Confirm below to permanently erase your account credentials, keys, claims, and local chat history."
+                            } else {
+                                "Not signed in to this account. To delete without an active session, enter the @username AND BOTH its PIN and Recovery Key."
+                            },
+                            color = if (isAuthenticatedBySession) EmeraldMesh else AmberRootBoost,
+                            fontSize = 11.5.sp
                         )
                         OutlinedTextField(
                             value = deleteAccountUsernameInput,
-                            onValueChange = { deleteAccountUsernameInput = it },
-                            label = { Text("Username to delete (optional)") },
+                            onValueChange = {
+                                deleteAccountUsernameInput = it
+                                deleteAccountError = ""
+                            },
+                            label = { Text("Account @username") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (!isAuthenticatedBySession) {
+                            OutlinedTextField(
+                                value = deleteAccountPinInput,
+                                onValueChange = {
+                                    deleteAccountPinInput = it
+                                    deleteAccountError = ""
+                                },
+                                label = { Text("Account PIN (required)") },
+                                singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = deleteAccountRecoveryInput,
+                                onValueChange = {
+                                    deleteAccountRecoveryInput = it
+                                    deleteAccountError = ""
+                                },
+                                label = { Text("Recovery Key PMRK-... (required)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (deleteAccountError.isNotBlank()) {
+                            Text(
+                                text = deleteAccountError,
+                                color = RedSosAlert,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 },
                 confirmButton = {
+                    val canSubmit = isAuthenticatedBySession ||
+                        (inputNormUser.isNotBlank() && deleteAccountPinInput.isNotBlank() && deleteAccountRecoveryInput.isNotBlank())
                     Button(
+                        enabled = canSubmit,
                         onClick = {
-                            deleteAccountFeedback = onDeleteAccountInfo(deleteAccountUsernameInput)
-                            showDeleteAccountDialog = false
+                            val (ok, msg) = onDeleteAccountInfo(
+                                deleteAccountUsernameInput,
+                                deleteAccountPinInput,
+                                deleteAccountRecoveryInput
+                            )
+                            if (ok) {
+                                deleteAccountFeedback = msg
+                                deleteAccountError = ""
+                                deleteAccountPinInput = ""
+                                deleteAccountRecoveryInput = ""
+                                showDeleteAccountDialog = false
+                            } else {
+                                deleteAccountError = msg
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = RedSosAlert, contentColor = Color.White)
                     ) {
@@ -2720,7 +2808,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2.5 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.2.7 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

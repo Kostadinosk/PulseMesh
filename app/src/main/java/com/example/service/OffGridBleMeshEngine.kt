@@ -1191,6 +1191,9 @@ class OffGridBleMeshEngine(
             if (packet.memberIdsCsv.isNotBlank()) put("memberIds", packet.memberIdsCsv)
             if (packet.senderPubKey.isNotBlank()) put("pk", packet.senderPubKey)
             if (packet.encryptedKeysJson.isNotBlank()) put("ekeys", packet.encryptedKeysJson)
+            if (packet.srcUsername.isNotBlank()) put("su", packet.srcUsername)
+            if (packet.dstUsername.isNotBlank()) put("du", packet.dstUsername)
+            if (packet.isGateway) put("gw", true)
             if (packet.type != "VOICE" && l2capTransport.localPsm > 0) {
                 put("l2psm", l2capTransport.localPsm)
             }
@@ -1972,7 +1975,10 @@ class OffGridBleMeshEngine(
                 groupName = root.optString("groupName", ""),
                 memberIdsCsv = root.optString("memberIds", ""),
                 senderPubKey = root.optString("pk", "").ifBlank { root.optString("senderPubKey", "") },
-                encryptedKeysJson = root.optString("ekeys", "").ifBlank { root.optString("encryptedKeys", "") }
+                encryptedKeysJson = root.optString("ekeys", "").ifBlank { root.optString("encryptedKeys", "") },
+                srcUsername = root.optString("su", ""),
+                dstUsername = root.optString("du", ""),
+                isGateway = root.optBoolean("gw", false)
             )
             if (effectiveRssi != null) {
                 _telemetry.update { it.copy(rxFramesCount = it.rxFramesCount + 1, lastRssiDbm = effectiveRssi) }

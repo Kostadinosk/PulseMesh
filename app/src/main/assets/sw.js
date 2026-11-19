@@ -1,6 +1,6 @@
-// PulseMesh v1.2.5 Offline PWA Service Worker (iOS / iPhone & Desktop)
-const CACHE_NAME = "pulsemesh-web-v125";
-const TILE_CACHE = "pulsemesh-tiles-v125";
+// PulseMesh v1.2.7 Offline PWA Service Worker (iOS / iPhone & Desktop)
+const CACHE_NAME = "pulsemesh-web-v127";
+const TILE_CACHE = "pulsemesh-tiles-v127";
 const APP_SHELL = [
   "./",
   "./index.html",
