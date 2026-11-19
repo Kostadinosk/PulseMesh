@@ -9,7 +9,7 @@ Key Features:
 • Offline OpenStreetMap Tactical Map (EPSG:3857): Regional OpenStreetMap Web Mercator tile downloader with local disk caching, shared tactical pins (RALLY, HAZARD, SUPPLY, SOS), live compass bearing HUD, and barometric altitude tracking.
 • 3-State Location Privacy: Per-contact and mesh location sharing modes (OFF, APPROXIMATE grid fuzzing, PRECISE GPS) so coordinates are never broadcast unintentionally.
 • Acoustic AFSK Audio Modem: Air-gapped data transmission over phone speakers and microphones (1200 / 2200 Hz Bell 202 tones) with Reed-Solomon forward error correction.
-• Embedded Wi-Fi Direct Web Portal: Automatically hosts a self-contained offline PulseMesh Web Node over Wi-Fi Direct (192.168.49.1:8080) and Local Hotspot (192.168.43.1:8080) so nearby laptops, iPhones, or browsers join the live mesh, cached offline map tiles, waypoints, and PTT audio with zero internet.
+• Official iPhone / iOS PWA & Wi-Fi Direct Web Portal: Automatically hosts a self-contained offline PulseMesh Web Node over Wi-Fi Direct (192.168.49.1:8080) and Local Hotspot (192.168.43.1:8080) with built-in 2-step QR codes (Wi-Fi + Portal URL) so iPhones, iPads, and laptops join the live mesh, cached offline map tiles, waypoints, and PTT audio with zero internet.
 • Strict Off-Grid Mode & 100% FOSS: Hard-blocks external HTTP connections when Off-Grid Mode is enabled, with zero Google Play Services, Firebase, or analytics SDKs.
 
 Licensed under GNU GPL-3.0-only (see LICENSE and TRADEMARK.md). PulseMesh (com.KostadinosK.pulsemesh) is an independent open-source project by Konstantinos Kourtis and is not affiliated with pulsemesh.io or any commercial entity.

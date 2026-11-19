@@ -122,6 +122,21 @@ class PulseMeshWebServer(
         }.getOrElse { ByteArray(0) }
     }
 
+    private val cachedManifestBytes: ByteArray by lazy {
+        runCatching {
+            context.assets.open("manifest.json").use { it.readBytes() }
+                .toString(Charsets.UTF_8)
+                .replace("../assets/pulsemesh-logo.png", "/api/icon.png")
+                .toByteArray(Charsets.UTF_8)
+        }.getOrElse { """{"name":"PulseMesh","short_name":"PulseMesh","display":"standalone","start_url":"/"}""".toByteArray(Charsets.UTF_8) }
+    }
+
+    private val cachedSwBytes: ByteArray by lazy {
+        runCatching {
+            context.assets.open("sw.js").use { it.readBytes() }
+        }.getOrElse { ByteArray(0) }
+    }
+
     private data class SseConnection(
         val socket: Socket,
         val output: OutputStream,
@@ -363,7 +378,15 @@ class PulseMeshWebServer(
                     writeResponse(output, 200, "OK", "text/html; charset=utf-8", cachedHtmlBytes)
                 }
 
-                method == "GET" && path == "/api/icon.png" -> {
+                method == "GET" && (path == "/manifest.json" || path == "/web/manifest.json") -> {
+                    writeResponse(output, 200, "OK", "application/manifest+json; charset=utf-8", cachedManifestBytes)
+                }
+
+                method == "GET" && (path == "/sw.js" || path == "/web/sw.js") -> {
+                    writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes)
+                }
+
+                method == "GET" && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png") -> {
                     if (cachedIconBytes.isNotEmpty()) {
                         writeResponse(output, 200, "OK", "image/png", cachedIconBytes)
                     } else {

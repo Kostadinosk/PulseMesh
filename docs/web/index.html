@@ -2,19 +2,24 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>PulseMesh Web Node — Off-Grid &amp; Hybrid Mesh Client (v1.2)</title>
-  <meta name="description" content="PulseMesh browser mesh client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid channels." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.1)</title>
+  <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PulseMesh" />
+  <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="../assets/pulsemesh-logo.png" onerror="this.href='/api/icon.png'" />
+  <link rel="apple-touch-icon" href="../assets/pulsemesh-logo.png" />
   <style>
     :root {
       --bg-canvas: #041320;
       --bg-grad-1: #072238;
       --bg-grad-2: #030e19;
-      --glass-card: rgba(10, 34, 54, 0.86);
-      --glass-surface: rgba(14, 45, 69, 0.78);
-      --glass-input: rgba(5, 19, 32, 0.88);
+      --glass-card: rgba(10, 34, 54, 0.88);
+      --glass-surface: rgba(14, 45, 69, 0.80);
+      --glass-input: rgba(5, 19, 32, 0.90);
       --border: rgba(60, 184, 240, 0.36);
       --border-bright: rgba(199, 240, 255, 0.58);
       --text-primary: #F0F9FF;
@@ -37,9 +42,9 @@
       --bg-canvas: #D6F2FF;
       --bg-grad-1: #EBF9FF;
       --bg-grad-2: #C2E9FF;
-      --glass-card: rgba(243, 251, 255, 0.92);
-      --glass-surface: rgba(248, 253, 255, 0.88);
-      --glass-input: rgba(255, 255, 255, 0.94);
+      --glass-card: rgba(243, 251, 255, 0.93);
+      --glass-surface: rgba(248, 253, 255, 0.89);
+      --glass-input: rgba(255, 255, 255, 0.96);
       --border: rgba(70, 165, 220, 0.55);
       --border-bright: #FFFFFF;
       --text-primary: #072A44;
@@ -69,6 +74,32 @@
       flex-direction: column;
     }
 
+    /* iOS PWA Install Banner */
+    .ios-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: calc(env(safe-area-inset-top, 0px) + 7px) 14px 7px;
+      background: linear-gradient(90deg, rgba(0, 136, 230, 0.92), rgba(11, 163, 84, 0.92));
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 60;
+    }
+    .ios-banner.visible { display: flex; }
+    .ios-banner button {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      color: #fff;
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* SOS Banner */
     .sos-banner {
       display: none;
@@ -96,13 +127,13 @@
       cursor: pointer;
     }
 
-    /* Top Bar */
+    /* Top Bar (with iOS notch safe area) */
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 8px 14px;
+      gap: 8px;
+      padding: calc(env(safe-area-inset-top, 0px) + 8px) 14px 8px;
       background: var(--glass-card);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
@@ -111,11 +142,13 @@
       z-index: 40;
       flex-wrap: wrap;
     }
+    .ios-banner.visible ~ .topbar { padding-top: 8px; }
     .brand-left {
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 8px;
       min-width: 0;
+      cursor: pointer;
     }
     .brand-dot {
       width: 11px;
@@ -207,7 +240,7 @@
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-top: 1px solid var(--border);
-      padding: 4px 6px env(safe-area-inset-bottom, 4px);
+      padding: 4px 6px calc(env(safe-area-inset-bottom, 0px) + 5px);
       z-index: 40;
     }
     .nav-btn {
@@ -234,6 +267,88 @@
       background: var(--cyan-dim);
       box-shadow: inset 0 0 0 1px var(--border);
     }
+
+    /* ===================== SETUP / LOGIN OVERLAY ===================== */
+    .setup-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      background: rgba(3, 12, 22, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      overflow-y: auto;
+      padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+      align-items: center;
+      justify-content: center;
+    }
+    .setup-overlay.open { display: flex; }
+    .setup-card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--glass-card);
+      border: 1px solid var(--border-bright);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin: auto;
+    }
+    .setup-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .setup-brand img {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      border: 1px solid var(--border-bright);
+      background: var(--glass-input);
+    }
+    .setup-brand h1 { font-size: 19px; font-weight: 800; line-height: 1.2; }
+    .setup-brand p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .setup-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: var(--glass-input);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .setup-tab-btn {
+      padding: 8px 6px;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .setup-tab-btn.active {
+      background: var(--cyan-dim);
+      color: var(--cyan);
+      box-shadow: inset 0 0 0 1px var(--cyan);
+    }
+    .setup-pane { display: none; flex-direction: column; gap: 11px; }
+    .setup-pane.active { display: flex; }
+    .status-note {
+      padding: 9px 11px;
+      border-radius: 10px;
+      background: var(--glass-input);
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .status-note.ok { border-color: var(--emerald); color: var(--emerald); }
+    .status-note.err { border-color: var(--red); color: var(--red); }
 
     /* ===================== TAB 1: TACTICAL MAP ===================== */
     #tab-map { position: relative; flex-direction: column; }
@@ -457,7 +572,7 @@
       border-radius: 10px;
       padding: 10px 12px;
       color: var(--text-primary);
-      font-size: 13.5px;
+      font-size: 14px;
       outline: none;
     }
     .chat-composer input[type="text"]:focus { border-color: var(--cyan); }
@@ -471,22 +586,19 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
     }
     .btn-primary {
       background: linear-gradient(135deg, #00A8FF, #19E68C);
       color: #03131F;
       border: none;
     }
-    .btn-danger {
-      background: var(--red);
-      color: #fff;
-      border: none;
-    }
-    .btn-emerald {
-      background: var(--emerald);
-      color: #03131F;
-      border: none;
-    }
+    .btn-danger { background: var(--red); color: #fff; border: none; }
+    .btn-emerald { background: var(--emerald); color: #03131F; border: none; }
 
     /* ===================== TAB 3: VOICE & PTT ===================== */
     #tab-voice {
@@ -538,13 +650,7 @@
       background: radial-gradient(circle at 30% 30%, rgba(255, 77, 109, 0.65), rgba(120, 10, 30, 0.92));
       box-shadow: 0 0 42px rgba(255, 77, 109, 0.65);
     }
-    .quick-macros {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-    }
+    .quick-macros { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
     .voice-status-box {
       width: 100%;
       padding: 10px 12px;
@@ -601,8 +707,8 @@
     .node-meta { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 3px; }
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 11px;
     }
     .field { display: flex; flex-direction: column; gap: 5px; }
     .field label {
@@ -618,7 +724,7 @@
       padding: 9px 10px;
       color: var(--text-primary);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: 13px;
       outline: none;
     }
     .field input:focus, .field select:focus { border-color: var(--cyan); }
@@ -663,9 +769,7 @@
     @media (max-width: 760px) {
       .chat-sidebar {
         position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
+        top: 0; bottom: 0; left: 0;
         z-index: 30;
         transform: translateX(-100%);
         transition: transform 0.2s ease;
@@ -674,11 +778,17 @@
       }
       .chat-sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.7); }
       .mobile-threads-btn { display: inline-flex; }
-      .topbar { padding: 7px 10px; }
+      .topbar { padding-left: 10px; padding-right: 10px; }
     }
   </style>
 </head>
 <body>
+  <!-- iPhone / iOS PWA Install Banner -->
+  <div class="ios-banner" id="iosInstallBanner">
+    <span>📱 iPhone App Mode: Tap Safari <strong>Share (□↑)</strong> &rarr; <strong>Add to Home Screen</strong> for offline full-screen use.</span>
+    <button type="button" id="dismissIosBanner">OK</button>
+  </div>
+
   <!-- Priority SOS Banner -->
   <div class="sos-banner" id="sosBanner">
     <span id="sosBannerText">⚠ PRIORITY SOS DISTRESS BEACON ACTIVE</span>
@@ -687,10 +797,10 @@
 
   <!-- Top Status Bar -->
   <header class="topbar">
-    <div class="brand-left">
+    <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.2 WEB</span>
+      <span class="version-tag">v1.2.1</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
@@ -720,6 +830,7 @@
         <button type="button" class="map-fab" id="mapZoomIn">+</button>
         <button type="button" class="map-fab" id="mapZoomOut">−</button>
         <button type="button" class="map-fab emerald" id="mapGpsBtn">◎ GPS</button>
+        <button type="button" class="map-fab" id="mapCacheBtn" title="Save visible map tiles for offline iPhone use">📥 Cache</button>
         <button type="button" class="map-fab" id="mapDropPinBtn">📍 Pin</button>
       </div>
     </section>
@@ -762,7 +873,7 @@
         <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--cyan);">
           WALKIE-TALKIE PTT (8 kHz G.711 μ-LAW)
         </div>
-        <div class="voice-status-box" id="voiceStatusBox">STANDBY • HOLD PTT OR SPACEBAR TO TRANSMIT</div>
+        <div class="voice-status-box" id="voiceStatusBox">STANDBY • HOLD PTT TO TRANSMIT</div>
         <button type="button" class="ptt-btn" id="pttBtn">
           <span style="font-size:28px;">🎙</span>
           <span id="pttBtnLabel">HOLD TO TALK</span>
@@ -822,7 +933,7 @@
           <h3>OPERATOR IDENTITY &amp; ENCRYPTION</h3>
           <div class="form-grid">
             <div class="field">
-              <label for="setCallsign">Operator Callsign</label>
+              <label for="setCallsign">Operator Callsign / @username</label>
               <input type="text" id="setCallsign" maxlength="24" />
             </div>
             <div class="field">
@@ -844,15 +955,16 @@
           </div>
           <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
             <button type="button" class="btn btn-emerald" id="saveSettingsBtn">Save &amp; Reconnect</button>
+            <button type="button" class="btn btn-primary" id="openSetupWizardBtn">Account Login / Setup Wizard</button>
             <button type="button" class="btn" id="regenKeysBtn">Rotate ECDH Keys</button>
-            <button type="button" class="btn" id="pingMeshBtn">Broadcast Presence Ping</button>
+            <button type="button" class="btn" id="pingMeshBtn">Presence Ping</button>
           </div>
         </div>
 
         <div class="card">
-          <h3>CONNECT TO A LOCAL WI-FI DIRECT / HOTSPOT NODE</h3>
+          <h3>IPHONE &amp; WI-FI DIRECT LOCAL PORTAL</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
-            When joined to an Android phone's PulseMesh Wi-Fi Direct group (<code>192.168.49.1</code>) or Local Hotspot (<code>192.168.43.1</code>), open its local portal directly with zero internet:
+            On iPhone, scan the Android host's 2-step QR codes (Settings &rarr; Wi-Fi Direct Web Portal) or jump directly to the local offline portal after joining its Wi-Fi:
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input type="text" id="localHostUrlInput" value="http://192.168.49.1:8080" style="flex:1;min-width:200px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
@@ -862,10 +974,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB NODE (v1.2)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.1)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
-            Identical browser counterpart to the PulseMesh Android app. Uses <strong>ECDH P-256</strong> + <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>) for live hybrid relay compatibility and connects offline to any Android PulseMesh Wi-Fi Direct Web Portal.<br /><br />
-            <strong>PulseMesh • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>) for live hybrid relay compatibility and connects 100% offline to any Android Wi-Fi Direct Web Portal.<br /><br />
+            <strong>PulseMesh v1.2.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -880,6 +992,98 @@
     <button type="button" class="nav-btn" data-tab="nodes"><span class="ico">📡</span><span>NODES</span></button>
     <button type="button" class="nav-btn" data-tab="settings"><span class="ico">⚙</span><span>SETUP</span></button>
   </nav>
+
+  <!-- SETUP & ACCOUNT LOGIN WIZARD OVERLAY -->
+  <div class="setup-overlay" id="setupOverlay">
+    <div class="setup-card">
+      <div class="setup-brand">
+        <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
+        <div>
+          <h1>PulseMesh v1.2.1 Setup &amp; Login</h1>
+          <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
+        </div>
+      </div>
+
+      <div class="setup-tabs">
+        <button type="button" class="setup-tab-btn active" data-spane="quick">1. QUICK SETUP</button>
+        <button type="button" class="setup-tab-btn" data-spane="login">2. @USERNAME</button>
+        <button type="button" class="setup-tab-btn" data-spane="iphone">3. IPHONE WIFI</button>
+      </div>
+
+      <!-- Pane 1: Quick Operator Setup (Works 100% Offline & Online) -->
+      <div class="setup-pane active" id="spane-quick">
+        <div class="field">
+          <label for="wizCallsign">Operator Callsign</label>
+          <input type="text" id="wizCallsign" placeholder="e.g. Kostas-iPhone or Alpha-1" maxlength="24" />
+        </div>
+        <div class="field">
+          <label for="wizPassphrase">Mesh Channel Passphrase (must match team)</label>
+          <input type="text" id="wizPassphrase" value="pulsemesh-tactical" maxlength="64" />
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="wizLocMode">Location Privacy</label>
+            <select id="wizLocMode">
+              <option value="EXACT">EXACT GPS</option>
+              <option value="COARSE">COARSE (~1 km Fuzz)</option>
+              <option value="OFF">OFF (Stealth)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wizTheme">Interface Theme</label>
+            <select id="wizTheme">
+              <option value="dark">Dark Frutiger Aero</option>
+              <option value="light">Daylight Aero</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary" id="wizFinishQuickBtn" style="padding:12px;font-size:13px;">
+          🚀 Enter PulseMesh Node
+        </button>
+      </div>
+
+      <!-- Pane 2: @username Encrypted Account Login / Claim (Compatible with Android PV1 Vaults) -->
+      <div class="setup-pane" id="spane-login">
+        <div class="status-note">
+          Sign in with your Android PulseMesh <strong>@username</strong> &amp; PIN (or <code>PMRK-</code> Recovery Key) to restore your exact ECDH P-256 identity, or claim a new <strong>@username</strong>.
+        </div>
+        <div class="field">
+          <label for="loginUsername">@username (3-24 letters/numbers)</label>
+          <input type="text" id="loginUsername" placeholder="e.g. @kostas" maxlength="25" />
+        </div>
+        <div class="field">
+          <label for="loginSecret">4-6 Digit PIN or Recovery Key (PMRK-XXXX-XXXX-XXXX)</label>
+          <input type="password" id="loginSecret" placeholder="Enter PIN or PMRK-... key" maxlength="32" />
+        </div>
+        <div id="loginStatusBox" class="status-note" style="display:none;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="btnSignInUsername" style="flex:1;padding:11px;">🔑 Sign In (@username)</button>
+          <button type="button" class="btn btn-emerald" id="btnClaimUsername" style="flex:1;padding:11px;">✨ Claim New @username</button>
+        </div>
+      </div>
+
+      <!-- Pane 3: Official iPhone / iPad Wi-Fi Direct Guide -->
+      <div class="setup-pane" id="spane-iphone">
+        <div class="status-note">
+          <strong>Off-Grid iPhone to Android (Zero Internet):</strong><br/>
+          1. On Android PulseMesh, open <strong>Settings &rarr; Host Hotspot / Wi-Fi Direct</strong> and tap <strong>Show iPhone QR Codes</strong>.<br/>
+          2. Scan <strong>QR #1 (Wi-Fi)</strong> with iPhone Camera to join the Android phone's local network.<br/>
+          3. Scan <strong>QR #2 (Portal URL)</strong> or tap a button below to open PulseMesh offline.<br/>
+          4. For app icon mode on iOS, tap Safari <strong>Share &rarr; Add to Home Screen</strong>.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a class="btn btn-emerald" href="http://192.168.49.1:8080" style="flex:1;">Wi-Fi Direct (:8080)</a>
+          <a class="btn btn-primary" href="http://192.168.43.1:8080" style="flex:1;">Hotspot (:8080)</a>
+        </div>
+        <button type="button" class="btn" id="wizContinueFromIphoneBtn">Continue in Current Session</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:10px;color:var(--text-muted);">
+        <span>ECDH P-256 • AES-256-GCM • GNU GPL-3.0</span>
+        <button type="button" class="icon-btn" id="wizSkipBtn" style="font-size:10px;">Skip for now</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Waypoint Modal -->
   <div class="modal-backdrop" id="waypointModal">
@@ -915,15 +1119,35 @@
   (function () {
     "use strict";
 
+    // Register Offline PWA Service Worker (for iPhone / Desktop Home Screen app mode)
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    }
+
+    // Smart iPhone / iPad Safari "Add to Home Screen" banner
+    const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isStandalonePwa = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (isIosDevice && !isStandalonePwa && !localStorage.getItem("pulsemesh_ios_banner_dismissed")) {
+      const b = document.getElementById("iosInstallBanner");
+      if (b) b.classList.add("visible");
+    }
+    document.getElementById("dismissIosBanner").addEventListener("click", () => {
+      document.getElementById("iosInstallBanner").classList.remove("visible");
+      localStorage.setItem("pulsemesh_ios_banner_dismissed", "1");
+    });
+
     // =========================================================================
     // STATE & PERSISTENCE
     // =========================================================================
     const STORAGE_KEY = "pulsemesh_web_v12_state";
     const CHANNEL_TOPIC_SALT = "PULSEMESH_TOPIC_V2:";
     const CHANNEL_AES_SALT = "PULSEMESH_CHANNEL_AES_V2:";
+    const USER_CLAIM_TOPIC_SALT = "PULSEMESH_USER_CLAIM_V1:";
     const ECDH_KDF_INFO = "PULSEMESH_ECDH_V1";
     const DM_PREFIX_ECDH = "E2EE_ECDH_V2:";
     const CHANNEL_PREFIX = "PM2:";
+    const VAULT_PREFIX = "PV1:";
     const NTFY_BASE = "https://ntfy.sh";
 
     function loadSavedConfig() {
@@ -943,11 +1167,15 @@
     }
 
     const saved = loadSavedConfig();
+    const defaultPrefix = isIosDevice ? "iPhone-" : "WebNode-";
+    const initialNodeId = saved.nodeId || randomNodeId();
     const state = {
       mode: "DETECTING", // "LOCAL_DIRECT" | "HYBRID_NTFY"
+      setupDone: !!saved.setupDone,
       hostInfo: null,
-      nodeId: saved.nodeId || randomNodeId(),
-      callsign: saved.callsign || ("WebNode-" + (saved.nodeId || "01").slice(-2)),
+      nodeId: initialNodeId,
+      callsign: saved.callsign || (defaultPrefix + initialNodeId.slice(-2)),
+      claimedUsername: saved.claimedUsername || "",
       passphrase: saved.passphrase || "pulsemesh-tactical",
       locationMode: saved.locationMode || "EXACT",
       pubKeyB64: saved.pubKeyB64 || "",
@@ -958,10 +1186,10 @@
       isSosActive: false,
       voiceRxEnabled: true,
       selectedThreadId: "channel_primary",
-      nodes: new Map(),      // normId -> nodeObj
-      groups: [],            // { groupId, groupName, memberIds }
-      waypoints: new Map(),  // id -> wp
-      packets: [],           // chronological list
+      nodes: new Map(),
+      groups: [],
+      waypoints: new Map(),
+      packets: [],
       seenIds: new Set(),
       logs: [],
       map: {
@@ -988,6 +1216,12 @@
       if (!id) return "";
       return String(id).trim().replace(/^0x/i, "").toUpperCase();
     }
+    function normalizeUsername(raw) {
+      return String(raw || "").trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+    }
+    function normalizeRecoveryKey(raw) {
+      return String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
 
     function logLine(tag, msg) {
       const ts = new Date().toLocaleTimeString([], { hour12: false });
@@ -995,6 +1229,45 @@
       if (state.logs.length > 120) state.logs.length = 120;
       const el = document.getElementById("telemetryLog");
       if (el) el.textContent = state.logs.join("\n");
+    }
+
+    // =========================================================================
+    // INDEXEDDB OFFLINE TILE CACHE (FOR IPHONE PWA OFFLINE MAPS)
+    // =========================================================================
+    let tileDbPromise = null;
+    function openTileDb() {
+      if (tileDbPromise) return tileDbPromise;
+      tileDbPromise = new Promise((resolve) => {
+        if (!window.indexedDB) { resolve(null); return; }
+        const req = indexedDB.open("pulsemesh_tiles_v1", 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("tiles")) db.createObjectStore("tiles");
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      return tileDbPromise;
+    }
+
+    async function idbGetTile(key) {
+      const db = await openTileDb();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction("tiles", "readonly");
+        const req = tx.objectStore("tiles").get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function idbPutTile(key, blob) {
+      const db = await openTileDb();
+      if (!db) return;
+      try {
+        const tx = db.transaction("tiles", "readwrite");
+        tx.objectStore("tiles").put(blob, key);
+      } catch (_) {}
     }
 
     // =========================================================================
@@ -1058,10 +1331,46 @@
       return "pm_" + bytesToLowerHex(h).slice(0, 20);
     }
 
+    async function deriveUsernameClaimTopic(username) {
+      const norm = normalizeUsername(username);
+      const h = await sha256Bytes(USER_CLAIM_TOPIC_SALT + norm);
+      return "pm_reg_" + bytesToLowerHex(h).slice(0, 20);
+    }
+
     async function deriveChannelAesKey(passphrase) {
       const clean = (passphrase || "").trim() || "pulsemesh-tactical";
       const keyBytes = await sha256Bytes(CHANNEL_AES_SALT + clean);
       return crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    }
+
+    async function derivePbkdf2VaultKey(username, saltHex, secret) {
+      const norm = normalizeUsername(username);
+      const saltBytes = encUtf8(`PM_VAULT_V2:${norm}:${saltHex}`);
+      const baseKey = await crypto.subtle.importKey("raw", encUtf8(secret), "PBKDF2", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: saltBytes, iterations: 65536, hash: "SHA-256" },
+        baseKey,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function decryptAccountVault(username, saltHex, secret, encVault) {
+      const trimmed = (encVault || "").trim();
+      if (!trimmed.startsWith(VAULT_PREFIX) || !saltHex || !secret) return null;
+      try {
+        const key = await derivePbkdf2VaultKey(username, saltHex, secret);
+        const plain = await aesGcmDecryptBytes(trimmed.slice(VAULT_PREFIX.length), key);
+        const obj = JSON.parse(decUtf8(plain));
+        if (!obj.priv || !obj.pub || !obj.nid) return null;
+        return obj;
+      } catch (_) { return null; }
+    }
+
+    async function encryptAccountVault(username, saltHex, secret, payloadObj) {
+      const key = await derivePbkdf2VaultKey(username, saltHex, secret);
+      return VAULT_PREFIX + await aesGcmEncryptB64(encUtf8(JSON.stringify(payloadObj)), key);
     }
 
     async function aesGcmEncryptB64(plainBytes, cryptoKey) {
@@ -1130,11 +1439,149 @@
     }
 
     // =========================================================================
+    // @USERNAME LOGIN & CLAIM (COMPATIBLE WITH ANDROID TacticalE2eeManager)
+    // =========================================================================
+    function setLoginStatus(msg, cls = "") {
+      const el = document.getElementById("loginStatusBox");
+      el.style.display = "block";
+      el.className = "status-note" + (cls ? " " + cls : "");
+      el.textContent = msg;
+    }
+
+    async function pollUsernameClaim(username) {
+      const topic = await deriveUsernameClaimTopic(username);
+      const res = await fetch(`${NTFY_BASE}/${topic}/json?poll=1&since=all`, { headers: { "Accept": "application/x-ndjson" } });
+      if (!res.ok) throw new Error("Registry unreachable (HTTP " + res.status + ")");
+      const text = await res.text();
+      let latest = null;
+      for (const line of text.split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const outer = JSON.parse(t);
+          if (outer.event === "message" && outer.message && outer.message.startsWith("{")) {
+            const rec = JSON.parse(outer.message);
+            if (normalizeUsername(rec.username) === username) latest = rec;
+          }
+        } catch (_) {}
+      }
+      return latest;
+    }
+
+    document.getElementById("btnSignInUsername").addEventListener("click", async () => {
+      if (!hasSubtle) {
+        setLoginStatus("Account vault decryption requires HTTPS (open https://kostadinosk.github.io/PulseMesh/web/). Use Quick Setup for offline HTTP Wi-Fi Direct.", "err");
+        return;
+      }
+      const norm = normalizeUsername(document.getElementById("loginUsername").value);
+      const secret = document.getElementById("loginSecret").value.trim();
+      if (norm.length < 3) { setLoginStatus("Username must be at least 3 letters/numbers.", "err"); return; }
+      if (!secret) { setLoginStatus("Enter your 4-6 digit PIN or PMRK-... Recovery Key.", "err"); return; }
+
+      setLoginStatus(`Looking up @${norm} encrypted vault...`);
+      try {
+        const claim = await pollUsernameClaim(norm);
+        if (!claim) {
+          setLoginStatus(`@${norm} was not found on the public registry. Tap "Claim New @username" to register it.`, "err");
+          return;
+        }
+        let vault = null;
+        if (claim.pinVault && /^\d{4,6}$/.test(secret)) {
+          vault = await decryptAccountVault(norm, claim.saltHex, secret, claim.pinVault);
+        }
+        if (!vault && claim.recoveryVault) {
+          vault = await decryptAccountVault(norm, claim.saltHex, normalizeRecoveryKey(secret), claim.recoveryVault);
+        }
+        if (!vault) {
+          setLoginStatus("Incorrect PIN or Recovery Key for @" + norm + ".", "err");
+          return;
+        }
+        state.nodeId = vault.nid;
+        state.callsign = vault.dn || ("@" + norm);
+        state.claimedUsername = norm;
+        state.pubKeyB64 = vault.pub;
+        state.privKeyB64 = vault.priv;
+        state.fingerprint = format12HexFingerprint(await sha256Bytes(b64ToBytes(vault.pub)));
+        state.setupDone = true;
+        saveConfig({
+          setupDone: true, nodeId: state.nodeId, callsign: state.callsign,
+          claimedUsername: norm, pubKeyB64: state.pubKeyB64, privKeyB64: state.privKeyB64, fingerprint: state.fingerprint
+        });
+        syncSettingsInputs();
+        renderPeersAndHeader();
+        setLoginStatus(`Unlocked @${norm} (${state.nodeId})! Entering mesh...`, "ok");
+        setTimeout(() => {
+          closeSetupOverlay();
+          sendPresencePing();
+        }, 700);
+      } catch (e) {
+        setLoginStatus("Offline or registry error: " + e.message + ". Use Quick Setup for offline Wi-Fi Direct.", "err");
+      }
+    });
+
+    document.getElementById("btnClaimUsername").addEventListener("click", async () => {
+      if (!hasSubtle) {
+        setLoginStatus("Claiming a global @username requires HTTPS. Use Quick Setup for offline HTTP Wi-Fi Direct.", "err");
+        return;
+      }
+      const norm = normalizeUsername(document.getElementById("loginUsername").value);
+      const pin = document.getElementById("loginSecret").value.trim();
+      if (norm.length < 3) { setLoginStatus("Username must be 3-24 characters (a-z, 0-9, _, -).", "err"); return; }
+      if (!/^\d{4,6}$/.test(pin)) { setLoginStatus("To claim a new @username, enter a 4-6 digit numeric PIN.", "err"); return; }
+
+      setLoginStatus(`Checking availability for @${norm}...`);
+      try {
+        const existing = await pollUsernameClaim(norm);
+        if (existing) {
+          setLoginStatus(`@${norm} is already claimed. Enter its PIN to Sign In, or pick another handle.`, "err");
+          return;
+        }
+        await ensureEcdhKeys(false);
+        const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+        const saltHex = bytesToLowerHex(saltBytes);
+        const rkBytes = crypto.getRandomValues(new Uint8Array(6));
+        const rkHex = Array.from(rkBytes).map((b) => b.toString(16).toUpperCase().padStart(2, "0")).join("");
+        const recoveryKey = `PMRK-${rkHex.slice(0, 4)}-${rkHex.slice(4, 8)}-${rkHex.slice(8, 12)}`;
+        const authToken = bytesToLowerHex(crypto.getRandomValues(new Uint8Array(32)));
+        const authVerifierHash = bytesToLowerHex(await sha256Bytes("PM_AUTH_V2:" + authToken));
+
+        const vaultPayload = {
+          priv: state.privKeyB64, pub: state.pubKeyB64, nid: state.nodeId,
+          dn: "@" + norm, tok: authToken, rk: recoveryKey, ep: 1
+        };
+        const pinVault = await encryptAccountVault(norm, saltHex, pin, vaultPayload);
+        const recoveryVault = await encryptAccountVault(norm, saltHex, normalizeRecoveryKey(recoveryKey), vaultPayload);
+        const claimRec = {
+          username: norm, displayName: "@" + norm, nodeId: state.nodeId,
+          publicKeyBase64: state.pubKeyB64, saltHex, claimedAt: Date.now(),
+          v: 2, pinVault, recoveryVault, authVerifierHash
+        };
+        const topic = await deriveUsernameClaimTopic(norm);
+        const postRes = await fetch(`${NTFY_BASE}/${topic}`, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+          body: JSON.stringify(claimRec)
+        });
+        if (!postRes.ok) throw new Error("Publish failed (" + postRes.status + ")");
+
+        state.callsign = "@" + norm;
+        state.claimedUsername = norm;
+        state.setupDone = true;
+        saveConfig({ setupDone: true, callsign: state.callsign, claimedUsername: norm });
+        syncSettingsInputs();
+        renderPeersAndHeader();
+        setLoginStatus(`Claimed @${norm}! SAVE YOUR RECOVERY KEY: ${recoveryKey}`, "ok");
+        sendPresencePing();
+      } catch (e) {
+        setLoginStatus("Could not claim @" + norm + ": " + e.message, "err");
+      }
+    });
+
+    // =========================================================================
     // ITU-T G.711 MU-LAW CODEC (COMPATIBLE WITH Android TacticalAudioService.kt)
     // =========================================================================
     function pcm16ToMuLaw(sample) {
-      const MULAW_BIAS = 0x84;
-      const MULAW_CLIP = 32635;
+      const MULAW_BIAS = 0x84, MULAW_CLIP = 32635;
       let pcm = Math.max(-32768, Math.min(32767, sample | 0));
       let sign = 0;
       if (pcm < 0) { pcm = -pcm; sign = 0x80; }
@@ -1148,11 +1595,8 @@
 
     function muLawToPcm16(uVal) {
       const u = (~uVal) & 0xFF;
-      const sign = u & 0x80;
-      const exp = (u >> 4) & 0x07;
-      const mantissa = u & 0x0F;
-      let sample = ((mantissa << 3) + 0x84) << exp;
-      sample -= 0x84;
+      const sign = u & 0x80, exp = (u >> 4) & 0x07, mantissa = u & 0x0F;
+      let sample = (((mantissa << 3) + 0x84) << exp) - 0x84;
       return sign ? -sample : sample;
     }
 
@@ -1174,13 +1618,10 @@
         if (!ctx) return;
         const raw = b64ToBytes(b64);
         if (!raw.length) return;
-        // Android sends 4kHz (640B for 160ms) or 8kHz (1600B for 200ms)
         const sampleRate = raw.length <= 1000 ? 4000 : 8000;
         const buf = ctx.createBuffer(1, raw.length, sampleRate);
         const ch = buf.getChannelData(0);
-        for (let i = 0; i < raw.length; i++) {
-          ch[i] = muLawToPcm16(raw[i]) / 32768.0;
-        }
+        for (let i = 0; i < raw.length; i++) ch[i] = muLawToPcm16(raw[i]) / 32768.0;
         const src = ctx.createBufferSource();
         src.buffer = buf;
         src.connect(ctx.destination);
@@ -1203,8 +1644,7 @@
     }
 
     function haversineMeters(lat1, lon1, lat2, lon2) {
-      const R = 6371000;
-      const toRad = (d) => d * Math.PI / 180;
+      const R = 6371000, toRad = (d) => d * Math.PI / 180;
       const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
       const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
       return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -1214,36 +1654,24 @@
     // PACKET INGESTION & UI RENDERING
     // =========================================================================
     async function ingestWirePacket(pkt, sourceTransportLabel) {
-      if (!pkt || !pkt.packetId) return;
-      if (state.seenIds.has(pkt.packetId)) return;
+      if (!pkt || !pkt.packetId || state.seenIds.has(pkt.packetId)) return;
       state.seenIds.add(pkt.packetId);
-      if (state.seenIds.size > 2000) {
-        const first = state.seenIds.values().next().value;
-        state.seenIds.delete(first);
-      }
+      if (state.seenIds.size > 2000) state.seenIds.delete(state.seenIds.values().next().value);
 
       const srcNorm = normId(pkt.srcNodeId);
       const myNorm = normId(state.nodeId);
       const isSelf = srcNorm === myNorm;
 
-      // Update peer table
       if (srcNorm && !isSelf) {
         const prev = state.nodes.get(srcNorm) || {
-          id: pkt.srcNodeId,
-          callsign: pkt.srcCallsign || pkt.srcNodeId,
-          batteryPercent: 100,
-          rssiDbm: -55,
-          hopCount: pkt.hops || 1,
-          transports: new Set(),
-          publicKeyBase64: "",
-          latitude: 0,
-          longitude: 0
+          id: pkt.srcNodeId, callsign: pkt.srcCallsign || pkt.srcNodeId,
+          batteryPercent: 100, rssiDbm: -55, hopCount: pkt.hops || 1,
+          transports: new Set(), publicKeyBase64: "", latitude: 0, longitude: 0
         };
         if (pkt.srcCallsign) prev.callsign = pkt.srcCallsign;
         if (pkt.pk) prev.publicKeyBase64 = pkt.pk;
         if (typeof pkt.lat === "number" && typeof pkt.lng === "number" && (pkt.lat !== 0 || pkt.lng !== 0)) {
-          prev.latitude = pkt.lat;
-          prev.longitude = pkt.lng;
+          prev.latitude = pkt.lat; prev.longitude = pkt.lng;
         }
         if (typeof pkt.battery === "number") prev.batteryPercent = pkt.battery;
         if (typeof pkt.rssiDbm === "number") prev.rssiDbm = pkt.rssiDbm;
@@ -1254,23 +1682,17 @@
       }
 
       const type = String(pkt.type || "CHAT").toUpperCase();
-
       if (type === "HEARTBEAT" || type === "GPS_BEACON") {
-        renderPeersAndHeader();
-        drawMap();
-        return;
+        renderPeersAndHeader(); drawMap(); return;
       }
-
       if (type === "VOICE" || type === "VOICE_PTT" || type === "VOICE_STREAM" || type === "CALL_AUDIO") {
         if (!isSelf && pkt.payload) {
           playMuLawBase64(pkt.payload);
-          const box = document.getElementById("voiceStatusBox");
-          if (box) box.textContent = `🔊 SPEAKING: ${pkt.srcCallsign || pkt.srcNodeId} (${sourceTransportLabel || "MESH"})`;
+          document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${pkt.srcCallsign || pkt.srcNodeId}`;
           logLine("VOICE", `RX voice frame from ${pkt.srcCallsign || pkt.srcNodeId}`);
         }
         return;
       }
-
       if (type === "WAYPOINT") {
         let wpObj = null;
         try { wpObj = JSON.parse(pkt.payload); } catch (_) {}
@@ -1283,65 +1705,36 @@
           creatorCallsign: (wpObj && wpObj.creator) || pkt.srcCallsign || pkt.srcNodeId,
           timestamp: pkt.timestamp || Date.now()
         };
-        if (wp.latitude || wp.longitude) {
-          state.waypoints.set(wp.id, wp);
-        }
+        if (wp.latitude || wp.longitude) state.waypoints.set(wp.id, wp);
         addChatMessage({
-          id: pkt.packetId,
-          threadId: "channel_primary",
-          sender: pkt.srcCallsign || pkt.srcNodeId,
-          srcNodeId: pkt.srcNodeId,
-          text: `📍 SHARED PIN [${wp.type}]: ${wp.title} (${wp.latitude.toFixed(4)}, ${wp.longitude.toFixed(4)})`,
-          kind: "waypoint",
-          isSelf,
-          transport: sourceTransportLabel || "MESH",
-          hops: pkt.hops || 0,
-          timestamp: pkt.timestamp || Date.now()
+          id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId, text: `📍 SHARED PIN [${wp.type}]: ${wp.title} (${wp.latitude.toFixed(4)}, ${wp.longitude.toFixed(4)})`,
+          kind: "waypoint", isSelf, transport: sourceTransportLabel || "MESH", hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
         });
-        drawMap();
-        return;
+        drawMap(); return;
       }
-
       if (type === "SOS") {
-        const banner = document.getElementById("sosBanner");
-        const bannerText = document.getElementById("sosBannerText");
-        if (banner && bannerText) {
-          banner.classList.add("active");
-          bannerText.textContent = `⚠ SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "EMERGENCY DISTRESS"}`;
-        }
+        document.getElementById("sosBanner").classList.add("active");
+        document.getElementById("sosBannerText").textContent = `⚠ SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "EMERGENCY DISTRESS"}`;
         addChatMessage({
-          id: pkt.packetId,
-          threadId: "channel_primary",
-          sender: pkt.srcCallsign || pkt.srcNodeId,
-          srcNodeId: pkt.srcNodeId,
-          text: `⚠ SOS DISTRESS: ${pkt.payload || "EMERGENCY ALERT"}`,
-          kind: "sos",
-          isSelf,
-          transport: sourceTransportLabel || "MESH",
-          hops: pkt.hops || 0,
-          timestamp: pkt.timestamp || Date.now()
+          id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId, text: `⚠ SOS DISTRESS: ${pkt.payload || "EMERGENCY ALERT"}`,
+          kind: "sos", isSelf, transport: sourceTransportLabel || "MESH", hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
         });
-        logLine("SOS", `Emergency alert from ${pkt.srcCallsign || pkt.srcNodeId}`);
         return;
       }
-
       if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
         const dst = String(pkt.dstNodeId || "ALL");
-        let threadId = "channel_primary";
-        let displayText = pkt.payload || "";
-
+        let threadId = "channel_primary", displayText = pkt.payload || "";
         if (type === "E2EE_DM" || (dst !== "ALL" && dst !== "BROADCAST" && dst !== "ENC_TACNET" && type !== "GROUP_CHAT")) {
           const dstNorm = normId(dst);
-          if (!isSelf && dstNorm !== myNorm) return; // Not addressed to us
+          if (!isSelf && dstNorm !== myNorm) return;
           const peerId = isSelf ? dst : pkt.srcNodeId;
           threadId = "dm_" + peerId;
           const peer = state.nodes.get(normId(peerId));
           const peerPub = pkt.pk || (peer && peer.publicKeyBase64) || "";
-          if (displayText.startsWith(DM_PREFIX_ECDH)) {
-            displayText = await decryptDmEcdh(displayText, peerPub);
-          } else if (displayText.startsWith("PLAINTEXT:")) {
-            displayText = displayText.slice(10);
-          }
+          if (displayText.startsWith(DM_PREFIX_ECDH)) displayText = await decryptDmEcdh(displayText, peerPub);
+          else if (displayText.startsWith("PLAINTEXT:")) displayText = displayText.slice(10);
         } else if (type === "GROUP_CHAT" && pkt.groupId) {
           threadId = "group_" + pkt.groupId;
           if (!state.groups.some((g) => g.groupId === pkt.groupId)) {
@@ -1350,18 +1743,10 @@
         } else if (dst === "ENC_TACNET") {
           threadId = "channel_encrypted";
         }
-
         addChatMessage({
-          id: pkt.packetId,
-          threadId,
-          sender: pkt.srcCallsign || pkt.srcNodeId,
-          srcNodeId: pkt.srcNodeId,
-          text: displayText,
-          kind: "text",
-          isSelf,
-          transport: sourceTransportLabel || "MESH",
-          hops: pkt.hops || 0,
-          timestamp: pkt.timestamp || Date.now()
+          id: pkt.packetId, threadId, sender: pkt.srcCallsign || pkt.srcNodeId, srcNodeId: pkt.srcNodeId,
+          text: displayText, kind: "text", isSelf, transport: sourceTransportLabel || "MESH",
+          hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
         });
       }
     }
@@ -1371,19 +1756,15 @@
       state.packets.push(msg);
       if (state.packets.length > 350) state.packets.shift();
       renderThreads();
-      if (msg.threadId === state.selectedThreadId) {
-        renderMessages();
-      }
+      if (msg.threadId === state.selectedThreadId) renderMessages();
     }
 
     function renderPeersAndHeader() {
-      const count = state.nodes.size;
-      document.getElementById("peerCountPill").textContent = `PEERS: ${count}`;
+      document.getElementById("peerCountPill").textContent = `PEERS: ${state.nodes.size}`;
       document.getElementById("topIdentity").textContent = `${state.callsign} (${state.nodeId})`;
       document.getElementById("setFingerprint").value = `${state.nodeId} • ${state.fingerprint}`;
 
       const nodesList = document.getElementById("nodesList");
-      if (!nodesList) return;
       const arr = Array.from(state.nodes.values()).sort((a, b) => (b.lastSeenMs || 0) - (a.lastSeenMs || 0));
       if (!arr.length) {
         nodesList.innerHTML = `<div style="font-size:12.5px;color:var(--text-muted);font-family:var(--mono);padding:8px 0;">Scanning for nearby PulseMesh nodes... Send a message or Presence Ping to announce yourself.</div>`;
@@ -1412,7 +1793,6 @@
 
     function renderThreads() {
       const container = document.getElementById("threadsContainer");
-      if (!container) return;
       const threads = [
         { id: "channel_primary", title: "#Primary-LongFast", sub: "Public Mesh Broadcast (TTL=7)", badge: "MESH" },
         { id: "channel_encrypted", title: "#Encrypted-TacNet", sub: "AES-256-GCM Team Channel", badge: "AES-256" }
@@ -1422,34 +1802,27 @@
       }
       for (const n of state.nodes.values()) {
         threads.push({
-          id: "dm_" + n.id,
-          title: n.callsign,
+          id: "dm_" + n.id, title: n.callsign,
           sub: `${n.id} • ${n.publicKeyBase64 ? "ECDH P-256 Ready" : "Direct Mesh"}`,
           badge: n.publicKeyBase64 ? "ECDH" : "DM"
         });
       }
-
       container.innerHTML = threads.map((t) => {
         const lastMsg = [...state.packets].reverse().find((p) => p.threadId === t.id);
         const preview = lastMsg ? (lastMsg.text.startsWith("[[PM_IMAGE]]:") ? "📷 Photo attachment" : lastMsg.text) : t.sub;
         return `
           <div class="thread-item ${t.id === state.selectedThreadId ? "active" : ""}" data-tid="${escapeHtml(t.id)}">
-            <div class="thread-title">
-              <span>${escapeHtml(t.title)}</span>
-              <span class="badge-e2ee">${escapeHtml(t.badge)}</span>
-            </div>
+            <div class="thread-title"><span>${escapeHtml(t.title)}</span><span class="badge-e2ee">${escapeHtml(t.badge)}</span></div>
             <div class="thread-sub">${escapeHtml(preview)}</div>
           </div>
         `;
       }).join("");
-
       container.querySelectorAll(".thread-item").forEach((el) => {
         el.addEventListener("click", () => {
           selectThread(el.getAttribute("data-tid"));
           document.getElementById("chatSidebar").classList.remove("open");
         });
       });
-
       const active = threads.find((t) => t.id === state.selectedThreadId) || threads[0];
       if (active) {
         document.getElementById("activeThreadTitle").textContent = active.title;
@@ -1460,7 +1833,6 @@
 
     function renderMessages() {
       const list = document.getElementById("messagesList");
-      if (!list) return;
       const msgs = state.packets.filter((p) => p.threadId === state.selectedThreadId);
       if (!msgs.length) {
         list.innerHTML = `<div style="margin:auto;text-align:center;color:var(--text-muted);font-family:var(--mono);font-size:12px;padding:24px;">No messages in this thread yet.<br/>Type below to broadcast across the mesh.</div>`;
@@ -1471,8 +1843,7 @@
         const cls = ["msg-bubble", m.isSelf ? "self" : "", m.kind === "sos" ? "sos" : "", m.kind === "waypoint" ? "waypoint" : ""].filter(Boolean).join(" ");
         let bodyHtml = "";
         if (m.text && m.text.startsWith("[[PM_IMAGE]]:")) {
-          const rest = m.text.slice("[[PM_IMAGE]]:".length);
-          const parts = rest.split("||");
+          const parts = m.text.slice("[[PM_IMAGE]]:".length).split("||");
           const b64 = parts[0].replace(/[^A-Za-z0-9+/=]/g, "");
           const cap = parts[1] ? `<div class="msg-text" style="margin-top:4px;">${escapeHtml(parts[1])}</div>` : "";
           bodyHtml = `<img class="msg-img" src="data:image/jpeg;base64,${b64}" alt="Mesh photo" />${cap}`;
@@ -1481,10 +1852,7 @@
         }
         return `
           <div class="${cls}">
-            <div class="msg-meta">
-              <span class="msg-sender">${escapeHtml(m.sender)}</span>
-              <span>${ts}</span>
-            </div>
+            <div class="msg-meta"><span class="msg-sender">${escapeHtml(m.sender)}</span><span>${ts}</span></div>
             ${bodyHtml}
             <div class="msg-badge">${escapeHtml(m.transport)} • Hop ${m.hops}</div>
           </div>
@@ -1493,116 +1861,60 @@
       list.scrollTop = list.scrollHeight;
     }
 
-    function selectThread(threadId) {
-      state.selectedThreadId = threadId;
-      renderThreads();
-      renderMessages();
-    }
-
-    window.__openDm = function (peerId) {
-      selectThread("dm_" + peerId);
-      switchTab("chat");
-    };
-
+    function selectThread(threadId) { state.selectedThreadId = threadId; renderThreads(); renderMessages(); }
+    window.__openDm = function (peerId) { selectThread("dm_" + peerId); switchTab("chat"); };
     function escapeHtml(s) {
-      return String(s == null ? "" : s)
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     // =========================================================================
-    // OUTBOUND SENDING (LOCAL WI-FI DIRECT PORTAL OR ENCRYPTED NTFY HYBRID)
+    // OUTBOUND SENDING
     // =========================================================================
     async function sendMeshAction({ type = "CHAT", threadId = state.selectedThreadId, text = "", payload = "", wp = null }) {
       const pktId = `web_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`;
       const loc = getEffectiveLocation();
 
       if (state.mode === "LOCAL_DIRECT") {
-        // Send to Android Host Bridge — Android encrypts & relays across BLE + Wi-Fi + Relay
-        const body = {
-          packetId: pktId,
-          clientNodeId: state.nodeId,
-          callsign: state.callsign,
-          publicKeyBase64: state.pubKeyB64,
-          threadId: threadId || "channel_primary",
-          type,
-          text,
-          payload: payload || text,
-          lat: loc.lat,
-          lng: loc.lng,
-          waypointTitle: wp ? wp.title : "",
-          waypointType: wp ? wp.type : "",
-          waypointLat: wp ? wp.latitude : null,
-          waypointLng: wp ? wp.longitude : null
-        };
         const res = await fetch("/api/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body)
+          body: JSON.stringify({
+            packetId: pktId, clientNodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64,
+            threadId: threadId || "channel_primary", type, text, payload: payload || text, lat: loc.lat, lng: loc.lng,
+            waypointTitle: wp ? wp.title : "", waypointType: wp ? wp.type : "",
+            waypointLat: wp ? wp.latitude : null, waypointLng: wp ? wp.longitude : null
+          })
         });
         if (!res.ok) throw new Error("Local host returned " + res.status);
         if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
           addChatMessage({
-            id: pktId,
-            threadId: threadId || "channel_primary",
-            sender: state.callsign + " (You)",
-            srcNodeId: state.nodeId,
-            text: text || payload,
-            kind: "text",
-            isSelf: true,
-            transport: "WI-FI DIRECT HOST",
-            hops: 0,
-            timestamp: Date.now()
+            id: pktId, threadId: threadId || "channel_primary", sender: state.callsign + " (You)",
+            srcNodeId: state.nodeId, text: text || payload, kind: "text", isSelf: true,
+            transport: "WI-FI DIRECT HOST", hops: 0, timestamp: Date.now()
           });
         } else if (type === "WAYPOINT" && wp) {
-          state.waypoints.set(wp.id, wp);
-          drawMap();
+          state.waypoints.set(wp.id, wp); drawMap();
         }
         return;
       }
 
-      // HYBRID ENCRYPTED RELAY MODE (ntfy.sh PM2 AES-256-GCM)
-      let dstNodeId = "ALL";
-      let wireType = type;
-      let wirePayload = payload || text;
-      let groupId = "";
-
+      let dstNodeId = "ALL", wireType = type, wirePayload = payload || text, groupId = "";
       if (type === "CHAT") {
-        if (threadId === "channel_encrypted") {
-          dstNodeId = "ENC_TACNET";
-        } else if (threadId.startsWith("dm_")) {
-          dstNodeId = threadId.slice(3);
-          wireType = "E2EE_DM";
+        if (threadId === "channel_encrypted") dstNodeId = "ENC_TACNET";
+        else if (threadId.startsWith("dm_")) {
+          dstNodeId = threadId.slice(3); wireType = "E2EE_DM";
           const peer = state.nodes.get(normId(dstNodeId));
-          if (peer && peer.publicKeyBase64) {
-            const enc = await encryptDmEcdh(text, peer.publicKeyBase64);
-            wirePayload = enc || ("PLAINTEXT:" + text);
-          } else {
-            wirePayload = "PLAINTEXT:" + text;
-          }
+          wirePayload = (peer && peer.publicKeyBase64) ? (await encryptDmEcdh(text, peer.publicKeyBase64) || ("PLAINTEXT:" + text)) : ("PLAINTEXT:" + text);
         } else if (threadId.startsWith("group_")) {
-          groupId = threadId.slice(6);
-          dstNodeId = groupId;
-          wireType = "GROUP_CHAT";
+          groupId = threadId.slice(6); dstNodeId = groupId; wireType = "GROUP_CHAT";
         }
       } else if (type === "WAYPOINT" && wp) {
-        wirePayload = JSON.stringify({
-          id: wp.id, title: wp.title, type: wp.type,
-          lat: wp.latitude, lon: wp.longitude,
-          creator: state.callsign, ts: wp.timestamp
-        });
+        wirePayload = JSON.stringify({ id: wp.id, title: wp.title, type: wp.type, lat: wp.latitude, lon: wp.longitude, creator: state.callsign, ts: wp.timestamp });
       }
 
       const wirePkt = {
-        packetId: pktId,
-        srcNodeId: state.nodeId,
-        srcCallsign: state.callsign,
-        dstNodeId,
-        type: wireType,
-        payload: wirePayload,
-        ttl: 7,
-        hops: 0,
-        timestamp: Date.now()
+        packetId: pktId, srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId,
+        type: wireType, payload: wirePayload, ttl: 7, hops: 0, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { wirePkt.lat = loc.lat; wirePkt.lng = loc.lng; }
       if (state.pubKeyB64) wirePkt.pk = state.pubKeyB64;
@@ -1611,71 +1923,42 @@
       state.seenIds.add(pktId);
       if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
         addChatMessage({
-          id: pktId,
-          threadId,
-          sender: state.callsign + " (You)",
-          srcNodeId: state.nodeId,
-          text,
-          kind: "text",
-          isSelf: true,
-          transport: wireType === "E2EE_DM" ? "E2EE ECDH RELAY" : "HYBRID PM2 RELAY",
-          hops: 0,
-          timestamp: wirePkt.timestamp
+          id: pktId, threadId, sender: state.callsign + " (You)", srcNodeId: state.nodeId, text,
+          kind: "text", isSelf: true, transport: wireType === "E2EE_DM" ? "E2EE ECDH RELAY" : "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
         });
       } else if (type === "WAYPOINT" && wp) {
         state.waypoints.set(wp.id, wp);
         addChatMessage({
-          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)",
-          srcNodeId: state.nodeId, text: `📍 SHARED PIN [${wp.type}]: ${wp.title}`,
-          kind: "waypoint", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
+          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)", srcNodeId: state.nodeId,
+          text: `📍 SHARED PIN [${wp.type}]: ${wp.title}`, kind: "waypoint", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
         });
         drawMap();
       } else if (type === "SOS") {
         addChatMessage({
-          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)",
-          srcNodeId: state.nodeId, text: `⚠ SOS DISTRESS: ${wirePayload}`,
-          kind: "sos", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
+          id: pktId, threadId: "channel_primary", sender: state.callsign + " (You)", srcNodeId: state.nodeId,
+          text: `⚠ SOS DISTRESS: ${wirePayload}`, kind: "sos", isSelf: true, transport: "HYBRID PM2 RELAY", hops: 0, timestamp: wirePkt.timestamp
         });
       }
-
       const topic = await deriveNtfyTopic(state.passphrase);
       const envelope = await encryptChannelPayload(JSON.stringify(wirePkt), state.passphrase);
-      await fetch(`${NTFY_BASE}/${topic}`, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-        body: envelope
-      });
+      await fetch(`${NTFY_BASE}/${topic}`, { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: envelope });
     }
 
     async function sendPresencePing() {
       const loc = getEffectiveLocation();
       if (state.mode === "LOCAL_DIRECT") {
         await fetch("/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nodeId: state.nodeId,
-            callsign: state.callsign,
-            publicKeyBase64: state.pubKeyB64,
-            lat: loc.lat,
-            lng: loc.lng,
-            locationMode: state.locationMode
-          })
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64, lat: loc.lat, lng: loc.lng, locationMode: state.locationMode })
         }).catch(() => {});
         return;
       }
       if (!hasSubtle) return;
       const pkt = {
         packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
-        srcNodeId: state.nodeId,
-        srcCallsign: state.callsign,
-        dstNodeId: "BROADCAST",
+        srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: "BROADCAST",
         type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
-        payload: "PulseMesh Web Node v1.2",
-        ttl: 7,
-        hops: 0,
-        battery: 100,
-        timestamp: Date.now()
+        payload: "PulseMesh Web/iPhone Node v1.2.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
       if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
@@ -1686,30 +1969,21 @@
     }
 
     // =========================================================================
-    // TRANSPORT 1: LOCAL WI-FI DIRECT / HOTSPOT PORTAL BRIDGE
+    // TRANSPORTS: LOCAL WI-FI DIRECT PORTAL & ENCRYPTED HYBRID RELAY
     // =========================================================================
     function applyLocalSnapshot(snap) {
       if (!snap) return;
       if (snap.hostNode) {
-        const hn = snap.hostNode;
-        const nId = normId(hn.id);
+        const hn = snap.hostNode, nId = normId(hn.id);
         if (nId && nId !== normId(state.nodeId)) {
           state.nodes.set(nId, {
-            id: hn.id,
-            callsign: hn.callsign + " (Host)",
-            batteryPercent: hn.batteryPercent || 100,
-            rssiDbm: -30,
-            hopCount: 0,
-            latitude: hn.latitude || 0,
-            longitude: hn.longitude || 0,
-            publicKeyBase64: hn.publicKeyBase64 || "",
-            transports: new Set(["WI-FI DIRECT HOST"]),
-            lastSeenMs: Date.now()
+            id: hn.id, callsign: hn.callsign + " (Host)", batteryPercent: hn.batteryPercent || 100,
+            rssiDbm: -30, hopCount: 0, latitude: hn.latitude || 0, longitude: hn.longitude || 0,
+            publicKeyBase64: hn.publicKeyBase64 || "", transports: new Set(["WI-FI DIRECT HOST"]), lastSeenMs: Date.now()
           });
         }
         if (state.lat == null && hn.latitude && hn.longitude && !state.map.userMoved) {
-          state.map.lat = hn.latitude;
-          state.map.lng = hn.longitude;
+          state.map.lat = hn.latitude; state.map.lng = hn.longitude;
         }
       }
       if (Array.isArray(snap.nodes)) {
@@ -1717,44 +1991,24 @@
           const nid = normId(n.id);
           if (!nid || nid === normId(state.nodeId)) continue;
           state.nodes.set(nid, {
-            id: n.id,
-            callsign: n.callsign || n.id,
-            batteryPercent: n.batteryPercent || 100,
-            rssiDbm: n.rssiDbm || -55,
-            hopCount: n.hopCount || 1,
-            latitude: n.latitude || 0,
-            longitude: n.longitude || 0,
-            publicKeyBase64: n.publicKeyBase64 || "",
-            transports: new Set(Array.isArray(n.transports) ? n.transports : [n.transport || "MESH"]),
-            lastSeenMs: Date.now()
+            id: n.id, callsign: n.callsign || n.id, batteryPercent: n.batteryPercent || 100,
+            rssiDbm: n.rssiDbm || -55, hopCount: n.hopCount || 1, latitude: n.latitude || 0, longitude: n.longitude || 0,
+            publicKeyBase64: n.publicKeyBase64 || "", transports: new Set(Array.isArray(n.transports) ? n.transports : ["MESH"]), lastSeenMs: Date.now()
           });
         }
       }
-      if (Array.isArray(snap.groups)) {
-        state.groups = snap.groups;
-      }
-      if (Array.isArray(snap.waypoints)) {
-        for (const wp of snap.waypoints) {
-          if (wp && wp.id) state.waypoints.set(wp.id, wp);
-        }
-      }
+      if (Array.isArray(snap.groups)) state.groups = snap.groups;
+      if (Array.isArray(snap.waypoints)) for (const wp of snap.waypoints) if (wp && wp.id) state.waypoints.set(wp.id, wp);
       if (Array.isArray(snap.packets)) {
         for (const p of snap.packets) {
-          const id = p.id;
-          if (!id || state.packets.some((x) => x.id === id)) continue;
-          state.seenIds.add(id);
-          const isSelf = normId(p.sourceId) === normId(state.nodeId);
+          if (!p.id || state.packets.some((x) => x.id === p.id)) continue;
+          state.seenIds.add(p.id);
           state.packets.push({
-            id,
-            threadId: p.threadId || "channel_primary",
-            sender: p.sourceCallsign || p.sourceId || "Peer",
-            srcNodeId: p.sourceId || "",
-            text: p.content || "",
+            id: p.id, threadId: p.threadId || "channel_primary", sender: p.sourceCallsign || p.sourceId || "Peer",
+            srcNodeId: p.sourceId || "", text: p.content || "",
             kind: p.type === "SOS" ? "sos" : (p.type === "WAYPOINT" ? "waypoint" : "text"),
-            isSelf,
-            transport: p.transport || "WI-FI DIRECT",
-            hops: p.hops || 0,
-            timestamp: p.timestamp || Date.now()
+            isSelf: normId(p.sourceId) === normId(state.nodeId), transport: p.transport || "WI-FI DIRECT",
+            hops: p.hops || 0, timestamp: p.timestamp || Date.now()
           });
         }
         state.packets.sort((a, b) => a.timestamp - b.timestamp);
@@ -1763,16 +2017,11 @@
         state.lastVoiceSeq = snap.recentVoice.seq;
         if (normId(snap.recentVoice.srcNodeId) !== normId(state.nodeId) && snap.recentVoice.payload) {
           playMuLawBase64(snap.recentVoice.payload);
-          const box = document.getElementById("voiceStatusBox");
-          if (box) box.textContent = `🔊 SPEAKING: ${snap.recentVoice.srcCallsign || snap.recentVoice.srcNodeId} (HOST BRIDGE)`;
+          document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${snap.recentVoice.srcCallsign || snap.recentVoice.srcNodeId}`;
         }
       }
-      if (snap.isSosActive) {
-        document.getElementById("sosBanner").classList.add("active");
-      }
-      renderPeersAndHeader();
-      renderMessages();
-      drawMap();
+      if (snap.isSosActive) document.getElementById("sosBanner").classList.add("active");
+      renderPeersAndHeader(); renderMessages(); drawMap();
     }
 
     async function startLocalDirectMode(info) {
@@ -1790,32 +2039,24 @@
       portalCard.style.display = "block";
       document.getElementById("localPortalDetails").innerHTML =
         `Connected offline to Android host <strong>${escapeHtml(info.hostCallsign)}</strong> (<code>${escapeHtml(info.hostNodeId)}</code>).<br/>` +
-        `SSID: <code>${escapeHtml(info.ssid || "Local Wi-Fi")}</code> • Portal: <code>${escapeHtml(info.portalUrl || location.origin)}</code><br/>` +
-        `All messages, waypoints, and PTT bursts sent here are bridged directly across the host phone's BLE, Wi-Fi Direct, and mesh transports with zero internet.`;
+        `SSID: <code>${escapeHtml(info.ssid || "Local Wi-Fi")}</code> • Portal: <code>${escapeHtml(info.portalUrl || location.origin)}</code>`;
 
       logLine("LOCAL", `Bridged to Android Host ${info.hostCallsign} (${info.hostNodeId}) v${info.version}`);
-
       await sendPresencePing();
       await pullLocalState();
 
-      // Open real-time SSE stream
       try {
         if (state.sseSource) state.sseSource.close();
         const es = new EventSource(`/api/events?clientNodeId=${encodeURIComponent(state.nodeId)}`);
         es.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data);
-            if (msg.event === "voice" && msg.payload) {
-              if (normId(msg.srcNodeId) !== normId(state.nodeId)) {
-                playMuLawBase64(msg.payload);
-                document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
-              }
-            } else if (msg.event === "refresh") {
-              pullLocalState();
-            }
+            if (msg.event === "voice" && msg.payload && normId(msg.srcNodeId) !== normId(state.nodeId)) {
+              playMuLawBase64(msg.payload);
+              document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
+            } else if (msg.event === "refresh") pullLocalState();
           } catch (_) {}
         };
-        es.onerror = () => { /* polling fallback keeps sync alive */ };
         state.sseSource = es;
       } catch (_) {}
 
@@ -1832,34 +2073,26 @@
           applyLocalSnapshot(await res.json());
           document.getElementById("connDot").className = "brand-dot";
         }
-      } catch (_) {
-        document.getElementById("connDot").className = "brand-dot offline";
-      }
+      } catch (_) { document.getElementById("connDot").className = "brand-dot offline"; }
     }
 
-    // =========================================================================
-    // TRANSPORT 2: WEBSITE HYBRID ENCRYPTED RELAY (ntfy.sh PM2 AES-256-GCM)
-    // =========================================================================
     async function startHybridNtfyMode() {
       state.mode = "HYBRID_NTFY";
       const pill = document.getElementById("modePill");
       pill.textContent = "HYBRID E2EE RELAY";
       pill.className = "pill amber";
-      document.getElementById("mapTileSourceHud").textContent = "Tiles: OpenStreetMap + Radar Fallback";
+      document.getElementById("mapTileSourceHud").textContent = "Tiles: OpenStreetMap + IndexedDB Offline";
 
       if (!hasSubtle) {
         document.getElementById("connDot").className = "brand-dot offline";
-        logLine("ERROR", "Web Crypto requires HTTPS for Hybrid Relay mode.");
         return;
       }
-
       if (state.ntfyAbort) state.ntfyAbort.abort();
       const ctrl = new AbortController();
       state.ntfyAbort = ctrl;
 
       const topic = await deriveNtfyTopic(state.passphrase);
       logLine("RELAY", `Connecting to encrypted PM2 channel (${topic})...`);
-
       sendPresencePing();
       if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
       state.heartbeatTimer = setInterval(sendPresencePing, 18000);
@@ -1867,16 +2100,11 @@
       (async function streamLoop() {
         while (!ctrl.signal.aborted) {
           try {
-            const resp = await fetch(`${NTFY_BASE}/${topic}/json?since=2m`, {
-              signal: ctrl.signal,
-              headers: { "Accept": "application/x-ndjson" }
-            });
+            const resp = await fetch(`${NTFY_BASE}/${topic}/json?since=2m`, { signal: ctrl.signal, headers: { "Accept": "application/x-ndjson" } });
             if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
             document.getElementById("connDot").className = "brand-dot";
-            logLine("RELAY", "LIVE — E2EE AES-256-GCM stream active (Android compatible)");
-
-            const reader = resp.body.getReader();
-            const decoder = new TextDecoder();
+            logLine("RELAY", "LIVE — E2EE AES-256-GCM stream active (Android & iPhone compatible)");
+            const reader = resp.body.getReader(), decoder = new TextDecoder();
             let buf = "";
             while (true) {
               const { value, done } = await reader.read();
@@ -1891,14 +2119,12 @@
                   const outer = JSON.parse(t);
                   if (outer.event === "message" && outer.message) {
                     const plain = await decryptChannelPayload(outer.message, state.passphrase);
-                    if (plain) {
-                      await ingestWirePacket(JSON.parse(plain), "HYBRID E2EE");
-                    }
+                    if (plain) await ingestWirePacket(JSON.parse(plain), "HYBRID E2EE");
                   }
                 } catch (_) {}
               }
             }
-          } catch (e) {
+          } catch (_) {
             if (ctrl.signal.aborted) break;
             document.getElementById("connDot").className = "brand-dot connecting";
             await new Promise((r) => setTimeout(r, 3000));
@@ -1908,7 +2134,7 @@
     }
 
     // =========================================================================
-    // EPSG:3857 SLIPPY TILE CANVAS MAP (WORKS 100% OFFLINE ON WI-FI DIRECT)
+    // EPSG:3857 SLIPPY TILE MAP + INDEXEDDB OFFLINE CACHE
     // =========================================================================
     const mapCanvas = document.getElementById("mapCanvas");
     const mctx = mapCanvas.getContext("2d");
@@ -1920,7 +2146,6 @@
       const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
       return { x, y };
     }
-
     function tileToLatLon(tx, ty, z) {
       const n = Math.pow(2, z);
       const lon = (tx / n) * 360 - 180;
@@ -1932,23 +2157,65 @@
       const maxT = 1 << z;
       if (y < 0 || y >= maxT) return null;
       const wx = ((x % maxT) + maxT) % maxT;
-      const key = `${state.mode}:${z}/${wx}/${y}`;
-      const cached = state.map.tileCache.get(key);
+      const key = `${z}/${wx}/${y}`;
+      const memKey = `${state.mode}:${key}`;
+      const cached = state.map.tileCache.get(memKey);
       if (cached) return cached.loaded ? cached.img : null;
 
-      const entry = { img: new Image(), loaded: false, failed: false };
-      entry.img.crossOrigin = "anonymous";
-      entry.img.onload = () => { entry.loaded = true; drawMap(); };
-      entry.img.onerror = () => { entry.failed = true; };
-      entry.img.src = state.mode === "LOCAL_DIRECT"
-        ? `/api/tiles/${z}/${wx}/${y}.png`
-        : `https://tile.openstreetmap.org/${z}/${wx}/${y}.png`;
-      state.map.tileCache.set(key, entry);
-      if (state.map.tileCache.size > 180) {
-        state.map.tileCache.delete(state.map.tileCache.keys().next().value);
-      }
+      const entry = { img: new Image(), loaded: false };
+      state.map.tileCache.set(memKey, entry);
+      if (state.map.tileCache.size > 180) state.map.tileCache.delete(state.map.tileCache.keys().next().value);
+
+      (async () => {
+        // 1. Check IndexedDB offline cache first
+        const idbBlob = await idbGetTile(key);
+        if (idbBlob) {
+          const objUrl = URL.createObjectURL(idbBlob);
+          entry.img.onload = () => { entry.loaded = true; drawMap(); URL.revokeObjectURL(objUrl); };
+          entry.img.src = objUrl;
+          return;
+        }
+        // 2. Fetch from local Android host or OSM and store in IndexedDB
+        const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${y}.png` : `https://tile.openstreetmap.org/${z}/${wx}/${y}.png`;
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const blob = await res.blob();
+          idbPutTile(key, blob);
+          const objUrl = URL.createObjectURL(blob);
+          entry.img.onload = () => { entry.loaded = true; drawMap(); URL.revokeObjectURL(objUrl); };
+          entry.img.src = objUrl;
+        } catch (_) {}
+      })();
       return null;
     }
+
+    document.getElementById("mapCacheBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("mapCacheBtn");
+      btn.textContent = "⏳ Caching...";
+      const zBase = state.map.zoom;
+      let savedCount = 0;
+      for (const z of [Math.max(10, zBase - 1), zBase, Math.min(15, zBase + 1)]) {
+        const c = latLonToTile(state.map.lat, state.map.lng, z);
+        const cx = Math.floor(c.x), cy = Math.floor(c.y), maxT = 1 << z;
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const wx = ((cx + dx) % maxT + maxT) % maxT, wy = cy + dy;
+            if (wy < 0 || wy >= maxT) continue;
+            const key = `${z}/${wx}/${wy}`;
+            if (await idbGetTile(key)) { savedCount++; continue; }
+            const url = state.mode === "LOCAL_DIRECT" ? `/api/tiles/${z}/${wx}/${wy}.png` : `https://tile.openstreetmap.org/${z}/${wx}/${wy}.png`;
+            try {
+              const res = await fetch(url);
+              if (res.ok) { await idbPutTile(key, await res.blob()); savedCount++; }
+            } catch (_) {}
+          }
+        }
+      }
+      btn.textContent = `✓ ${savedCount} tiles`;
+      logLine("MAP", `Cached ${savedCount} offline tiles in browser IndexedDB for iPhone/offline use.`);
+      setTimeout(() => { btn.textContent = "📥 Cache"; }, 2500);
+    });
 
     function resizeMapCanvas() {
       const rect = mapCanvas.parentElement.getBoundingClientRect();
@@ -1960,27 +2227,20 @@
     }
 
     function drawMap() {
-      const w = mapCanvas.clientWidth;
-      const h = mapCanvas.clientHeight;
+      const w = mapCanvas.clientWidth, h = mapCanvas.clientHeight;
       if (!w || !h) return;
-
       const isLight = document.documentElement.getAttribute("data-theme") === "light";
       mctx.fillStyle = isLight ? "#cde8f8" : "#041320";
       mctx.fillRect(0, 0, w, h);
 
-      const z = state.map.zoom;
-      const center = latLonToTile(state.map.lat, state.map.lng, z);
-      const tileSize = 256;
-      const startX = Math.floor(center.x - (w / 2) / tileSize) - 1;
-      const endX = Math.ceil(center.x + (w / 2) / tileSize) + 1;
-      const startY = Math.floor(center.y - (h / 2) / tileSize) - 1;
-      const endY = Math.ceil(center.y + (h / 2) / tileSize) + 1;
+      const z = state.map.zoom, center = latLonToTile(state.map.lat, state.map.lng, z), tileSize = 256;
+      const startX = Math.floor(center.x - (w / 2) / tileSize) - 1, endX = Math.ceil(center.x + (w / 2) / tileSize) + 1;
+      const startY = Math.floor(center.y - (h / 2) / tileSize) - 1, endY = Math.ceil(center.y + (h / 2) / tileSize) + 1;
 
       let anyTile = false;
       for (let tx = startX; tx <= endX; tx++) {
         for (let ty = startY; ty <= endY; ty++) {
-          const px = Math.floor(w / 2 + (tx - center.x) * tileSize);
-          const py = Math.floor(h / 2 + (ty - center.y) * tileSize);
+          const px = Math.floor(w / 2 + (tx - center.x) * tileSize), py = Math.floor(h / 2 + (ty - center.y) * tileSize);
           const img = getTileImage(z, tx, ty);
           if (img) {
             anyTile = true;
@@ -1989,101 +2249,62 @@
             mctx.drawImage(img, px, py, tileSize, tileSize);
             mctx.restore();
           } else {
-            // Tactical radar grid fallback when tile is offline/uncached
             mctx.strokeStyle = isLight ? "rgba(0,136,230,0.16)" : "rgba(56,207,255,0.13)";
             mctx.lineWidth = 1;
             mctx.strokeRect(px, py, tileSize, tileSize);
-            mctx.beginPath();
-            mctx.moveTo(px + tileSize / 2, py); mctx.lineTo(px + tileSize / 2, py + tileSize);
-            mctx.moveTo(px, py + tileSize / 2); mctx.lineTo(px + tileSize, py + tileSize / 2);
-            mctx.stroke();
           }
         }
       }
-
-      // Subtle radar rings around center when no tiles loaded
       if (!anyTile) {
         mctx.strokeStyle = isLight ? "rgba(0,136,230,0.22)" : "rgba(25,230,140,0.18)";
-        mctx.lineWidth = 1.2;
-        [70, 140, 210].forEach((r) => {
-          mctx.beginPath();
-          mctx.arc(w / 2, h / 2, r, 0, Math.PI * 2);
-          mctx.stroke();
-        });
+        [70, 140, 210].forEach((r) => { mctx.beginPath(); mctx.arc(w / 2, h / 2, r, 0, Math.PI * 2); mctx.stroke(); });
       }
 
-      function project(lat, lng) {
+      const project = (lat, lng) => {
         const t = latLonToTile(lat, lng, z);
         return { x: w / 2 + (t.x - center.x) * tileSize, y: h / 2 + (t.y - center.y) * tileSize };
-      }
-
-      // Draw Waypoints
+      };
       const wpColors = { RALLY: "#19E68C", HAZARD: "#FF4D6D", SUPPLY: "#FFB02E", SOS: "#FF1744", CAMP: "#38CFFF", WATER: "#00E5FF" };
       for (const wp of state.waypoints.values()) {
         if (!wp.latitude && !wp.longitude) continue;
         const pt = project(wp.latitude, wp.longitude);
-        const col = wpColors[wp.type] || "#19E68C";
-        mctx.fillStyle = col;
+        mctx.fillStyle = wpColors[wp.type] || "#19E68C";
         mctx.beginPath();
-        mctx.moveTo(pt.x, pt.y - 12);
-        mctx.lineTo(pt.x + 8, pt.y);
-        mctx.lineTo(pt.x, pt.y + 8);
-        mctx.lineTo(pt.x - 8, pt.y);
-        mctx.closePath();
-        mctx.fill();
+        mctx.moveTo(pt.x, pt.y - 12); mctx.lineTo(pt.x + 8, pt.y); mctx.lineTo(pt.x, pt.y + 8); mctx.lineTo(pt.x - 8, pt.y);
+        mctx.closePath(); mctx.fill();
         mctx.font = "bold 11px monospace";
         mctx.fillStyle = isLight ? "#072A44" : "#F0F9FF";
         mctx.fillText(`${wp.type}: ${wp.title}`, pt.x + 11, pt.y + 4);
       }
-
-      // Draw Peer Nodes
       for (const n of state.nodes.values()) {
         if (!n.latitude && !n.longitude) continue;
         const pt = project(n.latitude, n.longitude);
-        mctx.fillStyle = "rgba(56, 207, 255, 0.22)";
-        mctx.beginPath(); mctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2); mctx.fill();
-        mctx.fillStyle = "#38CFFF";
-        mctx.beginPath(); mctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); mctx.fill();
-        mctx.font = "bold 11px monospace";
-        mctx.fillStyle = isLight ? "#072A44" : "#F0F9FF";
+        mctx.fillStyle = "rgba(56, 207, 255, 0.22)"; mctx.beginPath(); mctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2); mctx.fill();
+        mctx.fillStyle = "#38CFFF"; mctx.beginPath(); mctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); mctx.fill();
+        mctx.font = "bold 11px monospace"; mctx.fillStyle = isLight ? "#072A44" : "#F0F9FF";
         mctx.fillText(n.callsign || n.id, pt.x + 10, pt.y - 2);
       }
-
-      // Draw Self GPS
       if (state.lat != null && state.lng != null) {
         const pt = project(state.lat, state.lng);
-        mctx.fillStyle = "rgba(25, 230, 140, 0.26)";
-        mctx.beginPath(); mctx.arc(pt.x, pt.y, 16, 0, Math.PI * 2); mctx.fill();
-        mctx.fillStyle = "#19E68C";
-        mctx.beginPath(); mctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2); mctx.fill();
+        mctx.fillStyle = "rgba(25, 230, 140, 0.26)"; mctx.beginPath(); mctx.arc(pt.x, pt.y, 16, 0, Math.PI * 2); mctx.fill();
+        mctx.fillStyle = "#19E68C"; mctx.beginPath(); mctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2); mctx.fill();
         mctx.strokeStyle = "#fff"; mctx.lineWidth = 2; mctx.stroke();
-        mctx.font = "bold 11px monospace";
-        mctx.fillStyle = "#19E68C";
+        mctx.font = "bold 11px monospace"; mctx.fillStyle = "#19E68C";
         mctx.fillText(state.callsign + " (YOU)", pt.x + 11, pt.y + 4);
       }
-
-      document.getElementById("mapCoordsHud").textContent =
-        `Center: ${state.map.lat.toFixed(4)}, ${state.map.lng.toFixed(4)} • Z${z}`;
+      document.getElementById("mapCoordsHud").textContent = `Center: ${state.map.lat.toFixed(4)}, ${state.map.lng.toFixed(4)} • Z${z}`;
     }
 
-    // Map Pointer Pan & Tap-to-Pin
     mapCanvas.addEventListener("pointerdown", (e) => {
-      state.map.dragging = true;
-      state.map.dragMoved = false;
-      state.map.dragStartX = e.clientX;
-      state.map.dragStartY = e.clientY;
+      state.map.dragging = true; state.map.dragMoved = false;
+      state.map.dragStartX = e.clientX; state.map.dragStartY = e.clientY;
       mapCanvas.setPointerCapture(e.pointerId);
     });
     mapCanvas.addEventListener("pointermove", (e) => {
       if (!state.map.dragging) return;
-      const dx = e.clientX - state.map.dragStartX;
-      const dy = e.clientY - state.map.dragStartY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        state.map.dragMoved = true;
-        state.map.userMoved = true;
-      }
-      state.map.dragStartX = e.clientX;
-      state.map.dragStartY = e.clientY;
+      const dx = e.clientX - state.map.dragStartX, dy = e.clientY - state.map.dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { state.map.dragMoved = true; state.map.userMoved = true; }
+      state.map.dragStartX = e.clientX; state.map.dragStartY = e.clientY;
       const center = latLonToTile(state.map.lat, state.map.lng, state.map.zoom);
       const next = tileToLatLon(center.x - dx / 256, center.y - dy / 256, state.map.zoom);
       state.map.lat = Math.max(-84, Math.min(84, next.lat));
@@ -2094,10 +2315,8 @@
       state.map.dragging = false;
       if (!state.map.dragMoved) {
         const rect = mapCanvas.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
         const center = latLonToTile(state.map.lat, state.map.lng, state.map.zoom);
-        const ll = tileToLatLon(center.x + (cx - rect.width / 2) / 256, center.y + (cy - rect.height / 2) / 256, state.map.zoom);
+        const ll = tileToLatLon(center.x + (e.clientX - rect.left - rect.width / 2) / 256, center.y + (e.clientY - rect.top - rect.height / 2) / 256, state.map.zoom);
         openWaypointModal(ll.lat, ll.lon);
       }
     });
@@ -2108,48 +2327,31 @@
     }, { passive: false });
 
     function openWaypointModal(lat, lng) {
-      state.map.pendingPinLat = lat;
-      state.map.pendingPinLng = lng;
+      state.map.pendingPinLat = lat; state.map.pendingPinLng = lng;
       document.getElementById("wpTitle").value = "";
       document.getElementById("wpCoordsPreview").value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       document.getElementById("waypointModal").classList.add("open");
     }
-
     document.getElementById("mapZoomIn").addEventListener("click", () => { state.map.zoom = Math.min(17, state.map.zoom + 1); drawMap(); });
     document.getElementById("mapZoomOut").addEventListener("click", () => { state.map.zoom = Math.max(2, state.map.zoom - 1); drawMap(); });
     document.getElementById("mapDropPinBtn").addEventListener("click", () => openWaypointModal(state.map.lat, state.map.lng));
     document.getElementById("wpCancelBtn").addEventListener("click", () => document.getElementById("waypointModal").classList.remove("open"));
     document.getElementById("wpSaveBtn").addEventListener("click", async () => {
-      const title = document.getElementById("wpTitle").value.trim() || "Tactical Pin";
-      const type = document.getElementById("wpType").value;
       const wp = {
-        id: "wp_" + Date.now(),
-        title,
-        type,
-        latitude: state.map.pendingPinLat,
-        longitude: state.map.pendingPinLng,
-        creatorCallsign: state.callsign,
-        timestamp: Date.now()
+        id: "wp_" + Date.now(), title: document.getElementById("wpTitle").value.trim() || "Tactical Pin",
+        type: document.getElementById("wpType").value, latitude: state.map.pendingPinLat, longitude: state.map.pendingPinLng,
+        creatorCallsign: state.callsign, timestamp: Date.now()
       };
       document.getElementById("waypointModal").classList.remove("open");
       await sendMeshAction({ type: "WAYPOINT", wp }).catch((e) => logLine("ERR", e.message));
     });
-
     document.getElementById("mapGpsBtn").addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        logLine("GPS", "Geolocation API not available in this browser.");
-        return;
-      }
+      if (!navigator.geolocation) { logLine("GPS", "Geolocation unavailable."); return; }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          state.lat = pos.coords.latitude;
-          state.lng = pos.coords.longitude;
-          state.map.lat = state.lat;
-          state.map.lng = state.lng;
-          state.map.zoom = Math.max(state.map.zoom, 14);
-          drawMap();
-          sendPresencePing();
-          logLine("GPS", `Locked ${state.lat.toFixed(5)}, ${state.lng.toFixed(5)}`);
+          state.lat = pos.coords.latitude; state.lng = pos.coords.longitude;
+          state.map.lat = state.lat; state.map.lng = state.lng; state.map.zoom = Math.max(state.map.zoom, 14);
+          drawMap(); sendPresencePing(); logLine("GPS", `Locked ${state.lat.toFixed(5)}, ${state.lng.toFixed(5)}`);
         },
         (err) => logLine("GPS", "Location denied or requires HTTPS: " + err.message),
         { enableHighAccuracy: true, timeout: 8000 }
@@ -2157,14 +2359,9 @@
     });
 
     // =========================================================================
-    // PTT MICROPHONE (8 kHz -> 4 kHz G.711 MU-LAW) & ALERT TONE
+    // PTT MICROPHONE & ALERT TONE
     // =========================================================================
-    let pttActive = false;
-    let pttStream = null;
-    let pttProcessor = null;
-    let pttSourceNode = null;
-    let pttSampleBuf = [];
-
+    let pttActive = false, pttStream = null, pttProcessor = null, pttSourceNode = null, pttSampleBuf = [];
     const hasMicApi = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     document.getElementById("micCapabilityHint").textContent = hasMicApi
       ? "Microphone capture ready (G.711 μ-law 4kHz/8kHz compatible with Android PulseMesh)"
@@ -2173,10 +2370,8 @@
     async function startPttTx() {
       if (pttActive) return;
       pttActive = true;
-      const btn = document.getElementById("pttBtn");
-      btn.classList.add("tx");
+      document.getElementById("pttBtn").classList.add("tx");
       document.getElementById("pttBtnLabel").textContent = "TRANSMITTING...";
-
       if (!hasMicApi) {
         document.getElementById("voiceStatusBox").textContent = "📡 TX ALERT TONE (Plain HTTP Mic Fallback)";
         await sendSyntheticAlertTone();
@@ -2190,13 +2385,11 @@
         pttSampleBuf = [];
         const step = ctx.sampleRate / 4000;
         let phase = 0;
-
         pttProcessor.onaudioprocess = (ev) => {
           if (!pttActive) return;
           const input = ev.inputBuffer.getChannelData(0);
           while (phase < input.length) {
-            const idx = Math.floor(phase);
-            const s16 = Math.max(-32768, Math.min(32767, Math.round(input[idx] * 32767 * 1.4)));
+            const s16 = Math.max(-32768, Math.min(32767, Math.round(input[Math.floor(phase)] * 32767 * 1.4)));
             pttSampleBuf.push(pcm16ToMuLaw(s16));
             phase += step;
           }
@@ -2208,40 +2401,33 @@
         };
         pttSourceNode.connect(pttProcessor);
         pttProcessor.connect(ctx.destination);
-        document.getElementById("voiceStatusBox").textContent = "🔴 LIVE PTT TX — STREAMING G.711 μ-LAW FRAMES";
+        document.getElementById("voiceStatusBox").textContent = "🔴 LIVE PTT TX — STREAMING G.711 μ-LAW";
       } catch (e) {
         logLine("VOICE", "Mic error: " + e.message);
-        document.getElementById("voiceStatusBox").textContent = "Mic permission denied — tap Ping Tone or Quick Callout";
         stopPttTx();
       }
     }
-
     function stopPttTx() {
       if (!pttActive) return;
       pttActive = false;
       document.getElementById("pttBtn").classList.remove("tx");
       document.getElementById("pttBtnLabel").textContent = "HOLD TO TALK";
-      document.getElementById("voiceStatusBox").textContent = "STANDBY • HOLD PTT OR SPACEBAR TO TRANSMIT";
+      document.getElementById("voiceStatusBox").textContent = "STANDBY • HOLD PTT TO TRANSMIT";
       try { if (pttProcessor) pttProcessor.disconnect(); } catch (_) {}
       try { if (pttSourceNode) pttSourceNode.disconnect(); } catch (_) {}
       try { if (pttStream) pttStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
       pttProcessor = null; pttSourceNode = null; pttStream = null;
     }
-
     async function sendSyntheticAlertTone() {
       const slice = new Uint8Array(640);
-      for (let i = 0; i < 640; i++) {
-        const s = Math.sin(2 * Math.PI * 880 * (i / 4000)) * 18000;
-        slice[i] = pcm16ToMuLaw(s);
-      }
+      for (let i = 0; i < 640; i++) slice[i] = pcm16ToMuLaw(Math.sin(2 * Math.PI * 880 * (i / 4000)) * 18000);
       const b64 = bytesToB64(slice);
       playMuLawBase64(b64);
       await sendMeshAction({ type: "VOICE_PTT", payload: b64 }).catch(() => {});
       logLine("VOICE", "Broadcast 880 Hz tactical ping tone");
     }
 
-    const pttBtn = document.getElementById("pttBtn");
-    pttBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); startPttTx(); });
+    document.getElementById("pttBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); startPttTx(); });
     window.addEventListener("pointerup", stopPttTx);
     window.addEventListener("pointercancel", stopPttTx);
     document.getElementById("voiceToneBtn").addEventListener("click", sendSyntheticAlertTone);
@@ -2250,26 +2436,60 @@
       e.target.textContent = state.voiceRxEnabled ? "🔊 RX Audio: ON" : "🔇 RX Audio: MUTED";
     });
     document.querySelectorAll(".quick-macro").forEach((b) => {
-      b.addEventListener("click", () => {
-        sendMeshAction({ type: "CHAT", threadId: "channel_primary", text: b.getAttribute("data-msg") }).catch(() => {});
-        logLine("PTT", "Sent quick callout: " + b.getAttribute("data-msg"));
-      });
+      b.addEventListener("click", () => sendMeshAction({ type: "CHAT", threadId: "channel_primary", text: b.getAttribute("data-msg") }).catch(() => {}));
     });
 
     // =========================================================================
-    // CHAT, PHOTO, SOS, TABS & SETTINGS HANDLERS
+    // SETUP OVERLAY, CHAT, PHOTO, SOS & SETTINGS HANDLERS
     // =========================================================================
+    function openSetupOverlay(tab = "quick") {
+      document.getElementById("wizCallsign").value = state.callsign;
+      document.getElementById("wizPassphrase").value = state.passphrase;
+      document.getElementById("wizLocMode").value = state.locationMode;
+      document.getElementById("wizTheme").value = document.documentElement.getAttribute("data-theme") || "dark";
+      switchSetupTab(tab);
+      document.getElementById("setupOverlay").classList.add("open");
+    }
+    function closeSetupOverlay() {
+      document.getElementById("setupOverlay").classList.remove("open");
+      setTimeout(resizeMapCanvas, 30);
+    }
+    function switchSetupTab(name) {
+      document.querySelectorAll(".setup-tab-btn").forEach((b) => b.classList.toggle("active", b.getAttribute("data-spane") === name));
+      document.querySelectorAll(".setup-pane").forEach((p) => p.classList.toggle("active", p.id === "spane-" + name));
+    }
+    document.querySelectorAll(".setup-tab-btn").forEach((b) => b.addEventListener("click", () => switchSetupTab(b.getAttribute("data-spane"))));
+    document.getElementById("openSetupFromTop").addEventListener("click", () => openSetupOverlay("quick"));
+    document.getElementById("openSetupWizardBtn").addEventListener("click", () => openSetupOverlay("login"));
+    document.getElementById("wizSkipBtn").addEventListener("click", () => {
+      state.setupDone = true; saveConfig({ setupDone: true }); closeSetupOverlay();
+    });
+    document.getElementById("wizContinueFromIphoneBtn").addEventListener("click", () => {
+      state.setupDone = true; saveConfig({ setupDone: true }); closeSetupOverlay();
+    });
+    document.getElementById("wizFinishQuickBtn").addEventListener("click", async () => {
+      state.callsign = document.getElementById("wizCallsign").value.trim() || state.callsign;
+      state.passphrase = document.getElementById("wizPassphrase").value.trim() || "pulsemesh-tactical";
+      state.locationMode = document.getElementById("wizLocMode").value;
+      const th = document.getElementById("wizTheme").value;
+      document.documentElement.setAttribute("data-theme", th);
+      localStorage.setItem("pulsemesh-theme", th);
+      syncThemeBtn();
+      state.setupDone = true;
+      saveConfig({ setupDone: true, callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode });
+      syncSettingsInputs();
+      renderPeersAndHeader();
+      closeSetupOverlay();
+      if (state.mode === "HYBRID_NTFY") await startHybridNtfyMode();
+      else await sendPresencePing();
+    });
+
     document.getElementById("chatForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const input = document.getElementById("chatInput");
-      const text = input.value.trim();
+      const input = document.getElementById("chatInput"), text = input.value.trim();
       if (!text) return;
       input.value = "";
-      try {
-        await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text });
-      } catch (err) {
-        logLine("ERR", "Send failed: " + err.message);
-      }
+      await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text }).catch((err) => logLine("ERR", err.message));
     });
 
     document.getElementById("photoInput").addEventListener("change", (e) => {
@@ -2279,17 +2499,13 @@
       reader.onload = () => {
         const img = new Image();
         img.onload = async () => {
-          const maxDim = 200;
-          const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+          const maxDim = 200, scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
           const c = document.createElement("canvas");
           c.width = Math.max(1, Math.round(img.width * scale));
           c.height = Math.max(1, Math.round(img.height * scale));
           c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-          const dataUrl = c.toDataURL("image/jpeg", 0.55);
-          const b64 = dataUrl.split(",")[1] || "";
-          if (b64) {
-            await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text: `[[PM_IMAGE]]:${b64}` }).catch(() => {});
-          }
+          const b64 = c.toDataURL("image/jpeg", 0.55).split(",")[1] || "";
+          if (b64) await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text: `[[PM_IMAGE]]:${b64}` }).catch(() => {});
         };
         img.src = reader.result;
       };
@@ -2308,46 +2524,41 @@
     document.getElementById("topSosBtn").addEventListener("click", triggerSos);
     document.getElementById("voiceSosBtn").addEventListener("click", triggerSos);
     document.getElementById("cancelSosBtn").addEventListener("click", () => {
-      state.isSosActive = false;
-      document.getElementById("sosBanner").classList.remove("active");
+      state.isSosActive = false; document.getElementById("sosBanner").classList.remove("active");
     });
 
     function switchTab(tabName) {
       document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
       document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-      const target = document.getElementById("tab-" + tabName);
-      if (target) target.classList.add("active");
-      const nav = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
-      if (nav) nav.classList.add("active");
+      document.getElementById("tab-" + tabName)?.classList.add("active");
+      document.querySelector(`.nav-btn[data-tab="${tabName}"]`)?.classList.add("active");
       if (tabName === "map") setTimeout(resizeMapCanvas, 30);
       if (tabName === "chat") renderMessages();
     }
     document.querySelectorAll(".nav-btn").forEach((b) => b.addEventListener("click", () => switchTab(b.getAttribute("data-tab"))));
-
     document.getElementById("openSidebarBtn").addEventListener("click", () => document.getElementById("chatSidebar").classList.add("open"));
     document.getElementById("closeSidebarBtn").addEventListener("click", () => document.getElementById("chatSidebar").classList.remove("open"));
 
-    // Theme toggle
     const themeBtn = document.getElementById("themeToggleBtn");
     const savedTheme = localStorage.getItem("pulsemesh-theme");
     if (savedTheme === "light" || savedTheme === "dark") document.documentElement.setAttribute("data-theme", savedTheme);
     function syncThemeBtn() {
-      const cur = document.documentElement.getAttribute("data-theme") || "dark";
-      themeBtn.textContent = cur === "dark" ? "☀ Aero" : "☾ Dark";
+      themeBtn.textContent = (document.documentElement.getAttribute("data-theme") || "dark") === "dark" ? "☀ Aero" : "☾ Dark";
     }
     syncThemeBtn();
     themeBtn.addEventListener("click", () => {
       const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", next);
       localStorage.setItem("pulsemesh-theme", next);
-      syncThemeBtn();
-      drawMap();
+      syncThemeBtn(); drawMap();
     });
 
-    // Settings
-    document.getElementById("setCallsign").value = state.callsign;
-    document.getElementById("setPassphrase").value = state.passphrase;
-    document.getElementById("setLocMode").value = state.locationMode;
+    function syncSettingsInputs() {
+      document.getElementById("setCallsign").value = state.callsign;
+      document.getElementById("setPassphrase").value = state.passphrase;
+      document.getElementById("setLocMode").value = state.locationMode;
+    }
+    syncSettingsInputs();
 
     document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
       state.callsign = document.getElementById("setCallsign").value.trim() || state.callsign;
@@ -2355,32 +2566,22 @@
       state.locationMode = document.getElementById("setLocMode").value;
       saveConfig({ callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode });
       renderPeersAndHeader();
-      if (state.mode === "HYBRID_NTFY") {
-        await startHybridNtfyMode();
-      } else {
-        await sendPresencePing();
-      }
+      if (state.mode === "HYBRID_NTFY") await startHybridNtfyMode();
+      else await sendPresencePing();
       logLine("SETUP", "Saved operator profile & reconnected.");
     });
-
     document.getElementById("regenKeysBtn").addEventListener("click", async () => {
-      await ensureEcdhKeys(true);
-      renderPeersAndHeader();
-      await sendPresencePing();
+      await ensureEcdhKeys(true); renderPeersAndHeader(); await sendPresencePing();
     });
-    document.getElementById("pingMeshBtn").addEventListener("click", () => {
-      sendPresencePing();
-      logLine("PING", "Presence beacon transmitted.");
-    });
+    document.getElementById("pingMeshBtn").addEventListener("click", () => { sendPresencePing(); logLine("PING", "Presence beacon sent."); });
     document.getElementById("openLocalPortalBtn").addEventListener("click", () => {
       const url = document.getElementById("localHostUrlInput").value.trim();
       if (url) window.location.href = url;
     });
-
     window.addEventListener("resize", resizeMapCanvas);
 
     // =========================================================================
-    // BOOTSTRAP: AUTO-DETECT WI-FI DIRECT ANDROID HOST VS WEBSITE RELAY
+    // BOOTSTRAP
     // =========================================================================
     async function boot() {
       await ensureEcdhKeys(false);
@@ -2389,7 +2590,10 @@
       renderMessages();
       resizeMapCanvas();
 
-      // Probe /api/info on same origin (fast 1.5s timeout)
+      if (!state.setupDone) {
+        openSetupOverlay("quick");
+      }
+
       let localInfo = null;
       try {
         const ctrl = new AbortController();
@@ -2402,11 +2606,8 @@
         }
       } catch (_) {}
 
-      if (localInfo) {
-        await startLocalDirectMode(localInfo);
-      } else {
-        await startHybridNtfyMode();
-      }
+      if (localInfo) await startLocalDirectMode(localInfo);
+      else await startHybridNtfyMode();
     }
 
     boot();

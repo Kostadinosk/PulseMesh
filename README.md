@@ -6,16 +6,16 @@
 
 **Off-Grid Peer-to-Peer Android Mesh Messenger, Full-Duplex Voice Communicator & Tactical Offline Map**
 
-[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2)
-[![Platform](https://img.shields.io/badge/Android-7.0%2B%20(API%2024--36)-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2)
+[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2.1)
+[![Platform](https://img.shields.io/badge/Android%20%2B%20iPhone%20PWA-API%2024--36%20%7C%20iOS%20Safari-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.2.1)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://github.com/Kostadinosk/PulseMesh)
 [![Encryption](https://img.shields.io/badge/Crypto-ECDH%20P--256%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-0088E6?style=flat-square)](LICENSE)
 
 [**Live Website**](https://kostadinosk.github.io/PulseMesh/) &bull;
-[**PulseMesh Web Node**](https://kostadinosk.github.io/PulseMesh/web/) &bull;
-[**Download Release APK (v1.2)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-release.apk) &bull;
-[**Download Debug APK (v1.2)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2/app-debug.apk) &bull;
+[**iPhone PWA & Web Node**](https://kostadinosk.github.io/PulseMesh/web/) &bull;
+[**Download Release APK (v1.2.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2.1/app-release.apk) &bull;
+[**Download Debug APK (v1.2.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.2.1/app-debug.apk) &bull;
 [**Contact & Field Reports**](https://kostadinosk.github.io/PulseMesh/contact.html) &bull;
 [**Report an Issue**](https://github.com/Kostadinosk/PulseMesh/issues)
 

@@ -6505,7 +6505,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2")
+            put("version", "1.2.1")
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)

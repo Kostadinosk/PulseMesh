@@ -1,0 +1,20 @@
+{
+  "name": "PulseMesh — Off-Grid & Hybrid Mesh Node",
+  "short_name": "PulseMesh",
+  "description": "Off-grid tactical mesh chat, E2EE groups & DMs, walkie-talkie PTT, and offline EPSG:3857 map for iPhone, iPad, Android, and desktop browsers.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#041320",
+  "theme_color": "#041320",
+  "categories": ["communication", "navigation", "utilities"],
+  "icons": [
+    {
+      "src": "../assets/pulsemesh-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

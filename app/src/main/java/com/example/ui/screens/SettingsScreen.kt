@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -809,7 +810,8 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // v1.2 Wi-Fi Direct Embedded Web Portal Card (Visible in both Simple & Pro modes)
+                // v1.2.1 Wi-Fi Direct Embedded Web Portal & Official iPhone QR Join Card (Visible in both Simple & Pro modes)
+                var showIphoneQrDialog by remember { mutableStateOf(false) }
                 Surface(
                     color = p.surfaceVariant,
                     shape = RoundedCornerShape(10.dp),
@@ -832,7 +834,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.2 WI-FI DIRECT WEB PORTAL",
+                                    text = "v1.2.1 WI-FI DIRECT PORTAL & iPHONE QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -841,9 +843,9 @@ fun SettingsScreen(
                                 )
                                 Text(
                                     text = if (state.webPortalStatus.isRunning) {
-                                        "ACTIVE • ${state.webPortalStatus.activeClientCount} browser client(s) linked"
+                                        "ACTIVE • ${state.webPortalStatus.activeClientCount} browser/iPhone client(s) linked"
                                     } else {
-                                        "Auto-hosts the full PulseMesh Web Node when Wi-Fi Direct / Hotspot starts"
+                                        "Auto-hosts the PulseMesh Web/iPhone PWA when Wi-Fi Direct / Hotspot starts"
                                     },
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = p.textSecondary,
@@ -871,47 +873,197 @@ fun SettingsScreen(
                                 border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldMeshDim),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = state.webPortalStatus.portalUrl,
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                color = EmeraldMesh,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = state.webPortalStatus.portalUrl,
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    color = EmeraldMesh,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
                                             )
-                                        )
-                                        Text(
-                                            text = "Join this phone's Wi-Fi Direct / Hotspot & open URL in any browser (zero internet)",
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                color = p.textSecondary,
-                                                fontSize = 9.sp
-                                            )
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                            cm?.setPrimaryClip(
-                                                android.content.ClipData.newPlainText(
-                                                    "PulseMesh Web Portal URL",
-                                                    state.webPortalStatus.portalUrl
+                                            Text(
+                                                text = "Scan 2-step QR on iPhone or open URL in any browser (zero internet)",
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    color = p.textSecondary,
+                                                    fontSize = 9.sp
                                                 )
                                             )
                                         }
+                                        TextButton(
+                                            onClick = {
+                                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                cm?.setPrimaryClip(
+                                                    android.content.ClipData.newPlainText(
+                                                        "PulseMesh Web Portal URL",
+                                                        state.webPortalStatus.portalUrl
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = { showIphoneQrDialog = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = EmeraldMesh,
+                                            contentColor = Color.Black
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("show_iphone_qr_button")
                                     ) {
-                                        Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            "SHOW iPHONE 2-STEP QR CODES (WI-FI + PORTAL)",
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
                         }
                     }
+                }
+
+                if (showIphoneQrDialog && state.webPortalStatus.portalUrl.isNotBlank()) {
+                    val hasWifiCreds = state.hotspotState.ssid.isNotBlank()
+                    val wifiPayload = remember(state.hotspotState.ssid, state.hotspotState.passphrase) {
+                        if (hasWifiCreds) {
+                            com.example.util.QrCodeGenerator.buildWifiJoinPayload(
+                                state.hotspotState.ssid,
+                                state.hotspotState.passphrase
+                            )
+                        } else ""
+                    }
+                    val wifiQrBmp = remember(wifiPayload) {
+                        if (wifiPayload.isNotBlank()) {
+                            com.example.util.QrCodeGenerator.generateBitmap(wifiPayload, 360)?.asImageBitmap()
+                        } else null
+                    }
+                    val urlQrBmp = remember(state.webPortalStatus.portalUrl) {
+                        com.example.util.QrCodeGenerator.generateBitmap(state.webPortalStatus.portalUrl, 360)?.asImageBitmap()
+                    }
+                    var qrStep by remember { mutableStateOf(if (wifiQrBmp != null) 1 else 2) }
+
+                    AlertDialog(
+                        onDismissRequest = { showIphoneQrDialog = false },
+                        containerColor = p.card,
+                        title = {
+                            Text(
+                                text = "iPHONE & BROWSER QR JOIN",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    color = EmeraldMesh,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            )
+                        },
+                        text = {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (wifiQrBmp != null) {
+                                        OutlinedButton(
+                                            onClick = { qrStep = 1 },
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                if (qrStep == 1) EmeraldMesh else p.border
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("1. JOIN WI-FI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (qrStep == 1) EmeraldMesh else p.textSecondary)
+                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { qrStep = 2 },
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (qrStep == 2) CyanGateway else p.border
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("2. OPEN APP", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (qrStep == 2) CyanGateway else p.textSecondary)
+                                    }
+                                }
+
+                                val activeBmp = if (qrStep == 1 && wifiQrBmp != null) wifiQrBmp else urlQrBmp
+                                if (activeBmp != null) {
+                                    Surface(
+                                        color = Color.White,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.size(220.dp)
+                                    ) {
+                                        androidx.compose.foundation.Image(
+                                            bitmap = activeBmp,
+                                            contentDescription = "PulseMesh QR Code",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(8.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = if (qrStep == 1 && wifiQrBmp != null) {
+                                        "Step 1: Point iPhone Camera here to join Wi-Fi \"${state.hotspotState.ssid}\" (Pass: ${state.hotspotState.passphrase.ifBlank { "Open" }}), then tap Step 2."
+                                    } else {
+                                        "Step 2: Point iPhone Camera here to open ${state.webPortalStatus.portalUrl} offline in Safari (Share -> Add to Home Screen for app icon)."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = p.textSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            if (qrStep == 1 && wifiQrBmp != null) {
+                                Button(
+                                    onClick = { qrStep = 2 },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black)
+                                ) {
+                                    Text("Next: Portal QR", fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = { showIphoneQrDialog = false },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black)
+                                ) {
+                                    Text("Done", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showIphoneQrDialog = false }) {
+                                Text("Close", color = p.textSecondary)
+                            }
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -2329,7 +2481,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.2.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,
