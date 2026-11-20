@@ -35,6 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPOutputStream
 
 data class WebPortalStatus(
     val isRunning: Boolean = false,
@@ -42,9 +43,12 @@ data class WebPortalStatus(
     val hostIp: String = "",
     val portalUrl: String = "",
     val allReachableUrls: List<String> = emptyList(),
+    val labeledReachableUrls: List<Pair<String, String>> = emptyList(),
     val activeClientCount: Int = 0,
     val selfTestPassed: Boolean = false,
+    val lanSelfTestPassed: Boolean = false,
     val requestsServed: Int = 0,
+    val bindError: String = "",
     val statusMessage: String = "Wi-Fi Direct Web Portal Idle"
 )
 
@@ -107,7 +111,10 @@ class PulseMeshWebServer(
     private val running = AtomicBoolean(false)
     private val starting = AtomicBoolean(false)
     private val selfTestPassed = AtomicBoolean(false)
+    private val lanSelfTestPassed = AtomicBoolean(false)
     private val requestsServed = AtomicInteger(0)
+    @Volatile
+    private var lastBindError: String = ""
     @Volatile
     private var serverSocket: ServerSocket? = null
     @Volatile
@@ -116,7 +123,8 @@ class PulseMeshWebServer(
     private var preferredHostIp: String = ""
 
     private var startJob: Job? = null
-    private var acceptJob: Job? = null
+    @Volatile
+    private var acceptThread: Thread? = null
     private var maintenanceJob: Job? = null
     private val workerExecutor = Executors.newCachedThreadPool()
 
@@ -133,6 +141,14 @@ class PulseMeshWebServer(
         }.getOrElse {
             "<html><body><h1>PulseMesh Web Portal Asset Missing</h1></body></html>".toByteArray(Charsets.UTF_8)
         }
+    }
+
+    private val cachedHtmlGzipBytes: ByteArray by lazy {
+        runCatching {
+            val baos = ByteArrayOutputStream()
+            GZIPOutputStream(baos).use { gz -> gz.write(cachedHtmlBytes) }
+            baos.toByteArray()
+        }.getOrElse { ByteArray(0) }
     }
 
     private val cachedIconBytes: ByteArray by lazy {
@@ -168,24 +184,32 @@ class PulseMeshWebServer(
         if (hostIpHint.isNotBlank()) {
             preferredHostIp = hostIpHint.trim()
         }
-        if (running.get()) {
-            scope.launch(Dispatchers.IO) { refreshPortalUrl() }
+        if (running.get() && serverSocket?.isClosed == false) {
+            scope.launch(Dispatchers.IO) {
+                refreshPortalUrl()
+                runSelfTestsAsync()
+            }
             return
+        }
+        if (running.get() && serverSocket?.isClosed != false) {
+            running.set(false)
         }
         if (!starting.compareAndSet(false, true)) return
 
         _status.value = _status.value.copy(
-            statusMessage = "Starting Wi-Fi Direct Web Server..."
+            statusMessage = "Starting Local Hotspot Web Server..."
         )
 
         startJob?.cancel()
         startJob = scope.launch(Dispatchers.IO) {
             try {
+                lastBindError = ""
                 val ss = openServerSocket()
                 if (ss == null) {
                     _status.value = WebPortalStatus(
                         isRunning = false,
-                        statusMessage = "Web Portal failed to bind ports 8080-9090"
+                        bindError = lastBindError.ifBlank { "All ports 8080-9090 unavailable" },
+                        statusMessage = "Web Portal failed to bind: ${lastBindError.ifBlank { "ports 8080-9090 busy" }}"
                     )
                     return@launch
                 }
@@ -194,47 +218,61 @@ class PulseMeshWebServer(
                 boundPort = ss.localPort
                 running.set(true)
                 selfTestPassed.set(false)
+                lanSelfTestPassed.set(false)
                 requestsServed.set(0)
                 acquireWifiLock()
                 refreshPortalUrl()
                 registerNsdService(boundPort)
 
-                acceptJob?.cancel()
-                acceptJob = scope.launch(Dispatchers.IO) {
-                    while (isActive && running.get()) {
+                // Dedicated daemon Thread for accept() so coroutine/IO saturation never stalls incoming browser sockets
+                runCatching { acceptThread?.interrupt() }
+                acceptThread = Thread({
+                    while (running.get() && !ss.isClosed) {
                         try {
                             val client = ss.accept()
-                            client.tcpNoDelay = true
+                            runCatching {
+                                client.tcpNoDelay = true
+                                client.sendBufferSize = 65536
+                                client.setSoLinger(true, 4)
+                            }
                             workerExecutor.execute { handleClientSocket(client) }
                         } catch (_: Exception) {
-                            if (!running.get()) break
+                            if (!running.get() || ss.isClosed) break
                         }
                     }
+                }, "PulseMesh-HTTP-Accept").apply {
+                    isDaemon = true
+                    priority = Thread.NORM_PRIORITY + 1
+                    start()
                 }
 
-                // Loopback HTTP self-test right after bind to prove server responds with HTTP 200
+                // Loopback + real LAN/Hotspot IP HTTP 200 self-test right after bind
                 scope.launch(Dispatchers.IO) {
                     delay(180L)
                     if (!running.get()) return@launch
-                    val ok = runLoopbackSelfTest(boundPort)
-                    selfTestPassed.set(ok)
-                    refreshPortalUrl()
+                    runSelfTestsAsync()
                 }
 
                 // Rapid IP probe bursts while Android brings up SoftAP / Wi-Fi Direct IPv4 addresses, then steady 3s poll
                 maintenanceJob?.cancel()
                 maintenanceJob = scope.launch(Dispatchers.IO) {
-                    val quickProbes = longArrayOf(350L, 900L, 1500L, 2500L)
+                    val quickProbes = longArrayOf(400L, 1000L, 1800L, 3000L)
                     for (ms in quickProbes) {
                         delay(ms)
                         if (!isActive || !running.get()) return@launch
                         refreshPortalUrl()
+                        if (!lanSelfTestPassed.get()) {
+                            runSelfTestsAsync()
+                        }
                     }
                     var tick = 0
                     while (isActive && running.get()) {
                         delay(3_000L)
                         tick++
                         refreshPortalUrl()
+                        if (!selfTestPassed.get() || (!lanSelfTestPassed.get() && tick % 3 == 0)) {
+                            runSelfTestsAsync()
+                        }
                         if (tick % 5 == 0) {
                             pruneStaleClients()
                             sendSseKeepAlive()
@@ -247,11 +285,27 @@ class PulseMeshWebServer(
         }
     }
 
+    private fun runSelfTestsAsync() {
+        if (!running.get()) return
+        val port = boundPort
+        val loopOk = runHttpSelfTest("127.0.0.1", port)
+        selfTestPassed.set(loopOk)
+        val bestIp = _status.value.hostIp
+        val lanOk = if (bestIp.isNotBlank() && bestIp != "127.0.0.1") {
+            runHttpSelfTest(bestIp, port)
+        } else false
+        lanSelfTestPassed.set(lanOk)
+        refreshPortalUrl()
+    }
+
     fun updateHostIpHint(hostIpHint: String) {
         if (hostIpHint.isNotBlank()) {
             preferredHostIp = hostIpHint.trim()
             if (running.get()) {
-                scope.launch(Dispatchers.IO) { refreshPortalUrl() }
+                scope.launch(Dispatchers.IO) {
+                    refreshPortalUrl()
+                    runSelfTestsAsync()
+                }
             }
         }
     }
@@ -264,8 +318,10 @@ class PulseMeshWebServer(
             releaseWifiLock()
             return
         }
-        acceptJob?.cancel()
-        acceptJob = null
+        runCatching { serverSocket?.close() }
+        serverSocket = null
+        runCatching { acceptThread?.interrupt() }
+        acceptThread = null
         maintenanceJob?.cancel()
         maintenanceJob = null
         unregisterNsdService()
@@ -275,8 +331,6 @@ class PulseMeshWebServer(
         }
         sseStreams.clear()
         activeClients.clear()
-        runCatching { serverSocket?.close() }
-        serverSocket = null
         _status.value = WebPortalStatus(
             isRunning = false,
             port = boundPort,
@@ -284,7 +338,7 @@ class PulseMeshWebServer(
         )
     }
 
-    fun isRunning(): Boolean = running.get()
+    fun isRunning(): Boolean = running.get() && serverSocket?.isClosed == false
 
     fun notifyStateChanged() {
         if (!running.get() || sseStreams.isEmpty()) return
@@ -321,32 +375,35 @@ class PulseMeshWebServer(
     private fun openServerSocket(): ServerSocket? {
         val ipv4Any = runCatching { InetAddress.getByName("0.0.0.0") }.getOrNull()
         for (port in PREFERRED_PORTS) {
-            val sock = runCatching {
+            val sock = try {
                 ServerSocket().apply {
                     reuseAddress = true
-                    // Explicit IPv4 INADDR_ANY (0.0.0.0) binds cleanly across p2p-wlan0-0, ap0, swlan0, wlan*, and loopback
                     if (ipv4Any != null) {
                         bind(InetSocketAddress(ipv4Any, port), 64)
                     } else {
                         bind(InetSocketAddress(port), 64)
                     }
                 }
-            }.getOrElse {
-                runCatching {
+            } catch (e: Exception) {
+                lastBindError = e.message ?: e.javaClass.simpleName
+                try {
                     ServerSocket().apply {
                         reuseAddress = true
                         bind(InetSocketAddress(port), 64)
                     }
-                }.getOrNull()
+                } catch (e2: Exception) {
+                    lastBindError = e2.message ?: e2.javaClass.simpleName
+                    null
+                }
             }
             if (sock != null) return sock
         }
         return null
     }
 
-    private fun runLoopbackSelfTest(port: Int): Boolean {
+    private fun runHttpSelfTest(host: String, port: Int): Boolean {
         return runCatching {
-            val url = java.net.URL("http://127.0.0.1:$port/api/info")
+            val url = java.net.URL("http://$host:$port/api/info")
             val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
                 connectTimeout = 1500
                 readTimeout = 1500
@@ -388,18 +445,27 @@ class PulseMeshWebServer(
 
     private fun refreshPortalUrl() {
         if (!running.get()) return
-        val rankedIps = resolveRankedLocalIpv4s()
-        val bestIp = rankedIps.firstOrNull()
-            ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.P2P_GO_IP }
+        val rankedLabeled = resolveRankedLabeledIpv4s()
+        val bestPair = rankedLabeled.firstOrNull()
+        val bestIp = bestPair?.first
+            ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.LOCAL_HOTSPOT_IP }
         val primaryUrl = "http://$bestIp:$boundPort"
-        val allUrls = rankedIps.map { "http://$it:$boundPort" }.ifEmpty { listOf(primaryUrl) }
+        val labeledUrls = if (rankedLabeled.isNotEmpty()) {
+            rankedLabeled.map { (ip, ifaceName) -> "http://$ip:$boundPort" to ifaceName }
+        } else {
+            listOf(primaryUrl to "fallback")
+        }
+        val allUrls = labeledUrls.map { it.first }
         val cur = _status.value
         val ok = selfTestPassed.get()
+        val lanOk = lanSelfTestPassed.get()
         val hits = requestsServed.get()
         if (cur.portalUrl != primaryUrl ||
             cur.allReachableUrls != allUrls ||
+            cur.labeledReachableUrls != labeledUrls ||
             cur.activeClientCount != activeClients.size ||
             cur.selfTestPassed != ok ||
+            cur.lanSelfTestPassed != lanOk ||
             cur.requestsServed != hits ||
             !cur.isRunning
         ) {
@@ -409,20 +475,23 @@ class PulseMeshWebServer(
                 hostIp = bestIp,
                 portalUrl = primaryUrl,
                 allReachableUrls = allUrls,
+                labeledReachableUrls = labeledUrls,
                 activeClientCount = activeClients.size,
                 selfTestPassed = ok,
+                lanSelfTestPassed = lanOk,
                 requestsServed = hits,
-                statusMessage = if (ok) {
-                    "HTTP 200 Verified • LIVE at $primaryUrl"
-                } else {
-                    "Web Portal LIVE at $primaryUrl"
+                bindError = "",
+                statusMessage = when {
+                    lanOk -> "LAN & Local HTTP 200 Verified • LIVE at $primaryUrl"
+                    ok -> "Local HTTP 200 Verified • LIVE at $primaryUrl"
+                    else -> "Web Portal LIVE at $primaryUrl"
                 }
             )
         }
     }
 
-    private fun resolveRankedLocalIpv4s(): List<String> {
-        val candidates = mutableListOf<Pair<Int, String>>()
+    private fun resolveRankedLabeledIpv4s(): List<Pair<String, String>> {
+        val candidates = mutableListOf<Triple<Int, String, String>>()
         runCatching {
             val ifaces = NetworkInterface.getNetworkInterfaces() ?: return@runCatching
             while (ifaces.hasMoreElements()) {
@@ -438,28 +507,31 @@ class PulseMeshWebServer(
                         val isPrivate = ip.startsWith("192.168.") || ip.startsWith("10.") ||
                             (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
                         if (!isPrivate) continue
-                        val priority = when {
-                            name.startsWith("p2p") || ip == "192.168.49.1" -> 135
-                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") ||
-                                name.startsWith("sap") || name.startsWith("tether") || name.startsWith("br") -> 130
-                            name.startsWith("wlan") && name != "wlan0" -> 125
-                            name.startsWith("wlan") && ip.endsWith(".1") -> 120
-                            ip.endsWith(".1") -> 112
-                            name.startsWith("wlan") -> 88
-                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("eth") -> 75
-                            else -> 50
+                        val (priority, label) = when {
+                            name.startsWith("ap_br") || name.startsWith("ap") || name.startsWith("swlan") ||
+                                name.startsWith("softap") || name.startsWith("sap") || name.startsWith("tether") ||
+                                name.startsWith("br") -> 140 to "Hotspot ($name)"
+                            name.startsWith("wlan") && name != "wlan0" -> 136 to "Hotspot ($name)"
+                            name.startsWith("p2p") || ip == "192.168.49.1" -> 132 to "Wi-Fi Direct ($name)"
+                            name.startsWith("wlan") && ip.endsWith(".1") -> 124 to "Wi-Fi AP ($name)"
+                            ip.startsWith("192.168.43.") || ip.startsWith("192.168.137.") -> 122 to "Hotspot ($name)"
+                            ip.endsWith(".1") -> 112 to "Gateway ($name)"
+                            name.startsWith("wlan") -> 88 to "Wi-Fi ($name)"
+                            name.startsWith("usb") || name.startsWith("rndis") || name.startsWith("ncm") || name.startsWith("eth") -> 75 to "LAN ($name)"
+                            else -> 50 to name
                         }
                         if (priority > 0) {
-                            candidates.add(priority to ip)
+                            candidates.add(Triple(priority, ip, label))
                         }
                     }
                 }
             }
         }
+        val seen = HashSet<String>()
         return candidates
             .sortedByDescending { it.first }
-            .map { it.second }
-            .distinct()
+            .filter { seen.add(it.second) }
+            .map { it.second to it.third }
     }
 
     private fun pruneStaleClients() {
@@ -493,220 +565,242 @@ class PulseMeshWebServer(
     private fun handleClientSocket(socket: Socket) {
         var keepOpenForSse = false
         try {
-            socket.soTimeout = 15_000
-            val input = BufferedInputStream(socket.getInputStream())
+            socket.soTimeout = 10_000
+            val input = BufferedInputStream(socket.getInputStream(), 16384)
             val output = socket.getOutputStream()
+            val isLoopback = socket.inetAddress?.isLoopbackAddress == true
 
-            val requestLine = readLineCrLf(input) ?: return
-            val parts = requestLine.trim().split(' ')
-            if (parts.size < 2) return
-            val method = parts[0].uppercase()
-            val fullTarget = parts[1]
+            // Clean HTTP/1.1 persistent keep-alive loop (eliminates Chrome/Safari TCP RST on multi-asset page loads)
+            var requestsOnSocket = 0
+            while (running.get() && requestsOnSocket < 24) {
+                val requestLine = readLineCrLf(input) ?: break
+                if (requestLine.isBlank()) continue
+                requestsOnSocket++
 
-            val headers = HashMap<String, String>()
-            while (true) {
-                val line = readLineCrLf(input) ?: break
-                if (line.isEmpty()) break
-                val colon = line.indexOf(':')
-                if (colon > 0) {
-                    headers[line.substring(0, colon).trim().lowercase()] =
-                        line.substring(colon + 1).trim()
-                }
-            }
+                val parts = requestLine.trim().split(' ')
+                if (parts.size < 2) break
+                val method = parts[0].uppercase()
+                val fullTarget = parts[1]
+                val httpVersion = parts.getOrNull(2)?.uppercase() ?: "HTTP/1.1"
 
-            if (method == "OPTIONS") {
-                writeResponse(output, 204, "No Content", "text/plain", ByteArray(0))
-                return
-            }
-
-            val qIdx = fullTarget.indexOf('?')
-            val path = if (qIdx >= 0) fullTarget.substring(0, qIdx) else fullTarget
-            val query = if (qIdx >= 0) parseQuery(fullTarget.substring(qIdx + 1)) else emptyMap()
-
-            val bodyBytes = if (method == "POST") {
-                val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, MAX_POST_BODY_BYTES) ?: 0
-                if (contentLength > 0) readExactBytes(input, contentLength) else ByteArray(0)
-            } else {
-                ByteArray(0)
-            }
-
-            val isHead = method == "HEAD"
-            if (path != "/api/events") {
-                val isLoopback = socket.inetAddress?.isLoopbackAddress == true
-                if (!isLoopback) {
-                    requestsServed.incrementAndGet()
-                    refreshPortalUrl()
-                }
-            }
-
-            when {
-                (method == "GET" || isHead) && (path == "/" || path == "/index.html" || path == "/web" || path == "/web/" || path == "/app" || path == "/app/") -> {
-                    writeResponse(output, 200, "OK", "text/html; charset=utf-8", cachedHtmlBytes, headOnly = isHead)
-                }
-
-                (method == "GET" || isHead) && (path == "/manifest.json" || path == "/web/manifest.json") -> {
-                    writeResponse(output, 200, "OK", "application/manifest+json; charset=utf-8", cachedManifestBytes, headOnly = isHead)
-                }
-
-                (method == "GET" || isHead) && (path == "/sw.js" || path == "/web/sw.js") -> {
-                    writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes, headOnly = isHead)
-                }
-
-                (method == "GET" || isHead) && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png" || path == "/favicon.ico" || path == "/apple-touch-icon.png") -> {
-                    if (cachedIconBytes.isNotEmpty()) {
-                        writeResponse(output, 200, "OK", "image/png", cachedIconBytes, headOnly = isHead)
-                    } else {
-                        writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead)
+                val headers = HashMap<String, String>()
+                while (true) {
+                    val line = readLineCrLf(input) ?: break
+                    if (line.isEmpty()) break
+                    val colon = line.indexOf(':')
+                    if (colon > 0) {
+                        headers[line.substring(0, colon).trim().lowercase()] =
+                            line.substring(colon + 1).trim()
                     }
                 }
 
-                (method == "GET" || isHead) && path == "/api/info" -> {
-                    val info = buildInfoJson(_status.value.portalUrl, activeClients.size)
-                    writeJson(output, 200, info.toString(), headOnly = isHead)
+                val connHeader = headers["connection"]?.lowercase().orEmpty()
+                val keepAlive = (httpVersion == "HTTP/1.1" && !connHeader.contains("close")) ||
+                    (httpVersion == "HTTP/1.0" && connHeader.contains("keep-alive"))
+                val acceptsGzip = headers["accept-encoding"]?.contains("gzip", ignoreCase = true) == true
+
+                if (method == "OPTIONS") {
+                    writeResponse(output, 204, "No Content", "text/plain", ByteArray(0), keepAlive = keepAlive)
+                    if (!keepAlive) break else continue
                 }
 
-                method == "GET" && path == "/api/state" -> {
-                    val clientId = query["clientNodeId"].orEmpty()
-                    if (clientId.isNotBlank()) {
-                        activeClients[clientId] = System.currentTimeMillis()
-                    }
-                    val snap = buildStateJson(clientId)
-                    writeJson(output, 200, snap.toString())
+                val qIdx = fullTarget.indexOf('?')
+                val path = if (qIdx >= 0) fullTarget.substring(0, qIdx) else fullTarget
+                val query = if (qIdx >= 0) parseQuery(fullTarget.substring(qIdx + 1)) else emptyMap()
+
+                val bodyBytes = if (method == "POST") {
+                    val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, MAX_POST_BODY_BYTES) ?: 0
+                    if (contentLength > 0) readExactBytes(input, contentLength) else ByteArray(0)
+                } else {
+                    ByteArray(0)
                 }
 
-                method == "GET" && path == "/api/events" -> {
-                    val clientId = query["clientNodeId"].orEmpty()
-                    if (clientId.isNotBlank()) {
-                        activeClients[clientId] = System.currentTimeMillis()
-                    }
-                    socket.soTimeout = 0
-                    val header = buildString {
-                        append("HTTP/1.1 200 OK\r\n")
-                        append("Content-Type: text/event-stream\r\n")
-                        append("Cache-Control: no-cache\r\n")
-                        append("Connection: keep-alive\r\n")
-                        append("Access-Control-Allow-Origin: *\r\n\r\n")
-                        append(": connected\n\n")
-                    }
-                    output.write(header.toByteArray(Charsets.UTF_8))
-                    output.flush()
-                    sseStreams.add(SseConnection(socket, output, clientId))
-                    keepOpenForSse = true
+                val isHead = method == "HEAD"
+                if (path != "/api/events" && !isLoopback) {
+                    val count = requestsServed.incrementAndGet()
+                    _status.value = _status.value.copy(requestsServed = count)
                 }
 
-                method == "POST" && path == "/api/register" -> {
-                    val obj = runCatching { JSONObject(String(bodyBytes, Charsets.UTF_8)) }.getOrNull()
-                    if (obj == null) {
-                        writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""")
-                        return
-                    }
-                    val nodeId = obj.optString("nodeId").trim()
-                    val callsign = obj.optString("callsign").trim().ifBlank { "WebNode" }
-                    if (nodeId.isNotBlank()) {
-                        activeClients[nodeId] = System.currentTimeMillis()
-                        refreshPortalUrl()
-                        onClientRegistered(
-                            WebClientRegistration(
-                                nodeId = nodeId,
-                                callsign = callsign,
-                                publicKeyBase64 = obj.optString("publicKeyBase64", ""),
-                                lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
-                                lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null
-                            )
+                when {
+                    (method == "GET" || isHead) && (path == "/" || path == "/index.html" || path == "/index.htm" || path == "/web" || path == "/web/" || path == "/app" || path == "/app/" || path == "/pulsemesh") -> {
+                        val useGzip = acceptsGzip && cachedHtmlGzipBytes.isNotEmpty()
+                        writeResponse(
+                            output = output,
+                            code = 200,
+                            reason = "OK",
+                            contentType = "text/html; charset=utf-8",
+                            body = if (useGzip) cachedHtmlGzipBytes else cachedHtmlBytes,
+                            headOnly = isHead,
+                            keepAlive = keepAlive,
+                            contentEncoding = if (useGzip) "gzip" else null
                         )
-                        notifyStateChanged()
                     }
-                    writeJson(output, 200, """{"ok":true}""")
-                }
 
-                method == "POST" && path == "/api/send" -> {
-                    val obj = runCatching { JSONObject(String(bodyBytes, Charsets.UTF_8)) }.getOrNull()
-                    if (obj == null) {
-                        writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""")
-                        return
+                    (method == "GET" || isHead) && (path == "/manifest.json" || path == "/web/manifest.json") -> {
+                        writeResponse(output, 200, "OK", "application/manifest+json; charset=utf-8", cachedManifestBytes, headOnly = isHead, keepAlive = keepAlive)
                     }
-                    val clientId = obj.optString("clientNodeId").trim()
-                    if (clientId.isNotBlank()) {
-                        activeClients[clientId] = System.currentTimeMillis()
+
+                    (method == "GET" || isHead) && (path == "/sw.js" || path == "/web/sw.js") -> {
+                        writeResponse(output, 200, "OK", "application/javascript; charset=utf-8", cachedSwBytes, headOnly = isHead, keepAlive = keepAlive)
                     }
-                    val submitted = WebSubmittedPacket(
-                        packetId = obj.optString("packetId").ifBlank { "web_${System.currentTimeMillis()}" },
-                        clientNodeId = clientId.ifBlank { "0xWEB0" },
-                        callsign = obj.optString("callsign").ifBlank { "WebNode" },
-                        publicKeyBase64 = obj.optString("publicKeyBase64", ""),
-                        threadId = obj.optString("threadId", "channel_primary"),
-                        dstNodeId = obj.optString("dstNodeId", ""),
-                        type = obj.optString("type", "CHAT").uppercase(),
-                        text = obj.optString("text", ""),
-                        payload = obj.optString("payload", ""),
-                        lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
-                        lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null,
-                        waypointTitle = obj.optString("waypointTitle", ""),
-                        waypointType = obj.optString("waypointType", "RALLY"),
-                        waypointLat = if (obj.has("waypointLat") && !obj.isNull("waypointLat")) obj.optDouble("waypointLat") else null,
-                        waypointLng = if (obj.has("waypointLng") && !obj.isNull("waypointLng")) obj.optDouble("waypointLng") else null
-                    )
-                    onWebPacketSubmitted(submitted)
-                    when (submitted.type) {
-                        "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
-                            notifyVoiceFrame(
-                                submitted.clientNodeId,
-                                submitted.callsign,
-                                submitted.payload,
-                                isCallAudio = submitted.type == "CALL_AUDIO"
+
+                    (method == "GET" || isHead) && (path == "/api/icon.png" || path == "/assets/pulsemesh-logo.png" || path == "/favicon.ico" || path == "/apple-touch-icon.png") -> {
+                        if (cachedIconBytes.isNotEmpty()) {
+                            writeResponse(output, 200, "OK", "image/png", cachedIconBytes, cacheControl = "public, max-age=86400", headOnly = isHead, keepAlive = keepAlive)
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && path == "/api/info" -> {
+                        val info = buildInfoJson(_status.value.portalUrl, activeClients.size)
+                        writeJson(output, 200, info.toString(), headOnly = isHead, keepAlive = keepAlive)
+                    }
+
+                    method == "GET" && path == "/api/state" -> {
+                        val clientId = query["clientNodeId"].orEmpty()
+                        if (clientId.isNotBlank()) {
+                            activeClients[clientId] = System.currentTimeMillis()
+                        }
+                        val snap = buildStateJson(clientId)
+                        writeJson(output, 200, snap.toString(), keepAlive = keepAlive)
+                    }
+
+                    method == "GET" && path == "/api/events" -> {
+                        val clientId = query["clientNodeId"].orEmpty()
+                        if (clientId.isNotBlank()) {
+                            activeClients[clientId] = System.currentTimeMillis()
+                        }
+                        socket.soTimeout = 0
+                        val header = buildString {
+                            append("HTTP/1.1 200 OK\r\n")
+                            append("Content-Type: text/event-stream\r\n")
+                            append("Cache-Control: no-cache\r\n")
+                            append("Connection: keep-alive\r\n")
+                            append("Access-Control-Allow-Origin: *\r\n\r\n")
+                            append(": connected\n\n")
+                        }
+                        output.write(header.toByteArray(Charsets.UTF_8))
+                        output.flush()
+                        sseStreams.add(SseConnection(socket, output, clientId))
+                        keepOpenForSse = true
+                        break
+                    }
+
+                    method == "POST" && path == "/api/register" -> {
+                        val obj = runCatching { JSONObject(String(bodyBytes, Charsets.UTF_8)) }.getOrNull()
+                        if (obj == null) {
+                            writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""", keepAlive = keepAlive)
+                            if (!keepAlive) break else continue
+                        }
+                        val nodeId = obj.optString("nodeId").trim()
+                        val callsign = obj.optString("callsign").trim().ifBlank { "WebNode" }
+                        if (nodeId.isNotBlank()) {
+                            activeClients[nodeId] = System.currentTimeMillis()
+                            _status.value = _status.value.copy(activeClientCount = activeClients.size)
+                            onClientRegistered(
+                                WebClientRegistration(
+                                    nodeId = nodeId,
+                                    callsign = callsign,
+                                    publicKeyBase64 = obj.optString("publicKeyBase64", ""),
+                                    lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
+                                    lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null
+                                )
                             )
+                            notifyStateChanged()
                         }
-                        "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
-                            notifyCallSignal(
-                                submitted.type,
-                                submitted.clientNodeId,
-                                submitted.callsign,
-                                submitted.dstNodeId.ifBlank { "ALL" },
-                                submitted.payload
-                            )
-                        }
-                        else -> notifyStateChanged()
+                        writeJson(output, 200, """{"ok":true}""", keepAlive = keepAlive)
                     }
-                    writeJson(output, 200, """{"ok":true}""")
+
+                    method == "POST" && path == "/api/send" -> {
+                        val obj = runCatching { JSONObject(String(bodyBytes, Charsets.UTF_8)) }.getOrNull()
+                        if (obj == null) {
+                            writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""", keepAlive = keepAlive)
+                            if (!keepAlive) break else continue
+                        }
+                        val clientId = obj.optString("clientNodeId").trim()
+                        if (clientId.isNotBlank()) {
+                            activeClients[clientId] = System.currentTimeMillis()
+                        }
+                        val submitted = WebSubmittedPacket(
+                            packetId = obj.optString("packetId").ifBlank { "web_${System.currentTimeMillis()}" },
+                            clientNodeId = clientId.ifBlank { "0xWEB0" },
+                            callsign = obj.optString("callsign").ifBlank { "WebNode" },
+                            publicKeyBase64 = obj.optString("publicKeyBase64", ""),
+                            threadId = obj.optString("threadId", "channel_primary"),
+                            dstNodeId = obj.optString("dstNodeId", ""),
+                            type = obj.optString("type", "CHAT").uppercase(),
+                            text = obj.optString("text", ""),
+                            payload = obj.optString("payload", ""),
+                            lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
+                            lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null,
+                            waypointTitle = obj.optString("waypointTitle", ""),
+                            waypointType = obj.optString("waypointType", "RALLY"),
+                            waypointLat = if (obj.has("waypointLat") && !obj.isNull("waypointLat")) obj.optDouble("waypointLat") else null,
+                            waypointLng = if (obj.has("waypointLng") && !obj.isNull("waypointLng")) obj.optDouble("waypointLng") else null
+                        )
+                        onWebPacketSubmitted(submitted)
+                        when (submitted.type) {
+                            "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
+                                notifyVoiceFrame(
+                                    submitted.clientNodeId,
+                                    submitted.callsign,
+                                    submitted.payload,
+                                    isCallAudio = submitted.type == "CALL_AUDIO"
+                                )
+                            }
+                            "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
+                                notifyCallSignal(
+                                    submitted.type,
+                                    submitted.clientNodeId,
+                                    submitted.callsign,
+                                    submitted.dstNodeId.ifBlank { "ALL" },
+                                    submitted.payload
+                                )
+                            }
+                            else -> notifyStateChanged()
+                        }
+                        writeJson(output, 200, """{"ok":true}""", keepAlive = keepAlive)
+                    }
+
+                    method == "GET" && path.startsWith("/api/tiles/") -> {
+                        val match = TILE_PATH_REGEX.matchEntire(path)
+                        if (match == null) {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), keepAlive = keepAlive)
+                        } else {
+                            val z = match.groupValues[1].toIntOrNull() ?: -1
+                            val x = match.groupValues[2].toIntOrNull() ?: -1
+                            val y = match.groupValues[3].toIntOrNull() ?: -1
+                            val tileFile = findCachedTileFile(z, x, y)
+                            val cachedBytes = if (tileFile != null && tileFile.exists() && tileFile.length() > 0L) {
+                                runCatching { tileFile.readBytes() }.getOrNull()
+                            } else null
+                            if (cachedBytes != null && cachedBytes.isNotEmpty()) {
+                                writeResponse(output, 200, "OK", "image/png", cachedBytes, cacheControl = "public, max-age=86400", keepAlive = keepAlive)
+                            } else if (canFetchOnlineTiles()) {
+                                val fetchedBytes = NativeTileMapManager.fetchTileBytesOnline(context, z, x, y)
+                                if (fetchedBytes != null && fetchedBytes.isNotEmpty()) {
+                                    writeResponse(output, 200, "OK", "image/png", fetchedBytes, cacheControl = "public, max-age=86400", keepAlive = keepAlive)
+                                } else {
+                                    writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), keepAlive = keepAlive)
+                                }
+                            } else {
+                                writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), keepAlive = keepAlive)
+                            }
+                        }
+                    }
+
+                    else -> {
+                        writeResponse(output, 404, "Not Found", "text/plain", "Not Found".toByteArray(Charsets.UTF_8), keepAlive = keepAlive)
+                    }
                 }
 
-                method == "GET" && path.startsWith("/api/tiles/") -> {
-                    val match = TILE_PATH_REGEX.matchEntire(path)
-                    if (match == null) {
-                        writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0))
-                        return
-                    }
-                    val z = match.groupValues[1].toIntOrNull() ?: -1
-                    val x = match.groupValues[2].toIntOrNull() ?: -1
-                    val y = match.groupValues[3].toIntOrNull() ?: -1
-                    val tileFile = findCachedTileFile(z, x, y)
-                    if (tileFile != null && tileFile.exists() && tileFile.length() > 0L) {
-                        val pngBytes = runCatching { tileFile.readBytes() }.getOrNull()
-                        if (pngBytes != null && pngBytes.isNotEmpty()) {
-                            writeResponse(output, 200, "OK", "image/png", pngBytes, cacheControl = "public, max-age=86400")
-                            return
-                        }
-                    }
-                    // Gateway Tile Proxy: if this host has internet enabled, fetch from OSM, cache locally, and serve to offline peers!
-                    if (canFetchOnlineTiles()) {
-                        val fetchedBytes = NativeTileMapManager.fetchTileBytesOnline(context, z, x, y)
-                        if (fetchedBytes != null && fetchedBytes.isNotEmpty()) {
-                            writeResponse(output, 200, "OK", "image/png", fetchedBytes, cacheControl = "public, max-age=86400")
-                            return
-                        }
-                    }
-                    writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0))
-                }
-
-                else -> {
-                    writeResponse(output, 404, "Not Found", "text/plain", "Not Found".toByteArray(Charsets.UTF_8))
-                }
+                if (!keepAlive) break
             }
         } catch (_: Exception) {
-            // Connection dropped cleanly
+            // Connection idle-timed-out or dropped cleanly by client
         } finally {
             if (!keepOpenForSse) {
-                runCatching { socket.shutdownOutput() }
                 runCatching { socket.close() }
             }
         }
@@ -721,9 +815,23 @@ class PulseMeshWebServer(
         return null
     }
 
-    private fun writeJson(output: OutputStream, code: Int, json: String, headOnly: Boolean = false) {
+    private fun writeJson(
+        output: OutputStream,
+        code: Int,
+        json: String,
+        headOnly: Boolean = false,
+        keepAlive: Boolean = false
+    ) {
         val reason = if (code == 200) "OK" else "Bad Request"
-        writeResponse(output, code, reason, "application/json; charset=utf-8", json.toByteArray(Charsets.UTF_8), headOnly = headOnly)
+        writeResponse(
+            output = output,
+            code = code,
+            reason = reason,
+            contentType = "application/json; charset=utf-8",
+            body = json.toByteArray(Charsets.UTF_8),
+            headOnly = headOnly,
+            keepAlive = keepAlive
+        )
     }
 
     private fun writeResponse(
@@ -733,17 +841,28 @@ class PulseMeshWebServer(
         contentType: String,
         body: ByteArray,
         cacheControl: String = "no-store",
-        headOnly: Boolean = false
+        headOnly: Boolean = false,
+        keepAlive: Boolean = false,
+        contentEncoding: String? = null
     ) {
         val header = buildString {
             append("HTTP/1.1 $code $reason\r\n")
             append("Content-Type: $contentType\r\n")
             append("Content-Length: ${body.size}\r\n")
+            if (!contentEncoding.isNullOrBlank()) {
+                append("Content-Encoding: $contentEncoding\r\n")
+                append("Vary: Accept-Encoding\r\n")
+            }
             append("Cache-Control: $cacheControl\r\n")
             append("Access-Control-Allow-Origin: *\r\n")
             append("Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\n")
             append("Access-Control-Allow-Headers: Content-Type\r\n")
-            append("Connection: close\r\n\r\n")
+            if (keepAlive) {
+                append("Connection: keep-alive\r\n")
+                append("Keep-Alive: timeout=10, max=24\r\n\r\n")
+            } else {
+                append("Connection: close\r\n\r\n")
+            }
         }
         output.write(header.toByteArray(Charsets.UTF_8))
         if (!headOnly && body.isNotEmpty()) output.write(body)

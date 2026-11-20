@@ -779,10 +779,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             autoHotspotNegotiator.handleHotspotAutoJoin(peerNodeId, ssidHint, passphrase, peerIpHint)
         }
         hotspotManager.onHotspotStartedCallback = { ssid, pass, hostIp ->
+            hotspotWebPortalRequested = true
             autoHotspotNegotiator.onExternalLocalHotspotStarted(ssid, pass, hostIp)
             pulseMeshWebServer.start(hostIp)
+            pulseMeshWebServer.updateHostIpHint(hostIp)
         }
         hotspotManager.onHotspotStoppedCallback = {
+            hotspotWebPortalRequested = false
             autoHotspotNegotiator.stopHotspotGroup()
             if (!manualWebPortalPinned) {
                 pulseMeshWebServer.stop()
@@ -1318,11 +1321,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun hostHotspotExplicitly() {
         hotspotWebPortalRequested = true
-        val nextBtnState = autoHotspotNegotiator.hostHotspotExplicitly(
-            onFallbackToLocalHotspot = { hotspotManager.startLocalHotspot() }
-        )
-        pulseMeshWebServer.start(com.example.service.AutoHotspotNegotiator.P2P_GO_IP)
-        _uiState.update { it.copy(hotspotButtonText = nextBtnState) }
+        pulseMeshWebServer.start(com.example.service.AutoHotspotNegotiator.LOCAL_HOTSPOT_IP)
+        // v1.2.8: Standard SoftAP (LocalOnlyHotspot / active System Hotspot) FIRST for 100% iPhone/Android/browser TCP compatibility;
+        // LocalHotspotManager automatically falls back to Wi-Fi Direct P2P if LocalOnlyHotspot is unavailable.
+        hotspotManager.startLocalHotspot()
+        val liveBtn = if (hotspotManager.hotspotState.value.isActive) {
+            "HOTSPOT: HOSTING (${hotspotManager.hotspotState.value.ssid.ifBlank { "AP" }})"
+        } else {
+            "HOTSPOT: STARTING..."
+        }
+        _uiState.update { it.copy(hotspotButtonText = liveBtn) }
         triggerHaptic(50)
     }
 
@@ -1354,22 +1362,26 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleOrConnectHotspot() {
+        val cur = autoHotspotNegotiator.status.value
+        val isHostingOrLinked = cur.isHotspotHost ||
+            hotspotManager.hotspotState.value.isActive ||
+            cur.buttonStateText.startsWith("HOTSPOT: HOSTING") ||
+            cur.buttonStateText == "HOTSPOT: LINKED"
+
+        if (isHostingOrLinked) {
+            stopHotspotExplicitly()
+            return
+        }
+
         val peerWithHotspot = (_uiState.value.nodes.filter { !it.isSelf } + peersBackingMap.values)
             .firstOrNull { it.hotspotPass.isNotBlank() }
 
-        val peerCreds = peerWithHotspot?.let {
-            Triple(it.id, it.hotspotSsid, it.hotspotPass)
+        if (peerWithHotspot != null) {
+            joinPeerHotspotExplicitly()
+            return
         }
-        val peerIpHint = peerWithHotspot?.ipAddress.orEmpty()
 
-        val nextBtnState = autoHotspotNegotiator.toggleOrConnectHotspot(
-            discoveredPeerHotspot = peerCreds,
-            peerHostIpHint = peerIpHint,
-            onStartLocalHotspotFallback = { hotspotManager.startLocalHotspot() },
-            onStopLocalHotspot = { hotspotManager.stopLocalHotspot() }
-        )
-        _uiState.update { it.copy(hotspotButtonText = nextBtnState) }
-        triggerHaptic(50)
+        hostHotspotExplicitly()
     }
 
     fun triggerAutoConnectHotspot() {
@@ -6935,7 +6947,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2.7")
+            put("version", "1.2.8")
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)

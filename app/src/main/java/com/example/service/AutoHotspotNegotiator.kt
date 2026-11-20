@@ -1911,14 +1911,18 @@ class AutoHotspotNegotiator(
                     val name = iface.name?.lowercase() ?: ""
                     for (addr in iface.interfaceAddresses) {
                         val inet = addr.address
-                        if (inet is Inet4Address && !inet.isLoopbackAddress) {
+                        if (inet is Inet4Address && !inet.isLoopbackAddress && !inet.isLinkLocalAddress) {
                             val ip = inet.hostAddress ?: continue
+                            val isPrivate = ip.startsWith("192.168.") || ip.startsWith("10.") ||
+                                (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
+                            if (!isPrivate) continue
                             when {
                                 name.startsWith("p2p") || ip.startsWith("192.168.49.") -> {
                                     if (p2pIp == null) p2pIp = ip
                                 }
                                 name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") ||
-                                    name == "wlan1" || ip.startsWith("192.168.43.") -> {
+                                    name.startsWith("sap") || name.startsWith("tether") || name.startsWith("br") ||
+                                    (name.startsWith("wlan") && name != "wlan0") || ip.startsWith("192.168.43.") -> {
                                     if (apIp == null) apIp = ip
                                 }
                             }
@@ -1927,7 +1931,8 @@ class AutoHotspotNegotiator(
                 }
             }
         }
-        val preferLocalAp = preferredRole.uppercase().contains("LOCAL")
+        val upperRole = preferredRole.uppercase()
+        val preferLocalAp = upperRole.contains("LOCAL") || upperRole.contains("HOST_AP") || upperRole.contains("AP")
         return if (preferLocalAp) {
             apIp ?: p2pIp ?: LOCAL_HOTSPOT_IP
         } else {

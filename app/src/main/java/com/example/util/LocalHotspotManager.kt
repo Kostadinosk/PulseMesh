@@ -41,6 +41,7 @@ class LocalHotspotManager(private val context: Context) {
 
     var onHotspotStartedCallback: ((ssid: String, passphrase: String, hostIp: String) -> Unit)? = null
     var onHotspotStoppedCallback: (() -> Unit)? = null
+    var onLocalHotspotFailedCallback: ((reason: Int) -> Unit)? = null
 
     @SuppressLint("MissingPermission")
     fun toggleLocalHotspot() {
@@ -54,6 +55,25 @@ class LocalHotspotManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun startLocalHotspot() {
         if (_hotspotState.value.isActive) {
+            val refreshedIp = detectActiveApIpv4() ?: "192.168.43.1"
+            onHotspotStartedCallback?.invoke(
+                _hotspotState.value.ssid.ifBlank { "PulseMesh-AP" },
+                _hotspotState.value.passphrase,
+                refreshedIp
+            )
+            return
+        }
+
+        // Fast-path: if Android's System Portable Hotspot (ap0/swlan0/wlan1/wlan2) is ALREADY active, adopt it directly!
+        val alreadyActiveApIp = detectDedicatedApOnlyIpv4()
+        if (alreadyActiveApIp != null) {
+            _hotspotState.value = HotspotState(
+                isActive = true,
+                ssid = "System Hotspot (Active)",
+                passphrase = "",
+                statusMessage = "Using Active System Hotspot • $alreadyActiveApIp"
+            )
+            onHotspotStartedCallback?.invoke("System Hotspot", "", alreadyActiveApIp)
             return
         }
 
@@ -78,18 +98,23 @@ class LocalHotspotManager(private val context: Context) {
                             statusMessage = "Local Hotspot Active ($ssid) • $initialIp"
                         )
                         onHotspotStartedCallback?.invoke(ssid, pass, initialIp)
-                        // Re-probe interface IP after 1.2s since Android 11-16 assigns random SoftAP IPs asynchronously
-                        mainHandler.postDelayed({
-                            if (_hotspotState.value.isActive) {
-                                val resolvedIp = detectActiveApIpv4() ?: initialIp
-                                if (resolvedIp != initialIp) {
-                                    _hotspotState.value = _hotspotState.value.copy(
-                                        statusMessage = "Local Hotspot Active ($ssid) • $resolvedIp"
-                                    )
-                                    onHotspotStartedCallback?.invoke(ssid, pass, resolvedIp)
+                        // Re-probe SoftAP IPv4 repeatedly (Android 11-16 assigns random SoftAP IPs 0.5-4s after onStarted)
+                        var lastReportedIp = initialIp
+                        val probeDelays = longArrayOf(500L, 1200L, 2500L, 4500L)
+                        for (delayMs in probeDelays) {
+                            mainHandler.postDelayed({
+                                if (_hotspotState.value.isActive) {
+                                    val resolvedIp = detectActiveApIpv4() ?: lastReportedIp
+                                    if (resolvedIp != lastReportedIp) {
+                                        lastReportedIp = resolvedIp
+                                        _hotspotState.value = _hotspotState.value.copy(
+                                            statusMessage = "Local Hotspot Active ($ssid) • $resolvedIp"
+                                        )
+                                        onHotspotStartedCallback?.invoke(ssid, pass, resolvedIp)
+                                    }
                                 }
-                            }
-                        }, 1200L)
+                            }, delayMs)
+                        }
                     }
 
                     override fun onStopped() {
@@ -105,6 +130,19 @@ class LocalHotspotManager(private val context: Context) {
                     override fun onFailed(reason: Int) {
                         super.onFailed(reason)
                         reservation = null
+                        // Code 3 (ERROR_INCOMPATIBLE_MODE): Android System Hotspot is already ON -> adopt its IP!
+                        val existingApIp = detectDedicatedApOnlyIpv4() ?: detectActiveApIpv4()
+                        if (reason == WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE && existingApIp != null) {
+                            _hotspotState.value = HotspotState(
+                                isActive = true,
+                                ssid = "System Hotspot (Active)",
+                                passphrase = "",
+                                statusMessage = "Using Active System Hotspot • $existingApIp"
+                            )
+                            onHotspotStartedCallback?.invoke("System Hotspot", "", existingApIp)
+                            return
+                        }
+                        onLocalHotspotFailedCallback?.invoke(reason)
                         startWifiDirectP2pHotspotFallback()
                     }
                 }, mainHandler)
@@ -179,6 +217,40 @@ class LocalHotspotManager(private val context: Context) {
         }
     }
 
+    private fun detectDedicatedApOnlyIpv4(): String? {
+        return runCatching {
+            val ifaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return@runCatching null
+            val candidates = mutableListOf<Pair<Int, String>>()
+            while (ifaces.hasMoreElements()) {
+                val iface = ifaces.nextElement()
+                if (!iface.isUp || iface.isLoopback) continue
+                val name = iface.name.lowercase()
+                if (name.startsWith("rmnet") || name.startsWith("ccmni") || name.startsWith("tun") ||
+                    name.startsWith("ppp") || name.startsWith("dummy") || name.startsWith("epdg") || name.startsWith("iwlan")
+                ) continue
+                val addrs = iface.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (addr is java.net.Inet4Address && !addr.isLoopbackAddress && !addr.isLinkLocalAddress) {
+                        val ip = addr.hostAddress ?: continue
+                        val isPrivate = ip.startsWith("192.168.") || ip.startsWith("10.") ||
+                            (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
+                        if (!isPrivate) continue
+                        val prio = when {
+                            name.startsWith("ap_br") || name.startsWith("ap") || name.startsWith("swlan") ||
+                                name.startsWith("softap") || name.startsWith("sap") || name.startsWith("tether") -> 130
+                            name.startsWith("wlan") && name != "wlan0" -> 125
+                            ip.startsWith("192.168.43.") || ip.startsWith("192.168.137.") -> 120
+                            else -> 0
+                        }
+                        if (prio > 0) candidates.add(prio to ip)
+                    }
+                }
+            }
+            candidates.maxByOrNull { it.first }?.second
+        }.getOrNull()
+    }
+
     private fun detectActiveApIpv4(): String? {
         return runCatching {
             val ifaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return@runCatching null
@@ -193,14 +265,19 @@ class LocalHotspotManager(private val context: Context) {
                 val addrs = iface.inetAddresses
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
-                    if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
+                    if (addr is java.net.Inet4Address && !addr.isLoopbackAddress && !addr.isLinkLocalAddress) {
                         val ip = addr.hostAddress ?: continue
+                        val isPrivate = ip.startsWith("192.168.") || ip.startsWith("10.") ||
+                            (ip.startsWith("172.") && (ip.substringAfter("172.").substringBefore('.').toIntOrNull() in 16..31))
+                        if (!isPrivate) continue
                         val prio = when {
-                            name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("softap") -> 120
-                            name.startsWith("p2p") || ip == "192.168.49.1" -> 115
-                            (name.startsWith("wlan") && name != "wlan0") -> 110
-                            name.startsWith("wlan") && ip.endsWith(".1") -> 105
-                            name.startsWith("wlan") -> 70
+                            name.startsWith("ap_br") || name.startsWith("ap") || name.startsWith("swlan") ||
+                                name.startsWith("softap") || name.startsWith("sap") || name.startsWith("tether") ||
+                                name.startsWith("br") -> 130
+                            name.startsWith("wlan") && name != "wlan0" -> 125
+                            name.startsWith("p2p") || ip == "192.168.49.1" -> 118
+                            name.startsWith("wlan") && ip.endsWith(".1") -> 110
+                            name.startsWith("wlan") -> 75
                             else -> 0
                         }
                         if (prio > 0) candidates.add(prio to ip)

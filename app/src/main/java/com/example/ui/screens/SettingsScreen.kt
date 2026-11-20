@@ -974,7 +974,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.2.7 WI-FI DIRECT PORTAL & iPHONE QR",
+                                    text = "v1.2.8 HOTSPOT WEB PORTAL & iPHONE QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -983,10 +983,16 @@ fun SettingsScreen(
                                 )
                                 Text(
                                     text = if (state.webPortalStatus.isRunning) {
-                                        val verifiedStr = if (state.webPortalStatus.selfTestPassed) "HTTP 200 OK" else "STARTING"
+                                        val verifiedStr = when {
+                                            state.webPortalStatus.lanSelfTestPassed -> "LAN + LOCAL HTTP 200 OK"
+                                            state.webPortalStatus.selfTestPassed -> "LOCAL HTTP 200 OK"
+                                            else -> "STARTING"
+                                        }
                                         "$verifiedStr • ${state.webPortalStatus.activeClientCount} linked • ${state.webPortalStatus.requestsServed} hits"
+                                    } else if (state.webPortalStatus.bindError.isNotBlank()) {
+                                        "Bind error: ${state.webPortalStatus.bindError}"
                                     } else {
-                                        "Auto-hosts the PulseMesh Web/iPhone PWA when Wi-Fi Direct / Hotspot starts"
+                                        "Auto-hosts the PulseMesh Web/iPhone PWA when Local or System Hotspot is active"
                                     },
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = p.textSecondary,
@@ -1026,18 +1032,24 @@ fun SettingsScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
+                                            val primaryLabel = state.webPortalStatus.labeledReachableUrls
+                                                .firstOrNull { it.first == state.webPortalStatus.portalUrl }?.second
                                             Text(
-                                                text = state.webPortalStatus.portalUrl,
+                                                text = if (!primaryLabel.isNullOrBlank()) {
+                                                    "${state.webPortalStatus.portalUrl}  [$primaryLabel]"
+                                                } else {
+                                                    state.webPortalStatus.portalUrl
+                                                },
                                                 style = MaterialTheme.typography.labelMedium.copy(
                                                     color = EmeraldMesh,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace
                                                 )
                                             )
-                                            val altUrls = state.webPortalStatus.allReachableUrls.filter { it != state.webPortalStatus.portalUrl }
-                                            if (altUrls.isNotEmpty()) {
+                                            val altLabeled = state.webPortalStatus.labeledReachableUrls.filter { it.first != state.webPortalStatus.portalUrl }
+                                            if (altLabeled.isNotEmpty()) {
                                                 Text(
-                                                    text = "Alt: ${altUrls.joinToString(" • ")}",
+                                                    text = "Alt: ${altLabeled.joinToString(" • ") { "${it.first} (${it.second})" }}",
                                                     style = MaterialTheme.typography.bodySmall.copy(
                                                         color = CyanGateway,
                                                         fontFamily = FontFamily.Monospace,
@@ -1046,7 +1058,7 @@ fun SettingsScreen(
                                                 )
                                             }
                                             Text(
-                                                text = "Scan 2-step QR on iPhone/Android or tap TEST. If connecting phone stays on 4G/5G, tap 'Keep Wi-Fi without Internet' or pause mobile data.",
+                                                text = "Connect the other phone to this Hotspot Wi-Fi, then open the URL above (or scan 2-step QR). Pause mobile data on the other phone if it redirects to 4G/5G.",
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     color = p.textSecondary,
                                                     fontSize = 9.sp
@@ -1083,27 +1095,59 @@ fun SettingsScreen(
                                         }
                                     }
 
-                                    Button(
-                                        onClick = { showIphoneQrDialog = true },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = EmeraldMesh,
-                                            contentColor = Color.Black
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("show_iphone_qr_button")
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            "SHOW iPHONE 2-STEP QR CODES (WI-FI + PORTAL)",
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        Button(
+                                            onClick = { showIphoneQrDialog = true },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = EmeraldMesh,
+                                                contentColor = Color.Black
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier
+                                                .weight(1.4f)
+                                                .testTag("show_iphone_qr_button")
+                                        ) {
+                                            Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                "2-STEP QR CODES",
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 10.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                runCatching {
+                                                    val tetherIntent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                                                        setClassName("com.android.settings", "com.android.settings.TetherSettings")
+                                                    }
+                                                    context.startActivity(tetherIntent)
+                                                }.onFailure {
+                                                    runCatching {
+                                                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
+                                                    }
+                                                }
+                                            },
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway.copy(alpha = 0.7f)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                "HOTSPOT SETTINGS",
+                                                color = CyanGateway,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 9.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2808,7 +2852,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2.7 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.2.8 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,
