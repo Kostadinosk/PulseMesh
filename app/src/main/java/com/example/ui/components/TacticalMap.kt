@@ -75,6 +75,16 @@ fun TacticalMap(
     locationShareMode: LocationShareMode = LocationShareMode.EXACT,
     onSelectLocationShareMode: (LocationShareMode) -> Unit = {},
     breadcrumbs: List<com.example.model.BreadcrumbPoint> = emptyList(),
+    geofenceEnabled: Boolean = false,
+    geofenceLat: Double = 0.0,
+    geofenceLng: Double = 0.0,
+    geofenceRadiusMeters: Int = 500,
+    geofenceAlertMessage: String = "",
+    onDismissGeofenceAlert: () -> Unit = {},
+    hasBarometerSensor: Boolean = false,
+    barometricPressureHpa: Float? = null,
+    weatherTrendLabel: String = "",
+    isStormAlertActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -269,6 +279,62 @@ fun TacticalMap(
                     center = Offset(regPx, regPy),
                     style = Stroke(width = 1.5.dp.toPx())
                 )
+            }
+
+            // 1.5 Draw Geofence Perimeter Circle when enabled
+            if (geofenceEnabled && (geofenceLat != 0.0 || geofenceLng != 0.0)) {
+                val (gfTileX, gfTileY) = NativeTileMapManager.latLonToTileCoords(geofenceLat, geofenceLng, intZoom)
+                val gfPx = viewCenterX + ((gfTileX - curTileX) * tileSizePx).toFloat()
+                val gfPy = viewCenterY + ((gfTileY - curTileY) * tileSizePx).toFloat()
+                val gfRadiusPx = OfflineRegionDownloader.calculateRealRadiusPixels(
+                    centerLat = geofenceLat,
+                    zoom = zoomLevel.toDouble(),
+                    selectedRadiusKm = geofenceRadiusMeters / 1000.0
+                ).coerceIn(8f, 100_000f)
+                val fenceColor = if (geofenceAlertMessage.isNotBlank()) RedSosAlert else CyanGateway
+                drawCircle(
+                    color = fenceColor.copy(alpha = 0.09f),
+                    radius = gfRadiusPx,
+                    center = Offset(gfPx, gfPy)
+                )
+                drawCircle(
+                    color = fenceColor.copy(alpha = 0.85f),
+                    radius = gfRadiusPx,
+                    center = Offset(gfPx, gfPy),
+                    style = Stroke(
+                        width = 2.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f))
+                    )
+                )
+            }
+
+            // 1.2 Draw Mesh Topology & Relay Route Lines between Self and live Peers
+            val selfNodeWithPos = nodes.firstOrNull { it.isSelf && (it.latitude != 0.0 || it.longitude != 0.0) }
+            if (selfNodeWithPos != null) {
+                val (sxT, syT) = NativeTileMapManager.latLonToTileCoords(selfNodeWithPos.latitude, selfNodeWithPos.longitude, intZoom)
+                val selfPx = viewCenterX + ((sxT - curTileX) * tileSizePx).toFloat()
+                val selfPy = viewCenterY + ((syT - curTileY) * tileSizePx).toFloat()
+                nodes.forEach { peer ->
+                    if (!peer.isSelf && (peer.latitude != 0.0 || peer.longitude != 0.0)) {
+                        val (pxT, pyT) = NativeTileMapManager.latLonToTileCoords(peer.latitude, peer.longitude, intZoom)
+                        val pPx = viewCenterX + ((pxT - curTileX) * tileSizePx).toFloat()
+                        val pPy = viewCenterY + ((pyT - curTileY) * tileSizePx).toFloat()
+                        val linkColor = when {
+                            peer.isGateway -> CyanGateway.copy(alpha = 0.78f)
+                            peer.hopCount <= 1 -> EmeraldMesh.copy(alpha = 0.75f)
+                            else -> AmberRootBoost.copy(alpha = 0.78f)
+                        }
+                        drawLine(
+                            color = linkColor,
+                            start = Offset(selfPx, selfPy),
+                            end = Offset(pPx, pPy),
+                            strokeWidth = if (peer.isGateway) 2.5.dp.toPx() else 1.8.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                if (peer.hopCount <= 1) floatArrayOf(12f, 8f) else floatArrayOf(6f, 10f)
+                            )
+                        )
+                    }
+                }
             }
 
             // 2. Draw Real Peer GPS Pin Markers with Live Distance, Compass Bearing Arrow & Altitude ASL
@@ -595,6 +661,54 @@ fun TacticalMap(
                             fontFamily = FontFamily.Monospace,
                             color = CyanGateway
                         )
+                    )
+                }
+            }
+
+            // 2.3 Barometric Weather Pill (ONLY shown on phones equipped with a hardware barometer sensor)
+            if (hasBarometerSensor && barometricPressureHpa != null) {
+                Surface(
+                    color = if (isStormAlertActive) RedSosAlert.copy(alpha = 0.92f) else DeepCarbon.copy(alpha = 0.88f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isStormAlertActive) Color.White else CyanGateway.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Text(
+                        text = if (isStormAlertActive) {
+                            "⛈️ STORM DROP • %.1f hPa • %s".format(barometricPressureHpa, weatherTrendLabel)
+                        } else {
+                            "BARO: %.1f hPa • %s".format(barometricPressureHpa, weatherTrendLabel)
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // 1.5 Geofence Breach Alert Banner
+            if (geofenceAlertMessage.isNotBlank()) {
+                Surface(
+                    color = RedSosAlert.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
+                    modifier = Modifier.clickable { onDismissGeofenceAlert() }
+                ) {
+                    Text(
+                        text = "⚠ $geofenceAlertMessage (TAP TO DISMISS)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
                 }
             }

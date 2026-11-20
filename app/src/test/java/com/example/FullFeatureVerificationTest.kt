@@ -9,6 +9,7 @@ import com.example.crypto.TacticalE2eeManager
 import com.example.crypto.UsernameClaimRecord
 import com.example.model.MeshPacket
 import com.example.model.PacketType
+import com.example.model.WaypointType
 import com.example.service.PulseMeshWebServer
 import com.example.service.WebClientRegistration
 import com.example.service.WebSubmittedPacket
@@ -366,5 +367,228 @@ class FullFeatureVerificationTest {
         val updatedPkt = vm.uiState.value.activeThreadPackets.first { it.id == sentPkt.id }
         assertTrue("CHAT_ACK must immediately flip isDelivered = true", updatedPkt.isDelivered)
         assertEquals("BravoAck", updatedPkt.ackedByCallsign)
+    }
+
+    @Test
+    fun `verify v1_3_0 SOS cancel removes red map pins locally and remotely`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = MeshViewModel(app)
+        vm.setManualGpsLocation(37.9838, 23.7275)
+
+        // 1. Trigger local SOS -> drops red SOS waypoint
+        vm.toggleSosBeacon()
+        assertTrue(vm.uiState.value.isSosActive)
+        assertTrue(
+            "Triggering SOS must drop a red SOS waypoint on the map",
+            vm.uiState.value.waypoints.any { it.type == WaypointType.SOS }
+        )
+
+        // 2. Cancel local SOS -> must remove self red SOS waypoint!
+        vm.toggleSosBeacon()
+        assertFalse(vm.uiState.value.isSosActive)
+        assertFalse(
+            "Cancelling SOS must remove the red SOS pin from the map",
+            vm.uiState.value.waypoints.any { it.type == WaypointType.SOS }
+        )
+
+        // 3. Incoming remote SOS drops remote red pin, then SOS_CLEAR removes it
+        vm.handleIncomingPacket(
+            WireMeshPacket(
+                packetId = "sos_remote_1",
+                srcNodeId = "0xE123",
+                srcCallsign = "EchoUnit",
+                dstNodeId = "ALL",
+                type = "SOS",
+                payload = "SOS DISTRESS",
+                lat = 37.9850,
+                lng = 23.7290,
+                ttl = 7,
+                hops = 0
+            )
+        )
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(vm.uiState.value.waypoints.any { it.type == WaypointType.SOS && it.id.contains("E123", ignoreCase = true) })
+
+        vm.handleIncomingPacket(
+            WireMeshPacket(
+                packetId = "sos_clear_remote_1",
+                srcNodeId = "0xE123",
+                srcCallsign = "EchoUnit",
+                dstNodeId = "ALL",
+                type = "SOS_CLEAR",
+                payload = "SOS CANCELLED",
+                ttl = 7,
+                hops = 0
+            )
+        )
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertFalse(
+            "Incoming SOS_CLEAR must remove remote peer's red SOS pin from map",
+            vm.uiState.value.waypoints.any { it.type == WaypointType.SOS && it.id.contains("E123", ignoreCase = true) }
+        )
+    }
+
+    @Test
+    fun `verify v1_3_0 HTTPS SSL hotspot portal and offline file transfer SHA-256`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val server = PulseMeshWebServer(
+            context = app,
+            scope = scope,
+            buildInfoJson = { portalUrl, count ->
+                JSONObject().apply {
+                    put("pulsemeshHost", true)
+                    put("version", "1.3.0")
+                    put("sslEnabled", true)
+                    put("portalUrl", portalUrl)
+                    put("webClientCount", count)
+                }
+            },
+            buildStateJson = { JSONObject().apply { put("ok", true) } },
+            onClientRegistered = {},
+            onWebPacketSubmitted = {}
+        )
+        server.start("127.0.0.1")
+        val deadline = System.currentTimeMillis() + 4000L
+        while ((!server.isRunning() || !server.status.value.selfTestPassed) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50L)
+        }
+        val status = server.status.value
+        assertTrue("Hotspot HTTP/HTTPS server must start", server.isRunning())
+        assertTrue("SSL HTTPS listener must be enabled on hotspot server", status.sslEnabled)
+        assertTrue("HTTPS port must be bound", status.httpsPort > 0)
+
+        try {
+            // 1. Verify Offline File Transfer upload + list + download SHA-256 over HTTP
+            val payloadBytes = "PulseMesh v1.3.0 field briefing checklist".toByteArray(Charsets.UTF_8)
+            val b64 = android.util.Base64.encodeToString(payloadBytes, android.util.Base64.NO_WRAP)
+            val uploadConn = (URL("http://127.0.0.1:${status.port}/api/files/upload").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                outputStream.use {
+                    it.write("""{"fileName":"briefing.txt","mimeType":"text/plain","senderCallsign":"Alpha","base64Data":"$b64"}""".toByteArray())
+                }
+            }
+            assertEquals(200, uploadConn.responseCode)
+            val uploadResp = uploadConn.inputStream.bufferedReader().readText()
+            val uploadJson = JSONObject(uploadResp)
+            assertTrue(uploadJson.optBoolean("ok"))
+            val fileId = uploadJson.getString("id")
+            val sha256 = uploadJson.getString("sha256")
+            assertEquals(64, sha256.length)
+
+            val dlConn = (URL("http://127.0.0.1:${status.port}/api/files/download?id=$fileId").openConnection() as HttpURLConnection)
+            assertEquals(200, dlConn.responseCode)
+            assertEquals(sha256, dlConn.getHeaderField("X-SHA256"))
+            val downloaded = dlConn.inputStream.readBytes()
+            assertArrayEquals(payloadBytes, downloaded)
+
+            // 2. Verify live TLS / SSL HTTPS handshake on :httpsPort using trust-all test context
+            val trustAll = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+            })
+            val sslCtx = javax.net.ssl.SSLContext.getInstance("TLS").apply {
+                init(null, trustAll, java.security.SecureRandom())
+            }
+            val httpsConn = (URL("https://127.0.0.1:${status.httpsPort}/api/info").openConnection() as javax.net.ssl.HttpsURLConnection).apply {
+                sslSocketFactory = sslCtx.socketFactory
+                hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                connectTimeout = 3000
+                readTimeout = 3000
+            }
+            assertEquals("HTTPS /api/info must return 200 OK", 200, httpsConn.responseCode)
+            assertTrue(httpsConn.inputStream.bufferedReader().readText().contains("1.3.0"))
+        } finally {
+            server.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `verify v1_3_0 features - barometer storm, geofence, quick status, reactions, QR join, decoy, Cloudflare default`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = DevicePreferences(app)
+        assertTrue(
+            "Default username relay URL must point to live Cloudflare Workers D1",
+            prefs.usernameRelayUrl.contains("pulsemesh-username-relay.pulsemesh.workers.dev")
+        )
+
+        // 2.3 Barometric storm trend detection
+        val (delta, label, storm) = com.example.service.TacticalSensorService.evaluateBarometricTrend(
+            listOf(0L to 1016.0f, 3_600_000L to 1014.0f, 7_200_000L to 1012.2f)
+        )
+        assertNotNull(delta)
+        assertTrue("Rapid -3.8 hPa drop must trigger STORM WARNING", storm)
+        assertEquals("STORM WARNING", label)
+
+        val vm = MeshViewModel(app)
+        vm.setManualGpsLocation(37.9838, 23.7275)
+
+        // 1.5 Geofence perimeter breach detection
+        vm.configureGeofence(enabled = true, radiusMeters = 200)
+        vm.handleIncomingPacket(
+            WireMeshPacket(
+                packetId = "gf_peer_far",
+                srcNodeId = "0xF444",
+                srcCallsign = "FarScout",
+                dstNodeId = "ALL",
+                type = "GPS_BEACON",
+                payload = "GPS",
+                lat = 37.9950,
+                lng = 23.7275,
+                ttl = 7,
+                hops = 0
+            )
+        )
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(
+            "Peer >1km away outside 200m geofence must raise breach alert",
+            vm.uiState.value.geofenceAlertMessage.contains("FarScout")
+        )
+        vm.dismissGeofenceAlert()
+        assertEquals("", vm.uiState.value.geofenceAlertMessage)
+
+        // 1.3 Quick-Status Text + Voice toggle
+        vm.sendQuickStatus(com.example.model.QuickStatusCode.NEED_WATER)
+        assertEquals("NEED_WATER", vm.uiState.value.lastQuickStatusCode)
+
+        // 3.1 Reactions & 3.2 Pin + Search + Trip Export
+        vm.selectThread("channel_primary")
+        vm.sendMessageInThread("channel_primary", "Check summit rally")
+        val msg = vm.uiState.value.activeThreadPackets.first { it.content == "Check summit rally" }
+        vm.sendReaction(msg.id, "👍")
+        vm.togglePinMessage("channel_primary", msg.id)
+        val after = vm.uiState.value.activeThreadPackets.first { it.id == msg.id }
+        assertTrue(after.isPinned)
+        assertTrue(after.reactions["👍"]?.isNotEmpty() == true)
+        assertTrue(vm.searchMessages("summit").any { it.second.id == msg.id })
+        assertTrue(vm.exportTripArchiveJson().contains("Check summit rally"))
+
+        // 3.3 QR Instant Contact/Group Join round-trip
+        val qrUri = vm.buildInstantJoinQrPayload()
+        assertTrue(qrUri.startsWith("pulsemesh://join?"))
+        val (importOk, _) = vm.importInstantJoinQrPayload("pulsemesh://join?node=0xD888&cs=DeltaQR&ch=RidgeNet&pk=TESTPK")
+        assertTrue(importOk)
+        assertTrue(vm.uiState.value.nodes.any { it.id == "0xD888" })
+
+        // 3.4 Language + 2.2 Expedition Mode + 4.1 Per-thread burn + 4.2 Decoy PIN
+        vm.setAppLanguage("el")
+        assertEquals("el", vm.uiState.value.appLanguage)
+        vm.toggleExpeditionMode()
+        assertTrue(vm.uiState.value.expeditionModeEnabled)
+        vm.setThreadBurnTtl("channel_primary", 300)
+        assertEquals(300, vm.uiState.value.perThreadBurnTtlMap["channel_primary"])
+        assertTrue(vm.setDecoyPin("2468"))
+        assertTrue(vm.verifyOrEnterDecoyMode("2468"))
+        assertTrue(vm.uiState.value.isDecoyModeActive)
+        vm.exitDecoyMode()
+        assertFalse(vm.uiState.value.isDecoyModeActive)
+
+        // Daylight Theme selection works (no double-toggle bug)
+        vm.setAppTheme(com.example.util.AppTheme.TACTICAL_LIGHT)
+        assertEquals(com.example.util.AppTheme.TACTICAL_LIGHT, vm.uiState.value.appTheme)
     }
 }

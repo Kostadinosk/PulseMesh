@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PulseMesh</string>
+    <string name="tab_map">Χάρτης</string>
+    <string name="tab_chats">Μηνύματα</string>
+    <string name="tab_voice">Φωνή &amp; Κλήσεις</string>
+    <string name="tab_settings">Ρυθμίσεις</string>
+    <string name="status_all_ok">Όλα καλά</string>
+    <string name="status_low_battery">Χαμηλή μπαταρία</string>
+    <string name="status_need_water">Χρειάζομαι νερό</string>
+    <string name="status_moving">Σε κίνηση</string>
+    <string name="status_need_help">Χρειάζομαι βοήθεια</string>
+    <string name="storm_warning">ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΚΑΤΑΙΓΙΔΑΣ</string>
+</resources>

@@ -13,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,6 +70,11 @@ fun MeshChatScreen(
     onSendTacticalSnap: () -> Unit = {},
     onRetrySendPacket: (MeshPacket) -> Unit = {},
     onConnectByUsername: (String, (Boolean, String) -> Unit) -> Unit = { _, _ -> },
+    onSendQuickStatus: (com.example.model.QuickStatusCode) -> Unit = {},
+    onToggleQuickStatusVoice: () -> Unit = {},
+    onSendReaction: (String, String) -> Unit = { _, _ -> },
+    onTogglePinMessage: (String, String) -> Unit = { _, _ -> },
+    onSetThreadBurnTtl: (String, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     if (state.selectedThreadId == null) {
@@ -79,6 +85,8 @@ fun MeshChatScreen(
             onSearchQueryChange = onSearchQueryChange,
             onCreateGroup = onCreateGroup,
             onConnectByUsername = onConnectByUsername,
+            onSendQuickStatus = onSendQuickStatus,
+            onToggleQuickStatusVoice = onToggleQuickStatusVoice,
             modifier = modifier
         )
     } else {
@@ -95,6 +103,9 @@ fun MeshChatScreen(
             onSendPhoto = onSendPhoto,
             onSendTacticalSnap = onSendTacticalSnap,
             onRetrySendPacket = onRetrySendPacket,
+            onSendReaction = onSendReaction,
+            onTogglePinMessage = onTogglePinMessage,
+            onSetThreadBurnTtl = onSetThreadBurnTtl,
             modifier = modifier
         )
     }
@@ -109,6 +120,8 @@ private fun ConversationListView(
     onSearchQueryChange: (String) -> Unit,
     onCreateGroup: (String, List<String>) -> Unit,
     onConnectByUsername: (String, (Boolean, String) -> Unit) -> Unit = { _, _ -> },
+    onSendQuickStatus: (com.example.model.QuickStatusCode) -> Unit = {},
+    onToggleQuickStatusVoice: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -592,6 +605,94 @@ private fun ConversationListView(
                         isSimpleMode = state.isSimpleMode,
                         onClick = { onSelectThread(convo.threadId) }
                     )
+                }
+            }
+
+            // 4. v1.3.0 Tactical Quick-Status One-Tap Strip (Text + Voice TTS)
+            item(key = "quick_status_strip") {
+                val isGreek = state.appLanguage == "el"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isGreek) "ΤΑΧΕΙΑ ΚΑΤΑΣΤΑΣΗ (ΚΕΙΜΕΝΟ + ΦΩΝΗ)" else "QUICK-STATUS BEACON (TEXT + VOICE)",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = p.textSecondary
+                        ),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            onClick = onToggleQuickStatusVoice,
+                            color = if (state.quickStatusVoiceEnabled) p.emeraldDim else p.surfaceVariant,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (state.quickStatusVoiceEnabled) p.emerald else p.border
+                            ),
+                            modifier = Modifier.testTag("quick_status_voice_toggle")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (state.quickStatusVoiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                                    contentDescription = "Voice Status Announcement",
+                                    tint = if (state.quickStatusVoiceEnabled) p.emerald else p.textMuted,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = if (state.quickStatusVoiceEnabled) (if (isGreek) "ΦΩΝΗ ON" else "VOICE ON") else (if (isGreek) "ΦΩΝΗ OFF" else "VOICE"),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (state.quickStatusVoiceEnabled) p.emerald else p.textSecondary
+                                )
+                            }
+                        }
+
+                        for (statusCode in com.example.model.QuickStatusCode.entries) {
+                            val isActive = state.lastQuickStatusCode == statusCode.name
+                            val accent = when (statusCode) {
+                                com.example.model.QuickStatusCode.ALL_OK -> p.emerald
+                                com.example.model.QuickStatusCode.NEED_HELP -> p.red
+                                com.example.model.QuickStatusCode.LOW_BATTERY,
+                                com.example.model.QuickStatusCode.NEED_WATER -> p.amber
+                                else -> p.cyan
+                            }
+                            Surface(
+                                onClick = { onSendQuickStatus(statusCode) },
+                                color = if (isActive) accent.copy(alpha = 0.22f) else p.background,
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.65f)),
+                                modifier = Modifier.testTag("quick_status_${statusCode.name}")
+                            ) {
+                                Text(
+                                    text = if (isGreek) statusCode.labelEl else statusCode.labelEn,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = accent,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1222,6 +1323,9 @@ private fun ConversationThreadView(
     onSendPhoto: (Bitmap, String) -> Unit = { _, _ -> },
     onSendTacticalSnap: () -> Unit = {},
     onRetrySendPacket: (MeshPacket) -> Unit = {},
+    onSendReaction: (String, String) -> Unit = { _, _ -> },
+    onTogglePinMessage: (String, String) -> Unit = { _, _ -> },
+    onSetThreadBurnTtl: (String, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     // Intercept back button to return to conversation list
@@ -1271,6 +1375,17 @@ private fun ConversationThreadView(
     val isDm = currentConvo != null && !currentConvo.isChannel && !currentConvo.isGroup && !currentConvo.peerNodeId.isNullOrBlank()
 
     val packets = state.activeThreadPackets
+    var threadSearchQuery by remember(threadId) { mutableStateOf("") }
+    var showThreadSearch by remember(threadId) { mutableStateOf(false) }
+    val filteredPackets = remember(packets, threadSearchQuery) {
+        if (threadSearchQuery.isBlank()) packets
+        else packets.filter {
+            it.content.contains(threadSearchQuery, ignoreCase = true) ||
+                it.sourceCallsign.contains(threadSearchQuery, ignoreCase = true)
+        }
+    }
+    val pinnedPacket = remember(packets) { packets.firstOrNull { it.isPinned } }
+    val activeThreadBurnSec = state.perThreadBurnTtlMap[threadId] ?: state.messageBurnTtlSeconds
 
     Column(
         modifier = modifier
@@ -1448,8 +1563,88 @@ private fun ConversationThreadView(
             }
         }
 
+        // v1.3.0 Thread Utility Strip: Search Toggle + Per-Chat Burn Timer + Pinned Message Banner
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(p.surface.copy(alpha = 0.72f))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                color = if (showThreadSearch) p.cyanDim else p.surfaceVariant,
+                shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, if (showThreadSearch) p.cyan else p.border),
+                modifier = Modifier.clickable {
+                    showThreadSearch = !showThreadSearch
+                    if (!showThreadSearch) threadSearchQuery = ""
+                }
+            ) {
+                Text(
+                    text = if (showThreadSearch) "✕ SEARCH" else "🔍 SEARCH",
+                    color = if (showThreadSearch) p.cyan else p.textSecondary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                )
+            }
+            val burnLabel = when (activeThreadBurnSec) {
+                0 -> "BURN: OFF"
+                60 -> "BURN: 1m"
+                300 -> "BURN: 5m"
+                3600 -> "BURN: 1h"
+                86400 -> "BURN: 24h"
+                else -> "BURN: ${activeThreadBurnSec}s"
+            }
+            Surface(
+                color = if (activeThreadBurnSec > 0) p.amberDim else p.surfaceVariant,
+                shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(0.8.dp, if (activeThreadBurnSec > 0) p.amber else p.border),
+                modifier = Modifier.clickable {
+                    val opts = listOf(0, 60, 300, 3600, 86400)
+                    val next = opts[(opts.indexOf(activeThreadBurnSec).coerceAtLeast(0) + 1) % opts.size]
+                    onSetThreadBurnTtl(threadId, next)
+                }
+            ) {
+                Text(
+                    text = "🔥 $burnLabel",
+                    color = if (activeThreadBurnSec > 0) p.amber else p.textSecondary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                )
+            }
+            if (pinnedPacket != null) {
+                Text(
+                    text = "📌 ${pinnedPacket.content.take(36)}",
+                    color = p.emerald,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        if (showThreadSearch) {
+            OutlinedTextField(
+                value = threadSearchQuery,
+                onValueChange = { threadSearchQuery = it },
+                placeholder = { Text("Search messages in this chat...", fontSize = 11.sp) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+
         // Messages Feed
-        if (packets.isEmpty()) {
+        if (filteredPackets.isEmpty()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1507,12 +1702,46 @@ private fun ConversationThreadView(
                 contentPadding = PaddingValues(vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(packets, key = { it.id }) { packet ->
+                items(filteredPackets, key = { it.id }) { packet ->
                     MessageBubble(
                         packet = packet,
                         isSimpleMode = state.isSimpleMode,
                         onPlayVoiceClip = onPlayVoiceClip,
-                        onRetrySendPacket = onRetrySendPacket
+                        onRetrySendPacket = onRetrySendPacket,
+                        onReact = { emoji -> onSendReaction(packet.id, emoji) },
+                        onTogglePin = { onTogglePinMessage(threadId, packet.id) }
+                    )
+                }
+            }
+        }
+
+        // v1.3.0 Quick-Reply Chips Strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            val quickReplies = if (state.appLanguage == "el") {
+                listOf("Όλα καλά", "Έρχομαι", "Ελήφθη", "Αναμονή")
+            } else {
+                listOf("All OK", "On my way", "Copy", "Standby")
+            }
+            for (qr in quickReplies) {
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, p.border),
+                    modifier = Modifier.clickable { onSendMessage(qr) }
+                ) {
+                    Text(
+                        text = qr,
+                        color = p.textSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -1774,7 +2003,9 @@ private fun MessageBubble(
     packet: MeshPacket,
     isSimpleMode: Boolean = false,
     onPlayVoiceClip: (String) -> Unit = {},
-    onRetrySendPacket: (MeshPacket) -> Unit = {}
+    onRetrySendPacket: (MeshPacket) -> Unit = {},
+    onReact: (String) -> Unit = {},
+    onTogglePin: () -> Unit = {}
 ) {
     val p = LocalPulsePalette.current
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
@@ -2234,6 +2465,46 @@ private fun MessageBubble(
                             }
                         }
                     }
+                }
+
+                // v1.3.0 Message Reactions & Pin Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    for ((emoji, actors) in packet.reactions) {
+                        Surface(
+                            color = p.emeraldDim,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, p.emerald.copy(alpha = 0.6f)),
+                            modifier = Modifier.clickable { onReact(emoji) }
+                        ) {
+                            Text(
+                                text = "$emoji ${actors.size}",
+                                fontSize = 9.sp,
+                                color = p.textPrimary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    for (quickEmoji in listOf("👍", "✅", "⚠️")) {
+                        Text(
+                            text = quickEmoji,
+                            fontSize = 10.sp,
+                            modifier = Modifier
+                                .clickable { onReact(quickEmoji) }
+                                .padding(horizontal = 2.dp)
+                        )
+                    }
+                    Text(
+                        text = if (packet.isPinned) "📌" else "📍",
+                        fontSize = 10.sp,
+                        modifier = Modifier
+                            .clickable { onTogglePin() }
+                            .padding(horizontal = 2.dp)
+                    )
                 }
             }
         }

@@ -1,0 +1,54 @@
+name: PulseMesh FOSS CI & Reproducible F-Droid Check
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-and-build:
+    name: Test, FOSS Audit & Release Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Audit zero proprietary dependencies (F-Droid Inclusion Policy)
+        run: |
+          if grep -iE "com\.google\.android\.gms|com\.google\.firebase|crashlytics|play-services" app/build.gradle.kts gradle/libs.versions.toml; then
+            echo "ERROR: Proprietary dependency detected!"
+            exit 1
+          fi
+          grep -q "includeInApk = false" app/build.gradle.kts || (echo "ERROR: dependenciesInfo must be disabled for F-Droid" && exit 1)
+          echo "FOSS & F-Droid dependency audit passed."
+
+      - name: Validate Web PWA & Cloudflare Worker JavaScript syntax
+        run: |
+          node --check docs/web/sw.js
+          node --check cloudflare-username-relay/worker.js
+          python3 -c "import re; html=open('docs/web/index.html').read(); m=re.findall(r'<script>(.*?)</script>', html, re.S); open('/tmp/pm_web_ci.js','w').write('\n'.join(m))"
+          node --check /tmp/pm_web_ci.js
+
+      - name: Grant Gradle wrapper execute permission
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Build unsigned/signed F-Droid compatible Release APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Upload Release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsemesh-release-apk
+          path: app/build/outputs/apk/release/*.apk

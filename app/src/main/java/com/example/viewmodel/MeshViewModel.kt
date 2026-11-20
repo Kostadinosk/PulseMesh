@@ -228,6 +228,32 @@ data class MeshUiState(
     val webPortalStatus: com.example.service.WebPortalStatus = com.example.service.WebPortalStatus(),
     val incomingSosAlert: String = "",
 
+    // PulseMesh v1.3.0 Flagship Upgrades State
+    val appLanguage: String = "en",
+    val sharedFiles: List<SharedMeshFile> = emptyList(),
+    val quickStatusVoiceEnabled: Boolean = true,
+    val lastQuickStatusCode: String = "",
+    val iceBloodType: String = "",
+    val iceAllergies: String = "",
+    val iceNotes: String = "",
+    val iceEmergencyContact: String = "",
+    val deadManSwitchMinutes: Int = 0,
+    val deadManRemainingSeconds: Int = 0,
+    val geofenceEnabled: Boolean = false,
+    val geofenceLat: Double = 0.0,
+    val geofenceLng: Double = 0.0,
+    val geofenceRadiusMeters: Int = 500,
+    val geofenceAlertMessage: String = "",
+    val expeditionModeEnabled: Boolean = false,
+    val expeditionAutoBelow20: Boolean = true,
+    val hasBarometerSensor: Boolean = false,
+    val pressureTrendHpaPer3h: Float? = null,
+    val weatherTrendLabel: String = "UNAVAILABLE",
+    val isStormAlertActive: Boolean = false,
+    val perThreadBurnTtlMap: Map<String, Int> = emptyMap(),
+    val hasDecoyPin: Boolean = false,
+    val isDecoyModeActive: Boolean = false,
+
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Sim, 4: Root)
     val selectedTabIndex: Int = 0
 )
@@ -289,7 +315,23 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             isBreadcrumbRecording = prefs.isBreadcrumbRecording,
             breadcrumbs = prefs.loadBreadcrumbs(),
             messageBurnTtlSeconds = prefs.messageBurnTtlSeconds,
-            hasDuressPin = prefs.duressPinHash.isNotBlank()
+            hasDuressPin = prefs.duressPinHash.isNotBlank(),
+            appLanguage = prefs.appLanguage,
+            quickStatusVoiceEnabled = prefs.quickStatusVoiceEnabled,
+            iceBloodType = prefs.iceBloodType,
+            iceAllergies = prefs.iceAllergies,
+            iceNotes = prefs.iceNotes,
+            iceEmergencyContact = prefs.iceEmergencyContact,
+            deadManSwitchMinutes = prefs.deadManSwitchMinutes,
+            deadManRemainingSeconds = prefs.deadManSwitchMinutes * 60,
+            geofenceEnabled = prefs.geofenceEnabled,
+            geofenceLat = prefs.geofenceLat,
+            geofenceLng = prefs.geofenceLng,
+            geofenceRadiusMeters = prefs.geofenceRadiusMeters,
+            expeditionModeEnabled = prefs.expeditionModeEnabled,
+            expeditionAutoBelow20 = prefs.expeditionAutoBelow20,
+            perThreadBurnTtlMap = prefs.getPerThreadBurnTtlMap(),
+            hasDecoyPin = prefs.decoyPinHash.isNotBlank()
         )
     )
     val uiState: StateFlow<MeshUiState> = _uiState.asStateFlow()
@@ -528,6 +570,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     private var telemetryTickJob: Job? = null
     private var simAnimJob: Job? = null
     private var autoCheckInJob: Job? = null
+    private var deadManSwitchJob: Job? = null
+    @Volatile
+    private var lastStormAlertBroadcastMs: Long = 0L
+    private var statusTts: android.speech.tts.TextToSpeech? = null
+    @Volatile
+    private var statusTtsReady: Boolean = false
 
     private val vibrator: Vibrator? by lazy {
         runCatching {
@@ -1075,9 +1123,35 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         deviceHeadingDeg = sState.deviceHeadingDeg,
                         barometricPressureHpa = sState.barometricPressureHpa,
                         barometricAltitudeMeters = resolvedAlt,
+                        hasBarometerSensor = sState.hasBarometerSensor,
+                        pressureTrendHpaPer3h = sState.pressureTrendHpaPer3h,
+                        weatherTrendLabel = sState.weatherTrendLabel,
+                        isStormAlertActive = sState.isStormAlertActive,
                         stepCount = sState.stepCount,
                         nodes = updatedNodes
                     )
+                }
+                if (sState.hasBarometerSensor && sState.isStormAlertActive) {
+                    val nowStorm = System.currentTimeMillis()
+                    if (nowStorm - lastStormAlertBroadcastMs > 30 * 60_000L) {
+                        lastStormAlertBroadcastMs = nowStorm
+                        val deltaStr = String.format(java.util.Locale.US, "%.1f", sState.pressureTrendHpaPer3h ?: -3.0f)
+                        val pVal = String.format(java.util.Locale.US, "%.1f", sState.barometricPressureHpa ?: 1000f)
+                        val alertText = "BAROMETRIC STORM ALERT: Pressure dropped $deltaStr hPa (now $pVal hPa)"
+                        val st = _uiState.value
+                        val pkt = com.example.service.WireMeshPacket(
+                            packetId = "wx_${nowStorm and 0xFFFFF}",
+                            srcNodeId = st.localNodeId,
+                            srcCallsign = st.operatorCallsign,
+                            dstNodeId = "ALL",
+                            type = "WEATHER_ALERT",
+                            payload = alertText,
+                            ttl = 5,
+                            hops = 0,
+                            timestamp = nowStorm
+                        )
+                        sendOmniPacket(pkt)
+                    }
                 }
             }
         }
@@ -1777,7 +1851,14 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
         if (nowActive) {
             val pktId = "PKT#SOS_${now and 0xFFFF}"
-            val sosMsg = "MAYDAY: EMERGENCY SOS BEACON TRIGGERED BY ${state.operatorCallsign} (${state.localNodeId}) @ $coordLabel"
+            val iceParts = buildList {
+                if (state.iceBloodType.isNotBlank()) add("Blood: ${state.iceBloodType}")
+                if (state.iceAllergies.isNotBlank()) add("Allergies: ${state.iceAllergies}")
+                if (state.iceNotes.isNotBlank()) add("Med: ${state.iceNotes}")
+                if (state.iceEmergencyContact.isNotBlank()) add("ICE: ${state.iceEmergencyContact}")
+            }
+            val iceSuffix = if (iceParts.isNotEmpty()) " | ICE [${iceParts.joinToString("; ")}]" else ""
+            val sosMsg = "MAYDAY: EMERGENCY SOS BEACON TRIGGERED BY ${state.operatorCallsign} (${state.localNodeId}) @ $coordLabel$iceSuffix"
             val badge = "[$pktId | ${state.localNodeId}->ALL | PRIORITY: EMERGENCY | $outTransport]"
             val packet = MeshPacket(
                 id = pktId,
@@ -1798,7 +1879,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             val lngVal = state.userLongitude
             if (latVal != null && lngVal != null) {
                 val sosWp = TacticalWaypoint(
-                    id = "SOS-${state.localNodeId.takeLast(4)}",
+                    id = "SOS-${normalizeId(state.localNodeId)}",
                     title = "SOS: ${state.operatorCallsign}",
                     type = WaypointType.SOS,
                     latitude = latVal,
@@ -1809,7 +1890,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _uiState.update { cur ->
                     cur.copy(
-                        waypoints = cur.waypoints.filterNot { it.id == sosWp.id } + sosWp,
+                        waypoints = cur.waypoints.filterNot {
+                            it.id == sosWp.id || it.id == "SOS-${state.localNodeId.takeLast(4)}"
+                        } + sosWp,
                         packets = listOf(packet) + cur.packets
                     )
                 }
@@ -1838,14 +1921,45 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             )
             sendOmniPacket(wirePacket)
         } else {
+            // Remove our own red SOS waypoint from the map immediately on cancel!
+            val selfNorm = normalizeId(state.localNodeId)
             val clearId = "PKT#SOS_CLR_${now and 0xFFFF}"
             val clearMsg = "SOS CLEARED by ${state.operatorCallsign} (${state.localNodeId})"
+            _uiState.update { cur ->
+                cur.copy(
+                    isSosActive = false,
+                    incomingSosAlert = if (cur.incomingSosAlert.contains(state.operatorCallsign, ignoreCase = true)) "" else cur.incomingSosAlert,
+                    waypoints = cur.waypoints.filterNot { wp ->
+                        wp.type == WaypointType.SOS && (
+                            wp.id.equals("SOS-$selfNorm", ignoreCase = true) ||
+                                wp.id.equals("SOS-${state.localNodeId.takeLast(4)}", ignoreCase = true) ||
+                                wp.creatorCallsign.contains("(Self)", ignoreCase = true)
+                            )
+                    }
+                )
+            }
+            val clearChatPkt = MeshPacket(
+                id = clearId,
+                sourceId = state.localNodeId,
+                destId = "ALL",
+                sourceCallsign = "${state.operatorCallsign} (Self)",
+                type = PacketType.TEXT,
+                content = clearMsg,
+                hops = 0,
+                transport = outTransport,
+                rawHexBadge = "[$clearId | SOS_CLEAR]",
+                isIncoming = false,
+                timestamp = now
+            )
+            persistentChatManager.savePacket("channel_primary", clearChatPkt)
+            refreshConversationsList()
+
             val wireClear = com.example.service.WireMeshPacket(
                 packetId = clearId,
                 srcNodeId = state.localNodeId,
                 srcCallsign = state.operatorCallsign,
                 dstNodeId = "ALL",
-                type = "CHAT",
+                type = "SOS_CLEAR",
                 payload = clearMsg,
                 ttl = 7,
                 hops = 0,
@@ -3395,7 +3509,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val nowMs = System.currentTimeMillis()
-        val burnExpMs = if (state.messageBurnTtlSeconds > 0) nowMs + state.messageBurnTtlSeconds * 1000L else 0L
+        val effectiveBurnSec = state.perThreadBurnTtlMap[threadId] ?: state.messageBurnTtlSeconds
+        val burnExpMs = if (effectiveBurnSec > 0) nowMs + effectiveBurnSec * 1000L else 0L
         val userPacket = MeshPacket(
             id = pktId,
             sourceId = state.localNodeId,
@@ -4189,6 +4304,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             packet.type == "GROUP_CHAT" ||
             packet.type == "WAYPOINT" ||
             packet.type == "SOS" ||
+            packet.type == "SOS_CLEAR" ||
+            packet.type == "QUICK_STATUS" ||
+            packet.type == "REACTION" ||
+            packet.type == "WEATHER_ALERT" ||
             packet.type == "CALL_RING" ||
             packet.type == "CALL_INVITE" ||
             packet.type == "CALL_ACCEPT" ||
@@ -4397,6 +4516,24 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val peerNode = peersBackingMap[normSrc]
         val updatedNodes = buildMergedNodesList(_uiState.value.nodes)
         val peerCount = updatedNodes.count { !it.isSelf }
+
+        // Evaluate 1.5 Geofence perimeter breach if enabled and peer reported real GPS
+        val curGeo = _uiState.value
+        if (curGeo.geofenceEnabled && (curGeo.geofenceLat != 0.0 || curGeo.geofenceLng != 0.0) &&
+            packet.lat != null && packet.lng != null && (packet.lat != 0.0 || packet.lng != 0.0)
+        ) {
+            val distFromFence = com.example.service.LiveMeshNetworkService.calculateDistanceMeters(
+                curGeo.geofenceLat, curGeo.geofenceLng, packet.lat, packet.lng
+            )
+            if (distFromFence > curGeo.geofenceRadiusMeters.toDouble()) {
+                val peerLabel = peerNode?.callsign ?: packet.srcCallsign.ifBlank { canonicalSrcId }
+                val breachMsg = "PERIMETER ALERT: $peerLabel is ${distFromFence.toInt()}m from rally (limit ${curGeo.geofenceRadiusMeters}m)"
+                if (curGeo.geofenceAlertMessage != breachMsg) {
+                    _uiState.update { it.copy(geofenceAlertMessage = breachMsg) }
+                    triggerHaptic(90)
+                }
+            }
+        }
 
         if (peerNode != null) {
             val allKnownIds = peersBackingMap.values.map { it.id }
@@ -5287,6 +5424,107 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 refreshConversationsList()
                 triggerHaptic(320)
+            }
+            "SOS_CLEAR" -> {
+                _uiState.update { cur ->
+                    cur.copy(
+                        nodes = updatedNodes,
+                        activePeerCount = peerCount,
+                        incomingSosAlert = if (cur.incomingSosAlert.contains(effectiveCallsign, ignoreCase = true) ||
+                            cur.incomingSosAlert.contains(canonicalSrcId, ignoreCase = true)
+                        ) "" else cur.incomingSosAlert,
+                        waypoints = cur.waypoints.filterNot { wp ->
+                            wp.type == WaypointType.SOS && (
+                                wp.id.equals("SOS-$normSrc", ignoreCase = true) ||
+                                    wp.id.equals("SOS-${canonicalSrcId.takeLast(4)}", ignoreCase = true) ||
+                                    wp.creatorCallsign.equals(effectiveCallsign, ignoreCase = true)
+                                )
+                        }
+                    )
+                }
+                val clrPkt = MeshPacket(
+                    id = packet.packetId,
+                    sourceId = peerNode?.id ?: canonicalSrcId,
+                    destId = "ALL",
+                    sourceCallsign = effectiveCallsign,
+                    type = PacketType.TEXT,
+                    content = packet.payload.ifBlank { "SOS CLEARED by $effectiveCallsign" },
+                    hops = receivedHops,
+                    transport = resolvedTransport,
+                    rawHexBadge = "[SOS_CLEAR | $canonicalSrcId->ALL | Hop $receivedHops]",
+                    isIncoming = true,
+                    timestamp = packet.timestamp
+                )
+                persistentChatManager.savePacket("channel_primary", clrPkt)
+                refreshConversationsList()
+            }
+            "QUICK_STATUS" -> {
+                val statusObj = runCatching { org.json.JSONObject(packet.payload) }.getOrNull()
+                val rawCode = statusObj?.optString("code")?.ifBlank { packet.payload } ?: packet.payload
+                val speakFlag = statusObj?.optBoolean("voice", true) ?: true
+                val qs = QuickStatusCode.fromCode(rawCode)
+                val isGreek = _uiState.value.appLanguage == "el"
+                val label = if (qs != null) (if (isGreek) qs.labelEl else qs.labelEn) else rawCode.take(32)
+                peersBackingMap[normSrc]?.let { pNode ->
+                    peersBackingMap[normSrc] = pNode.copy(
+                        quickStatus = label,
+                        quickStatusAtMs = packet.timestamp
+                    )
+                }
+                val qsPkt = MeshPacket(
+                    id = packet.packetId,
+                    sourceId = peerNode?.id ?: canonicalSrcId,
+                    destId = "ALL",
+                    sourceCallsign = effectiveCallsign,
+                    type = PacketType.TEXT,
+                    content = "[STATUS] $label",
+                    hops = receivedHops,
+                    transport = resolvedTransport,
+                    rawHexBadge = "[STATUS | $canonicalSrcId->ALL | Hop $receivedHops]",
+                    isIncoming = true,
+                    timestamp = packet.timestamp
+                )
+                persistentChatManager.savePacket("channel_primary", qsPkt)
+                _uiState.update { cur ->
+                    val merged = buildMergedNodesList(cur.nodes)
+                    cur.copy(nodes = merged, activePeerCount = merged.count { !it.isSelf })
+                }
+                refreshConversationsList()
+                if (speakFlag && _uiState.value.quickStatusVoiceEnabled) {
+                    val spoken = if (qs != null) (if (isGreek) qs.spokenEl else qs.spokenEn) else label
+                    speakStatusAnnouncement("$effectiveCallsign: $spoken")
+                }
+                triggerHaptic(35)
+            }
+            "REACTION" -> {
+                runCatching {
+                    val obj = org.json.JSONObject(packet.payload)
+                    val targetId = obj.optString("targetId").trim()
+                    val emoji = obj.optString("emoji").trim()
+                    if (targetId.isNotBlank() && emoji.isNotBlank()) {
+                        if (persistentChatManager.toggleReaction(targetId, emoji, effectiveCallsign)) {
+                            refreshConversationsList()
+                        }
+                    }
+                }
+            }
+            "WEATHER_ALERT" -> {
+                val wxPkt = MeshPacket(
+                    id = packet.packetId,
+                    sourceId = peerNode?.id ?: canonicalSrcId,
+                    destId = "ALL",
+                    sourceCallsign = effectiveCallsign,
+                    type = PacketType.TEXT,
+                    content = "⛈️ ${packet.payload.ifBlank { "BAROMETRIC STORM WARNING" }}",
+                    hops = receivedHops,
+                    transport = resolvedTransport,
+                    rawHexBadge = "[WEATHER | $canonicalSrcId->ALL | Hop $receivedHops]",
+                    isIncoming = true,
+                    timestamp = packet.timestamp
+                )
+                persistentChatManager.savePacket("channel_primary", wxPkt)
+                refreshConversationsList()
+                triggerHaptic(60)
             }
             "TILE_REQ" -> {
                 // Gateway Peer serves offline neighbors' map tile requests over BLE/Wi-Fi Direct!
@@ -6910,8 +7148,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
         val targetNodeId = matchingClaim?.nodeId ?: if (isLoggedInToTarget) state.localNodeId else ""
 
+        val authTokenBeforeDelete = prefs.accountAuthToken
+        val privKeyBeforeDelete = prefs.x25519PrivateKey
         val erasedMsgs = persistentChatManager.deleteAllDataMatchingAccount(effectiveUser, targetNodeId)
         val deletedActive = prefs.deleteAccountInformation(effectiveUser)
+
+        // Also delete from our Cloudflare Workers + D1 username registry when online
+        if (effectiveUser.isNotBlank() && (authTokenBeforeDelete.isNotBlank() || privKeyBeforeDelete.isNotBlank())) {
+            viewModelScope.launch(Dispatchers.IO) {
+                meshNetworkService.deleteUsernameFromRelay(
+                    username = effectiveUser,
+                    authToken = authTokenBeforeDelete,
+                    privateKeyBase64 = privKeyBeforeDelete,
+                    allowDirectLookup = true
+                )
+            }
+        }
 
         if (deletedActive) {
             synchronized(pendingDtnPackets) { pendingDtnPackets.clear() }
@@ -6950,11 +7202,439 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         return Pair(true, "Deleted all local account data for $label ($erasedMsgs message(s) removed).")
     }
 
+    // =========================================================================
+    // PULSEMESH v1.3.0 FLAGSHIP FEATURES
+    // =========================================================================
+
+    private fun speakStatusAnnouncement(phrase: String) {
+        if (phrase.isBlank()) return
+        runCatching {
+            val lang = if (_uiState.value.appLanguage == "el") java.util.Locale("el", "GR") else java.util.Locale.US
+            if (statusTts == null) {
+                statusTts = android.speech.tts.TextToSpeech(getApplication()) { status ->
+                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                        statusTtsReady = true
+                        runCatching {
+                            statusTts?.language = lang
+                            statusTts?.speak(phrase, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "pm_qs_${System.currentTimeMillis()}")
+                        }
+                    }
+                }
+            } else if (statusTtsReady) {
+                statusTts?.language = lang
+                statusTts?.speak(phrase, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "pm_qs_${System.currentTimeMillis()}")
+            }
+        }
+    }
+
+    // 3.4 Multi-Language Switcher (en / el)
+    fun setAppLanguage(langCode: String) {
+        val clean = if (langCode.equals("el", ignoreCase = true)) "el" else "en"
+        prefs.appLanguage = clean
+        _uiState.update { it.copy(appLanguage = clean) }
+        triggerHaptic(25)
+    }
+
+    // 1.1 Offline File & Document Transfer (Hotspot HTTP/HTTPS Portal)
+    fun shareLocalFileToPortal(fileName: String, bytes: ByteArray): SharedMeshFile? {
+        val st = _uiState.value
+        val saved = pulseMeshWebServer.addLocalSharedFile(fileName, bytes, st.operatorCallsign)
+        if (saved != null) {
+            _uiState.update { it.copy(sharedFiles = pulseMeshWebServer.listSharedFiles()) }
+            triggerHaptic(35)
+        }
+        return saved
+    }
+
+    fun deleteSharedFileFromPortal(fileId: String) {
+        if (pulseMeshWebServer.deleteSharedFile(fileId)) {
+            _uiState.update { it.copy(sharedFiles = pulseMeshWebServer.listSharedFiles()) }
+            triggerHaptic(25)
+        }
+    }
+
+    fun refreshSharedFilesList() {
+        _uiState.update { it.copy(sharedFiles = pulseMeshWebServer.listSharedFiles()) }
+    }
+
+    // 1.3 Tactical Quick-Status & One-Tap Check-Ins (Text + Voice)
+    fun toggleQuickStatusVoice(enabled: Boolean? = null) {
+        val next = enabled ?: !_uiState.value.quickStatusVoiceEnabled
+        prefs.quickStatusVoiceEnabled = next
+        _uiState.update { it.copy(quickStatusVoiceEnabled = next) }
+        triggerHaptic(20)
+    }
+
+    fun sendQuickStatus(status: QuickStatusCode, speakAloud: Boolean = _uiState.value.quickStatusVoiceEnabled) {
+        val st = _uiState.value
+        val now = System.currentTimeMillis()
+        val isGreek = st.appLanguage == "el"
+        val displayLabel = if (isGreek) status.labelEl else status.labelEn
+        val spokenLabel = if (isGreek) status.spokenEl else status.spokenEn
+        val pktId = "qs_${now and 0xFFFFF}"
+        val payloadJson = org.json.JSONObject().apply {
+            put("code", status.code)
+            put("voice", speakAloud)
+        }.toString()
+
+        val localPkt = MeshPacket(
+            id = pktId,
+            sourceId = st.localNodeId,
+            destId = "ALL",
+            sourceCallsign = "${st.operatorCallsign} (Self)",
+            type = PacketType.TEXT,
+            content = "[STATUS] $displayLabel",
+            hops = 0,
+            transport = resolveActiveOutboundTransportAndRssi(null).first,
+            rawHexBadge = "[$pktId | QUICK_STATUS]",
+            isIncoming = false,
+            timestamp = now
+        )
+        persistentChatManager.savePacket("channel_primary", localPkt)
+        _uiState.update { cur ->
+            val updatedNodes = cur.nodes.map { n ->
+                if (n.isSelf) n.copy(quickStatus = displayLabel, quickStatusAtMs = now) else n
+            }
+            cur.copy(lastQuickStatusCode = status.code, nodes = updatedNodes)
+        }
+        refreshConversationsList()
+
+        sendOmniPacket(
+            com.example.service.WireMeshPacket(
+                packetId = pktId,
+                srcNodeId = st.localNodeId,
+                srcCallsign = st.operatorCallsign,
+                dstNodeId = "ALL",
+                type = "QUICK_STATUS",
+                payload = payloadJson,
+                ttl = 7,
+                hops = 0,
+                lat = st.userLatitude,
+                lng = st.userLongitude,
+                battery = st.realBatteryPercent,
+                timestamp = now
+            )
+        )
+        if (speakAloud) {
+            speakStatusAnnouncement("${st.operatorCallsign}: $spokenLabel")
+        }
+        triggerHaptic(40)
+    }
+
+    // 1.4 Offline Emergency Medical / ICE Card + Dead-Man's Switch
+    fun saveIceMedicalCard(bloodType: String, allergies: String, notes: String, emergencyContact: String) {
+        prefs.iceBloodType = bloodType
+        prefs.iceAllergies = allergies
+        prefs.iceNotes = notes
+        prefs.iceEmergencyContact = emergencyContact
+        _uiState.update {
+            it.copy(
+                iceBloodType = prefs.iceBloodType,
+                iceAllergies = prefs.iceAllergies,
+                iceNotes = prefs.iceNotes,
+                iceEmergencyContact = prefs.iceEmergencyContact
+            )
+        }
+        triggerHaptic(30)
+    }
+
+    fun setDeadManSwitchMinutes(minutes: Int) {
+        val clean = if (minutes in listOf(0, 15, 30, 60, 120)) minutes else 0
+        prefs.deadManSwitchMinutes = clean
+        _uiState.update {
+            it.copy(
+                deadManSwitchMinutes = clean,
+                deadManRemainingSeconds = clean * 60
+            )
+        }
+        startOrRestartDeadManCountdown(clean)
+        triggerHaptic(30)
+    }
+
+    fun checkInDeadManSwitch() {
+        val mins = _uiState.value.deadManSwitchMinutes
+        if (mins <= 0) return
+        _uiState.update { it.copy(deadManRemainingSeconds = mins * 60) }
+        startOrRestartDeadManCountdown(mins)
+        triggerHaptic(35)
+    }
+
+    private fun startOrRestartDeadManCountdown(minutes: Int) {
+        deadManSwitchJob?.cancel()
+        deadManSwitchJob = null
+        if (minutes <= 0) return
+        deadManSwitchJob = viewModelScope.launch {
+            var remaining = minutes * 60
+            while (isActive && remaining > 0) {
+                delay(1_000L)
+                remaining--
+                _uiState.update { it.copy(deadManRemainingSeconds = remaining) }
+            }
+            if (isActive && _uiState.value.deadManSwitchMinutes > 0 && !_uiState.value.isSosActive) {
+                toggleSosBeacon()
+            }
+        }
+    }
+
+    // 1.5 Geofence / Perimeter Alerts
+    fun configureGeofence(enabled: Boolean, lat: Double? = null, lng: Double? = null, radiusMeters: Int = _uiState.value.geofenceRadiusMeters) {
+        val st = _uiState.value
+        val targetLat = lat ?: st.userLatitude ?: st.geofenceLat
+        val targetLng = lng ?: st.userLongitude ?: st.geofenceLng
+        val cleanRadius = radiusMeters.coerceIn(50, 25_000)
+        prefs.geofenceEnabled = enabled
+        prefs.geofenceLat = targetLat
+        prefs.geofenceLng = targetLng
+        prefs.geofenceRadiusMeters = cleanRadius
+        _uiState.update {
+            it.copy(
+                geofenceEnabled = enabled,
+                geofenceLat = targetLat,
+                geofenceLng = targetLng,
+                geofenceRadiusMeters = cleanRadius,
+                geofenceAlertMessage = if (!enabled) "" else it.geofenceAlertMessage
+            )
+        }
+        triggerHaptic(35)
+    }
+
+    fun dismissGeofenceAlert() {
+        _uiState.update { it.copy(geofenceAlertMessage = "") }
+    }
+
+    // 2.2 Battery-Saver Duty-Cycle ("Expedition Mode")
+    fun toggleExpeditionMode(enabled: Boolean? = null) {
+        val next = enabled ?: !_uiState.value.expeditionModeEnabled
+        prefs.expeditionModeEnabled = next
+        _uiState.update { it.copy(expeditionModeEnabled = next) }
+        triggerHaptic(30)
+    }
+
+    fun toggleExpeditionAutoBelow20(enabled: Boolean? = null) {
+        val next = enabled ?: !_uiState.value.expeditionAutoBelow20
+        prefs.expeditionAutoBelow20 = next
+        _uiState.update { it.copy(expeditionAutoBelow20 = next) }
+        triggerHaptic(25)
+    }
+
+    // 3.1 Message Reactions (lightweight 2-byte-style mesh reaction packets)
+    fun sendReaction(packetId: String, emoji: String) {
+        val st = _uiState.value
+        if (packetId.isBlank() || emoji.isBlank()) return
+        if (persistentChatManager.toggleReaction(packetId, emoji, st.operatorCallsign)) {
+            refreshConversationsList()
+        }
+        val payloadJson = org.json.JSONObject().apply {
+            put("targetId", packetId)
+            put("emoji", emoji)
+        }.toString()
+        sendOmniPacket(
+            com.example.service.WireMeshPacket(
+                packetId = "rxn_${System.currentTimeMillis() and 0xFFFFF}",
+                srcNodeId = st.localNodeId,
+                srcCallsign = st.operatorCallsign,
+                dstNodeId = "ALL",
+                type = "REACTION",
+                payload = payloadJson,
+                ttl = 5,
+                hops = 0
+            )
+        )
+        triggerHaptic(20)
+    }
+
+    // 3.2 Message Search, Pinned Messages & Trip Log Export
+    fun togglePinMessage(threadId: String, packetId: String) {
+        if (persistentChatManager.togglePin(threadId, packetId)) {
+            refreshConversationsList()
+            triggerHaptic(25)
+        }
+    }
+
+    fun searchMessages(query: String, threadIdFilter: String? = null): List<Pair<String, MeshPacket>> {
+        return persistentChatManager.searchPackets(query, threadIdFilter)
+    }
+
+    fun exportTripArchiveJson(): String {
+        val st = _uiState.value
+        val root = org.json.JSONObject().apply {
+            put("app", "PulseMesh")
+            put("version", "1.3.0")
+            put("exportedAt", System.currentTimeMillis())
+            put("operator", st.operatorCallsign)
+            put("nodeId", st.localNodeId)
+            val wpArr = org.json.JSONArray()
+            st.waypoints.forEach { w ->
+                wpArr.put(org.json.JSONObject().apply {
+                    put("id", w.id); put("title", w.title); put("type", w.type.name)
+                    put("lat", w.latitude); put("lng", w.longitude); put("ts", w.timestamp)
+                })
+            }
+            put("waypoints", wpArr)
+            val bcArr = org.json.JSONArray()
+            st.breadcrumbs.forEach { b ->
+                bcArr.put(org.json.JSONObject().apply {
+                    put("lat", b.lat); put("lon", b.lon); put("altM", b.altM); put("ts", b.timestamp)
+                })
+            }
+            put("breadcrumbs", bcArr)
+            val chatsObj = org.json.JSONObject()
+            for ((tid, list) in persistentChatManager.exportAllThreadsMap()) {
+                val arr = org.json.JSONArray()
+                list.forEach { p ->
+                    arr.put(org.json.JSONObject().apply {
+                        put("id", p.id); put("from", p.sourceCallsign); put("content", p.content)
+                        put("ts", p.timestamp); put("pinned", p.isPinned)
+                    })
+                }
+                chatsObj.put(tid, arr)
+            }
+            put("chats", chatsObj)
+        }
+        return root.toString(2)
+    }
+
+    // 3.3 QR Contact & Group Instant Join
+    fun buildInstantJoinQrPayload(groupId: String? = null): String {
+        val st = _uiState.value
+        val sb = StringBuilder("pulsemesh://join?")
+        sb.append("id=").append(java.net.URLEncoder.encode(st.localNodeId, "UTF-8"))
+        sb.append("&cs=").append(java.net.URLEncoder.encode(st.operatorCallsign, "UTF-8"))
+        if (st.claimedUsername.isNotBlank()) {
+            sb.append("&u=").append(java.net.URLEncoder.encode(st.claimedUsername, "UTF-8"))
+        }
+        if (st.x25519PublicKey.isNotBlank()) {
+            sb.append("&pk=").append(java.net.URLEncoder.encode(st.x25519PublicKey, "UTF-8"))
+        }
+        if (!groupId.isNullOrBlank()) {
+            val grp = st.meshGroups.firstOrNull { it.groupId == groupId }
+            if (grp != null) {
+                sb.append("&gid=").append(java.net.URLEncoder.encode(grp.groupId, "UTF-8"))
+                sb.append("&gn=").append(java.net.URLEncoder.encode(grp.groupName, "UTF-8"))
+                if (grp.groupKeyBase64.isNotBlank()) {
+                    sb.append("&gk=").append(java.net.URLEncoder.encode(grp.groupKeyBase64, "UTF-8"))
+                }
+            }
+        }
+        return sb.toString()
+    }
+
+    fun importInstantJoinQrPayload(rawUri: String): Pair<Boolean, String> {
+        val trimmed = rawUri.trim()
+        if (!trimmed.startsWith("pulsemesh://join?")) {
+            return Pair(false, "Invalid PulseMesh QR link (must start with pulsemesh://join?)")
+        }
+        val query = trimmed.substringAfter("?")
+        val params = LinkedHashMap<String, String>()
+        for (pair in query.split("&")) {
+            val eq = pair.indexOf('=')
+            if (eq > 0) {
+                val k = runCatching { java.net.URLDecoder.decode(pair.substring(0, eq), "UTF-8") }.getOrDefault(pair.substring(0, eq))
+                val v = runCatching { java.net.URLDecoder.decode(pair.substring(eq + 1), "UTF-8") }.getOrDefault(pair.substring(eq + 1))
+                params[k] = v
+            }
+        }
+        val peerId = (params["id"].orEmpty().ifBlank { params["node"].orEmpty() }).trim()
+        val peerCs = params["cs"].orEmpty().trim().ifBlank { peerId }
+        val peerUser = TacticalE2eeManager.normalizeUsername(params["u"].orEmpty())
+        val peerPk = params["pk"].orEmpty().trim()
+        if (peerId.isBlank() || normalizeId(peerId) == normalizeId(_uiState.value.localNodeId)) {
+            return Pair(false, "QR link does not contain a valid remote peer Node ID.")
+        }
+        if (peerPk.isNotBlank() && TacticalE2eeManager.isValidEcPublicKeyBase64(peerPk)) {
+            prefs.verifyOrTrustPeerPublicKey(peerId, peerPk)
+        }
+        if (peerUser.length >= 3) {
+            prefs.saveUsernameClaim(
+                com.example.crypto.UsernameClaimRecord(
+                    username = peerUser,
+                    displayName = peerCs,
+                    nodeId = peerId,
+                    publicKeyBase64 = peerPk,
+                    saltHex = "",
+                    pinHash = "",
+                    recoveryHash = "",
+                    claimedAt = System.currentTimeMillis()
+                )
+            )
+        }
+        registerOrUpdatePeerInstant(
+            peerNodeId = peerId,
+            callsign = peerCs,
+            sourceTransport = "QR TRUSTED",
+            forceImmediateUiUpdate = true
+        )
+        val gid = params["gid"].orEmpty().trim()
+        val gn = params["gn"].orEmpty().trim().ifBlank { "Group $gid" }
+        val gk = params["gk"].orEmpty().trim()
+        var joinedGroupNote = ""
+        if (gid.isNotBlank()) {
+            if (gk.isNotBlank()) prefs.saveGroupAesKey(gid, gk)
+            val selfId = _uiState.value.localNodeId
+            val existing = _uiState.value.meshGroups.firstOrNull { it.groupId == gid }
+            val members = ((existing?.memberIds ?: emptyList()) + listOf(selfId, peerId)).distinct()
+            val merged = MeshGroup(groupId = gid, groupName = gn, memberIds = members, groupKeyBase64 = gk.ifBlank { existing?.groupKeyBase64.orEmpty() })
+            val updatedGroups = _uiState.value.meshGroups.filterNot { it.groupId == gid } + merged
+            prefs.saveMeshGroups(updatedGroups)
+            _uiState.update { it.copy(meshGroups = updatedGroups) }
+            joinedGroupNote = " + joined group \"$gn\""
+        }
+        refreshConversationsList()
+        triggerHaptic(50)
+        return Pair(true, "Verified & added $peerCs ($peerId)$joinedGroupNote.")
+    }
+
+    // 4.1 Per-Chat Disappearing Burn Timers
+    fun setThreadBurnTtl(threadId: String, ttlSeconds: Int) {
+        prefs.setPerThreadBurnTtl(threadId, ttlSeconds)
+        _uiState.update { it.copy(perThreadBurnTtlMap = prefs.getPerThreadBurnTtlMap()) }
+        triggerHaptic(20)
+    }
+
+    // 4.2 Decoy / Panic Mode Profile
+    private fun hashDecoyPin(cleanPin: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("PULSEMESH_DECOY_V13:$cleanPin".toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    fun setDecoyPin(pin: String): Boolean {
+        val clean = pin.trim()
+        if (clean.isEmpty()) {
+            prefs.decoyPinHash = ""
+            _uiState.update { it.copy(hasDecoyPin = false, isDecoyModeActive = false) }
+            return true
+        }
+        if (clean.length < 4) return false
+        prefs.decoyPinHash = hashDecoyPin(clean)
+        _uiState.update { it.copy(hasDecoyPin = true) }
+        triggerHaptic(35)
+        return true
+    }
+
+    fun verifyOrEnterDecoyMode(enteredPin: String): Boolean {
+        val clean = enteredPin.trim()
+        val stored = prefs.decoyPinHash
+        if (clean.length < 4 || stored.isBlank()) return false
+        if (hashDecoyPin(clean) != stored) return false
+        _uiState.update { it.copy(isDecoyModeActive = true) }
+        triggerHaptic(40)
+        return true
+    }
+
+    fun exitDecoyMode() {
+        _uiState.update { it.copy(isDecoyModeActive = false) }
+        triggerHaptic(30)
+    }
+
     private fun buildWebPortalInfoJson(portalUrl: String, webClientCount: Int): org.json.JSONObject {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2.9")
+            put("version", "1.3.0")
+            put("sslEnabled", state.webPortalStatus.sslEnabled)
+            put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)
+            put("sharedFilesCount", state.webPortalStatus.sharedFilesCount)
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)
@@ -7366,6 +8046,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         telemetryTickJob?.cancel()
         simAnimJob?.cancel()
         acceptSignalRetryJob?.cancel()
+        deadManSwitchJob?.cancel()
+        runCatching { statusTts?.stop(); statusTts?.shutdown() }
+        statusTts = null
         ultrasonicModem.stopListeningLoop()
         audioService.release()
         tacticalCallService.release()

@@ -330,8 +330,16 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         label = {
+                                            val displayTitle = if (state.appLanguage == "el") {
+                                                when (index) {
+                                                    0 -> "Χάρτης"
+                                                    1 -> "Μηνύματα"
+                                                    2 -> "Φωνή"
+                                                    else -> "Ρυθμίσεις"
+                                                }
+                                            } else title
                                             Text(
-                                                text = title,
+                                                text = displayTitle,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 style = MaterialTheme.typography.labelSmall.copy(
@@ -388,6 +396,16 @@ class MainActivity : ComponentActivity() {
                                     locationShareMode = state.locationShareMode,
                                     onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
                                     breadcrumbs = state.breadcrumbs,
+                                    geofenceEnabled = state.geofenceEnabled,
+                                    geofenceLat = state.geofenceLat,
+                                    geofenceLng = state.geofenceLng,
+                                    geofenceRadiusMeters = state.geofenceRadiusMeters,
+                                    geofenceAlertMessage = state.geofenceAlertMessage,
+                                    onDismissGeofenceAlert = { viewModel.dismissGeofenceAlert() },
+                                    hasBarometerSensor = state.hasBarometerSensor,
+                                    barometricPressureHpa = state.barometricPressureHpa,
+                                    weatherTrendLabel = state.weatherTrendLabel,
+                                    isStormAlertActive = state.isStormAlertActive,
                                 )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(
@@ -428,6 +446,11 @@ class MainActivity : ComponentActivity() {
                                 onSendTacticalSnap = { viewModel.sendTacticalSnapInChat() },
                                 onRetrySendPacket = { pkt -> viewModel.retrySendChatPacket(pkt) },
                                 onConnectByUsername = { username, cb -> viewModel.connectByUsername(username, cb) },
+                                onSendQuickStatus = { code -> viewModel.sendQuickStatus(code) },
+                                onToggleQuickStatusVoice = { viewModel.toggleQuickStatusVoice() },
+                                onSendReaction = { pktId, emoji -> viewModel.sendReaction(pktId, emoji) },
+                                onTogglePinMessage = { threadId, pktId -> viewModel.togglePinMessage(threadId, pktId) },
+                                onSetThreadBurnTtl = { threadId, ttl -> viewModel.setThreadBurnTtl(threadId, ttl) },
                             )
                             2 -> SimpleCallVoiceScreen(
                                 state = state,
@@ -502,8 +525,38 @@ class MainActivity : ComponentActivity() {
                                         onSyncAccountBackupNow = { cb ->
                                             viewModel.syncAccountBackupNow(cb)
                                         },
+                                        onToggleBackgroundRelayService = { viewModel.toggleBackgroundRelayService() },
+                                        onToggleVolumeButtonPtt = { viewModel.toggleVolumeButtonPtt() },
+                                        onToggleRadioVoxBridge = { viewModel.toggleRadioVoxBridge() },
+                                        onToggleDeadReckoning = { viewModel.toggleDeadReckoning() },
+                                        onToggleBreadcrumbRecording = { viewModel.toggleBreadcrumbRecording() },
+                                        onClearBreadcrumbTrail = { viewModel.clearBreadcrumbTrail() },
+                                        onShareBreadcrumbTrail = { viewModel.shareBreadcrumbTrailToMesh() },
+                                        onBroadcastOfflineMapTiles = { viewModel.broadcastOfflineMapTilesToPeers() },
+                                        onTransmitKeyVerifyChirp = { viewModel.transmitUltrasonicKeyVerifyChirp() },
+                                        onCycleMessageBurnTtl = { viewModel.cycleMessageBurnTtl() },
+                                        onSetDuressPin = { pin -> viewModel.setDuressPin(pin) },
+                                        onTriggerDuressWipe = { pin -> viewModel.verifyOrTriggerDuressWipe(pin) },
+                                        onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
+                                        onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
                                         onToggleWebPortal = { viewModel.toggleWebPortal() },
                                         onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
+                                        onSetAppLanguage = { lang -> viewModel.setAppLanguage(lang) },
+                                        onShareLocalFile = { name, _, bytes -> viewModel.shareLocalFileToPortal(name, bytes) != null },
+                                        onDeleteSharedFile = { id -> viewModel.deleteSharedFileFromPortal(id) },
+                                        onSendQuickStatus = { code -> viewModel.sendQuickStatus(code) },
+                                        onToggleQuickStatusVoice = { viewModel.toggleQuickStatusVoice() },
+                                        onSaveIceMedicalCard = { b, a, c -> viewModel.saveIceMedicalCard(b, a, "", c) },
+                                        onSetDeadManSwitchMinutes = { m -> viewModel.setDeadManSwitchMinutes(m) },
+                                        onCheckInDeadManSwitch = { viewModel.checkInDeadManSwitch() },
+                                        onConfigureGeofence = { en, rad -> viewModel.configureGeofence(enabled = en, radiusMeters = rad) },
+                                        onToggleExpeditionMode = { viewModel.toggleExpeditionMode() },
+                                        onToggleExpeditionAutoBelow20 = { viewModel.toggleExpeditionAutoBelow20() },
+                                        onExportTripArchive = { viewModel.exportTripArchiveJson() },
+                                        onBuildInstantJoinQr = { viewModel.buildInstantJoinQrPayload() },
+                                        onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
+                                        onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
+                                        onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
                                     )
                                 } else {
                                     Column(
@@ -671,6 +724,22 @@ class MainActivity : ComponentActivity() {
                                                 onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
                                                 onToggleWebPortal = { viewModel.toggleWebPortal() },
                                                 onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
+                                                onSetAppLanguage = { lang -> viewModel.setAppLanguage(lang) },
+                                                onShareLocalFile = { name, _, bytes -> viewModel.shareLocalFileToPortal(name, bytes) != null },
+                                                onDeleteSharedFile = { id -> viewModel.deleteSharedFileFromPortal(id) },
+                                                onSendQuickStatus = { code -> viewModel.sendQuickStatus(code) },
+                                                onToggleQuickStatusVoice = { viewModel.toggleQuickStatusVoice() },
+                                                onSaveIceMedicalCard = { b, a, c -> viewModel.saveIceMedicalCard(b, a, "", c) },
+                                                onSetDeadManSwitchMinutes = { m -> viewModel.setDeadManSwitchMinutes(m) },
+                                                onCheckInDeadManSwitch = { viewModel.checkInDeadManSwitch() },
+                                                onConfigureGeofence = { en, rad -> viewModel.configureGeofence(enabled = en, radiusMeters = rad) },
+                                                onToggleExpeditionMode = { viewModel.toggleExpeditionMode() },
+                                                onToggleExpeditionAutoBelow20 = { viewModel.toggleExpeditionAutoBelow20() },
+                                                onExportTripArchive = { viewModel.exportTripArchiveJson() },
+                                                onBuildInstantJoinQr = { viewModel.buildInstantJoinQrPayload() },
+                                                onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
+                                                onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
+                                                onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
                                             )
                                         } else {
                                             RootBoosterScreen(
@@ -825,6 +894,91 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             )
+                        }
+                    }
+                }
+
+                // 4.2 Decoy / Panic Mode Benign Hiking Trail Log Overlay
+                if (state.isDecoyModeActive) {
+                    var exitTapCount by remember { mutableIntStateOf(0) }
+                    Surface(
+                        color = Color(0xFFF6F8F4),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("decoy_hiking_log_overlay")
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        exitTapCount += 1
+                                        if (exitTapCount >= 3) {
+                                            exitTapCount = 0
+                                            viewModel.exitDecoyMode()
+                                        }
+                                    },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "TrailNote Compass & Hike Log",
+                                        color = Color(0xFF1E3A2F),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp
+                                    )
+                                    Text(
+                                        text = "Offline Step & Elevation Journal",
+                                        color = Color(0xFF5A6B62),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.Terrain,
+                                    contentDescription = "Trail Journal",
+                                    tint = Color(0xFF2E6F40),
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                            HorizontalDivider(color = Color(0xFFD6E0D8))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Today's Trail Summary", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A2F))
+                                    Text("Compass Heading: ${state.deviceHeadingDeg.toInt()}°", color = Color(0xFF3E5248), fontSize = 13.sp)
+                                    Text("Steps Logged: ${state.stepCount}", color = Color(0xFF3E5248), fontSize = 13.sp)
+                                    if (state.hasBarometerSensor && state.barometricPressureHpa != null) {
+                                        Text(
+                                            text = "Barometer: %.1f hPa (${state.weatherTrendLabel})".format(state.barometricPressureHpa),
+                                            color = Color(0xFF3E5248),
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Recent Trail Notes", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A2F))
+                                    Text("• Pine Ridge Loop - Clear trail, shade near mile 2.4.", color = Color(0xFF4A5B52), fontSize = 13.sp)
+                                    Text("• Creek Crossing - Water flowing well, refill bottles.", color = Color(0xFF4A5B52), fontSize = 13.sp)
+                                    Text("• Summit Overlook - Light breeze, great sunset view.", color = Color(0xFF4A5B52), fontSize = 13.sp)
+                                }
+                            }
                         }
                     }
                 }

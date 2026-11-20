@@ -54,6 +54,27 @@ data class BreadcrumbPoint(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+data class SharedMeshFile(
+    val id: String,
+    val name: String,
+    val sizeBytes: Long,
+    val sha256: String,
+    val sender: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+enum class QuickStatusCode(val code: String, val labelEn: String, val labelEl: String, val spokenEn: String, val spokenEl: String) {
+    ALL_OK("ALL_OK", "ALL OK", "ΌΛΑ ΚΑΛΆ", "All okay", "Όλα καλά"),
+    LOW_BATTERY("LOW_BATTERY", "LOW BATTERY", "ΧΑΜΗΛΉ ΜΠΑΤΑΡΊΑ", "Low battery", "Χαμηλή μπαταρία"),
+    NEED_WATER("NEED_WATER", "NEED WATER", "ΧΡΕΙΆΖΟΜΑΙ ΝΕΡΌ", "Need water", "Χρειάζομαι νερό"),
+    MOVING("MOVING", "MOVING TO RALLY", "ΣΕ ΚΊΝΗΣΗ", "Moving to rally point", "Σε κίνηση προς το σημείο"),
+    NEED_HELP("NEED_HELP", "NEED HELP", "ΧΡΕΙΆΖΟΜΑΙ ΒΟΉΘΕΙΑ", "Need assistance", "Χρειάζομαι βοήθεια");
+
+    companion object {
+        fun fromCode(raw: String): QuickStatusCode? = entries.firstOrNull { it.code.equals(raw.trim(), ignoreCase = true) }
+    }
+}
+
 data class MeshPacket(
     val id: String,
     val sourceId: String,
@@ -71,7 +92,9 @@ data class MeshPacket(
     val waypointData: TacticalWaypoint? = null,
     val isDelivered: Boolean = false,
     val ackedByCallsign: String = "",
-    val expiresAtMs: Long = 0L
+    val expiresAtMs: Long = 0L,
+    val reactions: Map<String, List<String>> = emptyMap(),
+    val isPinned: Boolean = false
 ) {
     val transportUsed: String
         get() = transport
@@ -214,5 +237,8 @@ data class MeshNode(
     val transports: Set<String> = emptySet(),
     val publicKeyBase64: String = "",
     val safetyFingerprint: String = "",
-    val isKeyChangedWarning: Boolean = false
+    val isKeyChangedWarning: Boolean = false,
+    val quickStatus: String = "",
+    val quickStatusAtMs: Long = 0L,
+    val relayedViaNodeId: String = ""
 )

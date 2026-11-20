@@ -40,14 +40,18 @@ import java.util.zip.GZIPOutputStream
 data class WebPortalStatus(
     val isRunning: Boolean = false,
     val port: Int = 8080,
+    val httpsPort: Int = 8443,
+    val sslEnabled: Boolean = false,
     val hostIp: String = "",
     val portalUrl: String = "",
+    val httpsPortalUrl: String = "",
     val allReachableUrls: List<String> = emptyList(),
     val labeledReachableUrls: List<Pair<String, String>> = emptyList(),
     val activeClientCount: Int = 0,
     val selfTestPassed: Boolean = false,
     val lanSelfTestPassed: Boolean = false,
     val requestsServed: Int = 0,
+    val sharedFilesCount: Int = 0,
     val bindError: String = "",
     val statusMessage: String = "Wi-Fi Direct Web Portal Idle"
 )
@@ -97,7 +101,9 @@ class PulseMeshWebServer(
 ) {
     companion object {
         private val PREFERRED_PORTS = intArrayOf(8080, 8081, 8082, 8083, 8084, 8085, 8888, 9090)
-        private const val MAX_POST_BODY_BYTES = 512 * 1024 // 512 KB cap
+        private val PREFERRED_HTTPS_PORTS = intArrayOf(8443, 8444, 8445, 8446, 9443)
+        private const val MAX_POST_BODY_BYTES = 512 * 1024 // 512 KB cap for JSON API
+        private const val MAX_FILE_UPLOAD_BYTES = 5 * 1024 * 1024 // 5 MB cap for offline file transfer
         private const val CLIENT_STALE_MS = 90_000L
         private val TILE_PATH_REGEX = Regex("^/api/tiles/(\\d{1,2})/(\\d+)/(\\d+)\\.png$")
         private val EXCLUDED_IFACE_PREFIXES = listOf(
@@ -118,14 +124,24 @@ class PulseMeshWebServer(
     @Volatile
     private var serverSocket: ServerSocket? = null
     @Volatile
+    private var sslServerSocket: ServerSocket? = null
+    @Volatile
     private var boundPort: Int = 8080
+    @Volatile
+    private var boundHttpsPort: Int = 8443
     @Volatile
     private var preferredHostIp: String = ""
 
     private var startJob: Job? = null
     @Volatile
     private var acceptThread: Thread? = null
+    @Volatile
+    private var sslAcceptThread: Thread? = null
     private var maintenanceJob: Job? = null
+    private val sharedFilesIndex = CopyOnWriteArrayList<com.example.model.SharedMeshFile>()
+    private val sharedFilesDir: File by lazy {
+        File(context.filesDir, "pulsemesh_shared_files").apply { mkdirs() }
+    }
     private val workerExecutor = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "PulseMesh-HTTP-Worker").apply {
             isDaemon = true
@@ -250,6 +266,35 @@ class PulseMeshWebServer(
                     start()
                 }
 
+                // Dual-stack SSL/HTTPS listener (:8443) with pure-Kotlin self-signed ECDSA P-256 cert
+                // Enables WebCrypto ECDH & microphone getUserMedia on iPhone Safari / Chrome over local Hotspot!
+                val sslSock = openSslServerSocket()
+                if (sslSock != null) {
+                    sslServerSocket = sslSock
+                    boundHttpsPort = sslSock.localPort
+                    runCatching { sslAcceptThread?.interrupt() }
+                    sslAcceptThread = Thread({
+                        while (running.get() && !sslSock.isClosed) {
+                            try {
+                                val tlsClient = sslSock.accept()
+                                runCatching {
+                                    tlsClient.tcpNoDelay = true
+                                    tlsClient.sendBufferSize = 65536
+                                    tlsClient.setSoLinger(true, 4)
+                                }
+                                workerExecutor.execute { handleClientSocket(tlsClient) }
+                            } catch (_: Exception) {
+                                if (!running.get() || sslSock.isClosed) break
+                            }
+                        }
+                    }, "PulseMesh-HTTPS-Accept").apply {
+                        isDaemon = true
+                        priority = Thread.NORM_PRIORITY + 1
+                        start()
+                    }
+                    refreshPortalUrl()
+                }
+
                 // Loopback + real LAN/Hotspot IP HTTP 200 self-test right after bind
                 scope.launch(Dispatchers.IO) {
                     delay(180L)
@@ -324,8 +369,12 @@ class PulseMeshWebServer(
         }
         runCatching { serverSocket?.close() }
         serverSocket = null
+        runCatching { sslServerSocket?.close() }
+        sslServerSocket = null
         runCatching { acceptThread?.interrupt() }
         acceptThread = null
+        runCatching { sslAcceptThread?.interrupt() }
+        sslAcceptThread = null
         maintenanceJob?.cancel()
         maintenanceJob = null
         unregisterNsdService()
@@ -374,6 +423,68 @@ class PulseMeshWebServer(
             put("timestamp", System.currentTimeMillis())
         }.toString()
         broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+    }
+
+    private fun openSslServerSocket(): ServerSocket? {
+        val sslFactory = LocalSelfSignedTlsFactory.createSslServerSocketFactory(context) ?: return null
+        val ipv4Any = runCatching { InetAddress.getByName("0.0.0.0") }.getOrNull()
+        for (port in PREFERRED_HTTPS_PORTS) {
+            val sock = runCatching {
+                val ss = sslFactory.createServerSocket()
+                ss.reuseAddress = true
+                if (ipv4Any != null) {
+                    ss.bind(InetSocketAddress(ipv4Any, port), 64)
+                } else {
+                    ss.bind(InetSocketAddress(port), 64)
+                }
+                ss
+            }.getOrNull()
+            if (sock != null) return sock
+        }
+        return null
+    }
+
+    fun listSharedFiles(): List<com.example.model.SharedMeshFile> = sharedFilesIndex.toList()
+
+    fun addLocalSharedFile(fileName: String, bytes: ByteArray, sender: String): com.example.model.SharedMeshFile? {
+        if (bytes.isEmpty() || bytes.size > MAX_FILE_UPLOAD_BYTES) return null
+        val safeName = fileName.trim().replace(Regex("[^a-zA-Z0-9._ -]"), "_").take(80).ifBlank { "shared_file.bin" }
+        val fileId = "f_${System.currentTimeMillis()}_${(bytes.hashCode() and 0xFFFF).toString(16)}"
+        val sha256 = runCatching {
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { "%02x".format(it) }
+        }.getOrDefault("")
+        val dest = File(sharedFilesDir, fileId)
+        return runCatching {
+            dest.writeBytes(bytes)
+            val meta = com.example.model.SharedMeshFile(
+                id = fileId,
+                name = safeName,
+                sizeBytes = bytes.size.toLong(),
+                sha256 = sha256,
+                sender = sender.ifBlank { "Host" },
+                timestamp = System.currentTimeMillis()
+            )
+            sharedFilesIndex.add(0, meta)
+            while (sharedFilesIndex.size > 30) {
+                val removed = sharedFilesIndex.removeAt(sharedFilesIndex.lastIndex)
+                runCatching { File(sharedFilesDir, removed.id).delete() }
+            }
+            refreshPortalUrl()
+            notifyStateChanged()
+            meta
+        }.getOrNull()
+    }
+
+    fun deleteSharedFile(fileId: String): Boolean {
+        val removed = sharedFilesIndex.removeIf { it.id == fileId }
+        runCatching { File(sharedFilesDir, fileId).delete() }
+        if (removed) {
+            refreshPortalUrl()
+            notifyStateChanged()
+        }
+        return removed
     }
 
     private fun openServerSocket(): ServerSocket? {
@@ -454,6 +565,8 @@ class PulseMeshWebServer(
         val bestIp = bestPair?.first
             ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.LOCAL_HOTSPOT_IP }
         val primaryUrl = "http://$bestIp:$boundPort"
+        val sslActive = sslServerSocket?.isClosed == false
+        val httpsUrl = if (sslActive) "https://$bestIp:$boundHttpsPort" else ""
         val labeledUrls = if (rankedLabeled.isNotEmpty()) {
             rankedLabeled.map { (ip, ifaceName) -> "http://$ip:$boundPort" to ifaceName }
         } else {
@@ -464,29 +577,39 @@ class PulseMeshWebServer(
         val ok = selfTestPassed.get()
         val lanOk = lanSelfTestPassed.get()
         val hits = requestsServed.get()
+        val filesCount = sharedFilesIndex.size
         if (cur.portalUrl != primaryUrl ||
+            cur.httpsPortalUrl != httpsUrl ||
+            cur.sslEnabled != sslActive ||
             cur.allReachableUrls != allUrls ||
             cur.labeledReachableUrls != labeledUrls ||
             cur.activeClientCount != activeClients.size ||
             cur.selfTestPassed != ok ||
             cur.lanSelfTestPassed != lanOk ||
             cur.requestsServed != hits ||
+            cur.sharedFilesCount != filesCount ||
             !cur.isRunning
         ) {
             _status.value = WebPortalStatus(
                 isRunning = true,
                 port = boundPort,
+                httpsPort = boundHttpsPort,
+                sslEnabled = sslActive,
                 hostIp = bestIp,
                 portalUrl = primaryUrl,
+                httpsPortalUrl = httpsUrl,
                 allReachableUrls = allUrls,
                 labeledReachableUrls = labeledUrls,
                 activeClientCount = activeClients.size,
                 selfTestPassed = ok,
                 lanSelfTestPassed = lanOk,
                 requestsServed = hits,
+                sharedFilesCount = filesCount,
                 bindError = "",
                 statusMessage = when {
+                    lanOk && sslActive -> "HTTP + SSL HTTPS Verified • LIVE at $primaryUrl"
                     lanOk -> "LAN & Local HTTP 200 Verified • LIVE at $primaryUrl"
+                    ok && sslActive -> "HTTP + SSL HTTPS Ready • LIVE at $primaryUrl"
                     ok -> "Local HTTP 200 Verified • LIVE at $primaryUrl"
                     else -> "Web Portal LIVE at $primaryUrl"
                 }
@@ -613,7 +736,8 @@ class PulseMeshWebServer(
                 val query = if (qIdx >= 0) parseQuery(fullTarget.substring(qIdx + 1)) else emptyMap()
 
                 val bodyBytes = if (method == "POST") {
-                    val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, MAX_POST_BODY_BYTES) ?: 0
+                    val cap = if (path == "/api/files/upload") MAX_FILE_UPLOAD_BYTES else MAX_POST_BODY_BYTES
+                    val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, cap) ?: 0
                     if (contentLength > 0) readExactBytes(input, contentLength) else ByteArray(0)
                 } else {
                     ByteArray(0)
@@ -765,6 +889,78 @@ class PulseMeshWebServer(
                             else -> notifyStateChanged()
                         }
                         writeJson(output, 200, """{"ok":true}""", keepAlive = keepAlive)
+                    }
+
+                    method == "GET" && path == "/api/files" -> {
+                        val arr = org.json.JSONArray()
+                        for (f in sharedFilesIndex) {
+                            arr.put(JSONObject().apply {
+                                put("id", f.id)
+                                put("name", f.name)
+                                put("sizeBytes", f.sizeBytes)
+                                put("sha256", f.sha256)
+                                put("sender", f.sender)
+                                put("timestamp", f.timestamp)
+                            })
+                        }
+                        writeJson(output, 200, JSONObject().put("files", arr).toString(), keepAlive = keepAlive)
+                    }
+
+                    method == "POST" && path == "/api/files/upload" -> {
+                        val contentTypeHdr = headers["content-type"].orEmpty().lowercase(java.util.Locale.US)
+                        var fname = query["name"]?.ifBlank { "upload.bin" } ?: "upload.bin"
+                        var sender = query["sender"]?.ifBlank { "WebNode" } ?: "WebNode"
+                        var payloadBytes = bodyBytes
+                        if (contentTypeHdr.contains("application/json") || (bodyBytes.isNotEmpty() && bodyBytes[0] == '{'.code.toByte())) {
+                            runCatching {
+                                val j = JSONObject(String(bodyBytes, Charsets.UTF_8))
+                                val jName = j.optString("fileName").ifBlank { j.optString("name") }
+                                if (jName.isNotBlank()) fname = jName
+                                val jSender = j.optString("senderCallsign").ifBlank { j.optString("sender") }
+                                if (jSender.isNotBlank()) sender = jSender
+                                val b64 = j.optString("base64Data")
+                                if (b64.isNotBlank()) {
+                                    payloadBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                                }
+                            }
+                        }
+                        val saved = addLocalSharedFile(fname, payloadBytes, sender)
+                        if (saved != null) {
+                            val resp = JSONObject().apply {
+                                put("ok", true)
+                                put("id", saved.id)
+                                put("name", saved.name)
+                                put("fileName", saved.name)
+                                put("sizeBytes", saved.sizeBytes)
+                                put("sha256", saved.sha256)
+                            }
+                            writeJson(output, 200, resp.toString(), keepAlive = keepAlive)
+                        } else {
+                            writeJson(output, 400, """{"ok":false,"error":"empty_or_too_large"}""", keepAlive = keepAlive)
+                        }
+                    }
+
+                    method == "GET" && path == "/api/files/download" -> {
+                        val fid = query["id"].orEmpty().replace(Regex("[^a-zA-Z0-9_-]"), "")
+                        val meta = sharedFilesIndex.firstOrNull { it.id == fid }
+                        val targetFile = if (fid.isNotBlank()) File(sharedFilesDir, fid) else null
+                        if (meta != null && targetFile != null && targetFile.exists()) {
+                            val bytes = runCatching { targetFile.readBytes() }.getOrNull() ?: ByteArray(0)
+                            val dlHeader = buildString {
+                                append("HTTP/1.1 200 OK\r\n")
+                                append("Content-Type: application/octet-stream\r\n")
+                                append("Content-Disposition: attachment; filename=\"${meta.name.replace("\"", "")}\"\r\n")
+                                append("X-SHA256: ${meta.sha256}\r\n")
+                                append("Content-Length: ${bytes.size}\r\n")
+                                append("Access-Control-Allow-Origin: *\r\n")
+                                append("Connection: ${if (keepAlive) "keep-alive" else "close"}\r\n\r\n")
+                            }
+                            output.write(dlHeader.toByteArray(Charsets.UTF_8))
+                            output.write(bytes)
+                            output.flush()
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), keepAlive = keepAlive)
+                        }
                     }
 
                     method == "GET" && path.startsWith("/api/tiles/") -> {

@@ -1,6 +1,6 @@
-// PulseMesh v1.2.9 Offline PWA Service Worker (iOS / iPhone & Desktop)
-const CACHE_NAME = "pulsemesh-web-v129";
-const TILE_CACHE = "pulsemesh-tiles-v129";
+// PulseMesh v1.3.0 Offline PWA Service Worker (iOS / iPhone & Desktop)
+const CACHE_NAME = "pulsemesh-web-v130";
+const TILE_CACHE = "pulsemesh-tiles-v130";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -33,8 +33,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // Never intercept live SSE / local host API / ntfy live streams
-  if (url.pathname.startsWith("/api/") || url.hostname.endsWith("ntfy.sh")) {
+  // Never intercept live SSE / local host API / ntfy live streams / Cloudflare Workers D1 relay
+  if (url.pathname.startsWith("/api/") || url.hostname.endsWith("ntfy.sh") || url.hostname.endsWith("workers.dev")) {
     return;
   }
 

@@ -22,7 +22,7 @@ function jsonResponse(body, status = 200) {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, X-PM-Auth, X-PM-Signature",
     },
   });
@@ -308,6 +308,35 @@ export default {
         .run();
 
       return jsonResponse({ ok: true, username });
+    }
+
+    // DELETE /v1/users/:username — Authenticated permanent deletion (requires X-PM-Auth or ECDSA signature)
+    if (request.method === "DELETE" && userMatch) {
+      const username = normalizeUsername(decodeURIComponent(userMatch[1]));
+      if (!USERNAME_RE.test(username)) return jsonResponse({ error: "Invalid username" }, 400);
+
+      const existing = await env.DB.prepare(
+        "SELECT public_key_b64, auth_verifier_hash FROM users WHERE username = ?"
+      )
+        .bind(username)
+        .first();
+      if (!existing) return jsonResponse({ ok: true, username, alreadyDeleted: true });
+
+      const authToken = request.headers.get("X-PM-Auth") || "";
+      const tokenHash = authToken ? await sha256LowerHex(`PM_AUTH_V2:${authToken.trim()}`) : "";
+      const tokenValid = tokenHash && tokenHash === existing.auth_verifier_hash;
+      const sig = request.headers.get("X-PM-Signature") || "";
+      const sigValid =
+        sig &&
+        (await verifyEcP256Signature(existing.public_key_b64, `DELETE|${username}`, sig));
+
+      if (!tokenValid && !sigValid) {
+        return jsonResponse({ error: "Unauthorized deletion" }, 403);
+      }
+
+      await env.DB.prepare("DELETE FROM inbox WHERE recipient = ?").bind(username).run();
+      await env.DB.prepare("DELETE FROM users WHERE username = ?").bind(username).run();
+      return jsonResponse({ ok: true, username, deleted: true });
     }
 
     // POST /v1/inbox/:username — Queue opaque PMU2 E2EE envelope

@@ -18,6 +18,9 @@ data class TacticalSensorState(
     val deviceHeadingDeg: Float = 0f,
     val barometricPressureHpa: Float? = null,
     val barometricAltitudeMeters: Double? = null,
+    val pressureTrendHpaPer3h: Float? = null,
+    val weatherTrendLabel: String = "UNAVAILABLE",
+    val isStormAlertActive: Boolean = false,
     val hasCompassSensor: Boolean = false,
     val hasBarometerSensor: Boolean = false,
     val stepCount: Int = 0,
@@ -94,6 +97,23 @@ class TacticalSensorService(context: Context) : SensorEventListener {
         fun pressureHpaToAltitudeMeters(pressureHpa: Float): Double {
             if (pressureHpa <= 0f) return 0.0
             return SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, pressureHpa).toDouble()
+        }
+
+        /**
+         * Evaluates barometric pressure trend over a rolling window (up to 3 hours) on barometer-equipped phones.
+         * Returns `Triple(deltaHpa, label, isStormAlert)`. A drop of >= 3.0 hPa triggers a Storm Warning.
+         */
+        fun evaluateBarometricTrend(samples: List<Pair<Long, Float>>): Triple<Float, String, Boolean> {
+            if (samples.size < 2) return Triple(0f, "STEADY", false)
+            val oldest = samples.first()
+            val newest = samples.last()
+            val delta = newest.second - oldest.second
+            return when {
+                delta <= -3.0f -> Triple(delta, "STORM WARNING", true)
+                delta <= -1.2f -> Triple(delta, "FALLING", false)
+                delta >= 1.2f -> Triple(delta, "RISING (FAIR)", false)
+                else -> Triple(delta, "STEADY", false)
+            }
         }
 
         /**
@@ -177,6 +197,31 @@ class TacticalSensorService(context: Context) : SensorEventListener {
         }
     }
 
+    private val pressureHistory = ArrayDeque<Pair<Long, Float>>()
+    private var lastPressureSampleMs: Long = 0L
+
+    private fun recordPressureReading(hPa: Float, nowMs: Long = System.currentTimeMillis()) {
+        if (pressureHistory.isEmpty() || nowMs - lastPressureSampleMs >= 60_000L) {
+            lastPressureSampleMs = nowMs
+            pressureHistory.addLast(nowMs to hPa)
+            val cutoff = nowMs - 3L * 60 * 60 * 1000L
+            while (pressureHistory.size > 180 || (pressureHistory.size > 2 && pressureHistory.first().first < cutoff)) {
+                pressureHistory.removeFirst()
+            }
+        }
+        val (delta, label, storm) = evaluateBarometricTrend(pressureHistory.toList())
+        val altMeters = pressureHpaToAltitudeMeters(hPa)
+        _sensorState.update {
+            it.copy(
+                barometricPressureHpa = hPa,
+                barometricAltitudeMeters = altMeters,
+                pressureTrendHpaPer3h = delta,
+                weatherTrendLabel = label,
+                isStormAlertActive = storm
+            )
+        }
+    }
+
     override fun onSensorChanged(event: SensorEvent?) {
         event ?: return
         when (event.sensor.type) {
@@ -215,13 +260,7 @@ class TacticalSensorService(context: Context) : SensorEventListener {
             Sensor.TYPE_PRESSURE -> {
                 val hPa = event.values.firstOrNull() ?: return
                 if (hPa in 300f..1150f) {
-                    val altMeters = pressureHpaToAltitudeMeters(hPa)
-                    _sensorState.update {
-                        it.copy(
-                            barometricPressureHpa = hPa,
-                            barometricAltitudeMeters = altMeters
-                        )
-                    }
+                    recordPressureReading(hPa)
                 }
             }
         }

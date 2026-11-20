@@ -68,6 +68,20 @@ class PersistentChatManager(private val context: Context) {
                         purgedLegacyFakeThreads = true
                         continue
                     }
+                    val parsedReactions = LinkedHashMap<String, List<String>>()
+                    item.optJSONObject("reactions")?.let { rObj ->
+                        val rKeys = rObj.keys()
+                        while (rKeys.hasNext()) {
+                            val emoji = rKeys.next()
+                            val arr = rObj.optJSONArray(emoji) ?: continue
+                            val actors = mutableListOf<String>()
+                            for (ri in 0 until arr.length()) {
+                                val a = arr.optString(ri)
+                                if (a.isNotBlank()) actors.add(a)
+                            }
+                            if (actors.isNotEmpty()) parsedReactions[emoji] = actors
+                        }
+                    }
                     list.add(
                         MeshPacket(
                             id = pktId,
@@ -84,7 +98,9 @@ class PersistentChatManager(private val context: Context) {
                             timestamp = item.optLong("timestamp", System.currentTimeMillis()),
                             isDelivered = item.optBoolean("isDelivered", false),
                             ackedByCallsign = item.optString("ackedByCallsign", ""),
-                            expiresAtMs = item.optLong("expiresAtMs", 0L)
+                            expiresAtMs = item.optLong("expiresAtMs", 0L),
+                            reactions = parsedReactions,
+                            isPinned = item.optBoolean("isPinned", false)
                         )
                     )
                 }
@@ -291,6 +307,62 @@ class PersistentChatManager(private val context: Context) {
     }
 
     @Synchronized
+    fun toggleReaction(packetId: String, emoji: String, actorCallsign: String): Boolean {
+        if (packetId.isBlank() || emoji.isBlank()) return false
+        val cleanActor = actorCallsign.ifBlank { "Peer" }
+        var changed = false
+        for ((_, list) in memoryCache) {
+            for (idx in list.indices) {
+                val p = list[idx]
+                if (p.id == packetId) {
+                    val nextMap = p.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+                    val actors = nextMap.getOrPut(emoji) { mutableListOf() }
+                    if (actors.contains(cleanActor)) {
+                        actors.remove(cleanActor)
+                        if (actors.isEmpty()) nextMap.remove(emoji)
+                    } else {
+                        actors.add(cleanActor)
+                    }
+                    list[idx] = p.copy(reactions = nextMap.mapValues { it.value.toList() })
+                    changed = true
+                }
+            }
+        }
+        if (changed) persistToDisk()
+        return changed
+    }
+
+    @Synchronized
+    fun togglePin(threadId: String, packetId: String): Boolean {
+        val list = memoryCache[threadId] ?: return false
+        for (idx in list.indices) {
+            val p = list[idx]
+            if (p.id == packetId) {
+                list[idx] = p.copy(isPinned = !p.isPinned)
+                persistToDisk()
+                return true
+            }
+        }
+        return false
+    }
+
+    @Synchronized
+    fun searchPackets(query: String, threadIdFilter: String? = null): List<Pair<String, MeshPacket>> {
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val results = mutableListOf<Pair<String, MeshPacket>>()
+        for ((tid, list) in memoryCache) {
+            if (threadIdFilter != null && tid != threadIdFilter) continue
+            for (p in list) {
+                if (p.content.contains(q, ignoreCase = true) || p.sourceCallsign.contains(q, ignoreCase = true)) {
+                    results.add(tid to p)
+                }
+            }
+        }
+        return results.sortedByDescending { it.second.timestamp }
+    }
+
+    @Synchronized
     private fun persistToDisk() {
         runCatching {
             val root = JSONObject()
@@ -319,6 +391,18 @@ class PersistentChatManager(private val context: Context) {
                         }
                         if (p.expiresAtMs > 0L) {
                             put("expiresAtMs", p.expiresAtMs)
+                        }
+                        if (p.isPinned) {
+                            put("isPinned", true)
+                        }
+                        if (p.reactions.isNotEmpty()) {
+                            val rObj = JSONObject()
+                            for ((emoji, actors) in p.reactions) {
+                                val rArr = JSONArray()
+                                actors.forEach { rArr.put(it) }
+                                rObj.put(emoji, rArr)
+                            }
+                            put("reactions", rObj)
                         }
                     }
                     array.put(item)

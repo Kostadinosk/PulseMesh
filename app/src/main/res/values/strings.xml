@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">PulseMesh</string>
+    <string name="tab_map">Map</string>
+    <string name="tab_chats">Chats</string>
+    <string name="tab_voice">Voice</string>
+    <string name="tab_settings">Settings</string>
+    <string name="status_all_ok">ALL OK</string>
+    <string name="status_low_battery">LOW BATTERY</string>
+    <string name="status_need_water">NEED WATER</string>
+    <string name="status_moving">MOVING</string>
+    <string name="status_need_help">NEED HELP</string>
+    <string name="storm_warning">STORM ALERT: Rapid barometric pressure drop detected</string>
 </resources>

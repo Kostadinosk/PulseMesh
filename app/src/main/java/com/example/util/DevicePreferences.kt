@@ -419,9 +419,92 @@ class DevicePreferences(context: Context) {
         get() = prefs.getBoolean("is_username_on_hold", false)
         set(value) = prefs.edit().putBoolean("is_username_on_hold", value).apply()
 
+    companion object {
+        const val DEFAULT_CLOUDFLARE_RELAY_URL = "https://pulsemesh-username-relay.pulsemesh.workers.dev"
+    }
+
     var usernameRelayUrl: String
-        get() = prefs.getString("username_relay_url", "") ?: ""
+        get() = prefs.getString("username_relay_url", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_CLOUDFLARE_RELAY_URL
         set(value) = prefs.edit().putString("username_relay_url", value.trim().trimEnd('/')).apply()
+
+    // PulseMesh v1.3.0 Preferences: Language (en/el), ICE Medical, Dead-Man's Switch, Geofence, Expedition, Decoy PIN, Per-Chat Burn TTL
+    var appLanguage: String
+        get() = prefs.getString("app_language", "en")?.takeIf { it == "el" || it == "en" } ?: "en"
+        set(value) = prefs.edit().putString("app_language", if (value == "el") "el" else "en").apply()
+
+    var iceBloodType: String
+        get() = prefs.getString("ice_blood_type", "") ?: ""
+        set(value) = prefs.edit().putString("ice_blood_type", value.trim().take(16)).apply()
+
+    var iceAllergies: String
+        get() = prefs.getString("ice_allergies", "") ?: ""
+        set(value) = prefs.edit().putString("ice_allergies", value.trim().take(120)).apply()
+
+    var iceNotes: String
+        get() = prefs.getString("ice_notes", "") ?: ""
+        set(value) = prefs.edit().putString("ice_notes", value.trim().take(160)).apply()
+
+    var iceEmergencyContact: String
+        get() = prefs.getString("ice_emergency_contact", "") ?: ""
+        set(value) = prefs.edit().putString("ice_emergency_contact", value.trim().take(80)).apply()
+
+    var deadManSwitchMinutes: Int
+        get() = prefs.getInt("dead_man_switch_min", 0)
+        set(value) = prefs.edit().putInt("dead_man_switch_min", value.coerceIn(0, 720)).apply()
+
+    var geofenceEnabled: Boolean
+        get() = prefs.getBoolean("geofence_enabled", false)
+        set(value) = prefs.edit().putBoolean("geofence_enabled", value).apply()
+
+    var geofenceLat: Double
+        get() = java.lang.Double.longBitsToDouble(prefs.getLong("geofence_lat_bits", 0L))
+        set(value) = prefs.edit().putLong("geofence_lat_bits", java.lang.Double.doubleToRawLongBits(value)).apply()
+
+    var geofenceLng: Double
+        get() = java.lang.Double.longBitsToDouble(prefs.getLong("geofence_lng_bits", 0L))
+        set(value) = prefs.edit().putLong("geofence_lng_bits", java.lang.Double.doubleToRawLongBits(value)).apply()
+
+    var geofenceRadiusMeters: Int
+        get() = prefs.getInt("geofence_radius_m", 500)
+        set(value) = prefs.edit().putInt("geofence_radius_m", value.coerceIn(50, 25_000)).apply()
+
+    var expeditionModeEnabled: Boolean
+        get() = prefs.getBoolean("expedition_mode_enabled", false)
+        set(value) = prefs.edit().putBoolean("expedition_mode_enabled", value).apply()
+
+    var expeditionAutoBelow20: Boolean
+        get() = prefs.getBoolean("expedition_auto_below_20", true)
+        set(value) = prefs.edit().putBoolean("expedition_auto_below_20", value).apply()
+
+    var quickStatusVoiceEnabled: Boolean
+        get() = prefs.getBoolean("quick_status_voice_enabled", true)
+        set(value) = prefs.edit().putBoolean("quick_status_voice_enabled", value).apply()
+
+    var decoyPinHash: String
+        get() = prefs.getString("decoy_pin_hash", "") ?: ""
+        set(value) = prefs.edit().putString("decoy_pin_hash", value).apply()
+
+    fun getPerThreadBurnTtlMap(): Map<String, Int> {
+        val raw = prefs.getString("per_thread_burn_ttl_json", null) ?: return emptyMap()
+        val out = LinkedHashMap<String, Int>()
+        runCatching {
+            val obj = org.json.JSONObject(raw)
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                out[k] = obj.optInt(k, 0)
+            }
+        }
+        return out
+    }
+
+    fun setPerThreadBurnTtl(threadId: String, ttlSeconds: Int) {
+        val map = getPerThreadBurnTtlMap().toMutableMap()
+        if (ttlSeconds < 0) map.remove(threadId) else map[threadId] = ttlSeconds
+        val obj = org.json.JSONObject()
+        for ((k, v) in map) obj.put(k, v)
+        prefs.edit().putString("per_thread_burn_ttl_json", obj.toString()).apply()
+    }
 
     var accountAuthToken: String
         get() = prefs.getString("account_auth_token", "") ?: ""

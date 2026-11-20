@@ -92,6 +92,22 @@ fun SettingsScreen(
     onImportGpx: (String) -> Int = { 0 },
     onToggleWebPortal: () -> Unit = {},
     onDeleteAccountInfo: (username: String, pin: String, recoveryKey: String) -> Pair<Boolean, String> = { _, _, _ -> Pair(false, "") },
+    onSetAppLanguage: (String) -> Unit = {},
+    onShareLocalFile: (String, String, ByteArray) -> Boolean = { _, _, _ -> false },
+    onDeleteSharedFile: (String) -> Unit = {},
+    onSendQuickStatus: (com.example.model.QuickStatusCode) -> Unit = {},
+    onToggleQuickStatusVoice: () -> Unit = {},
+    onSaveIceMedicalCard: (String, String, String) -> Unit = { _, _, _ -> },
+    onSetDeadManSwitchMinutes: (Int) -> Unit = {},
+    onCheckInDeadManSwitch: () -> Unit = {},
+    onConfigureGeofence: (Boolean, Int) -> Unit = { _, _ -> },
+    onToggleExpeditionMode: () -> Unit = {},
+    onToggleExpeditionAutoBelow20: () -> Unit = {},
+    onExportTripArchive: () -> String = { "" },
+    onBuildInstantJoinQr: () -> String = { "" },
+    onImportInstantJoinQr: (String) -> Pair<Boolean, String> = { Pair(false, "") },
+    onSetDecoyPin: (String) -> Boolean = { false },
+    onTriggerDecoyMode: (String) -> Boolean = { false },
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -141,6 +157,24 @@ fun SettingsScreen(
     var deleteAccountFeedback by remember { mutableStateOf("") }
     var deleteAccountError by remember { mutableStateOf("") }
 
+    // v1.3.0 Horizontal Expandable Topic Lanes state (defaults to APPEARANCE)
+    var selectedLane by remember { mutableStateOf("APPEARANCE") }
+    var iceBloodInput by remember(state.iceBloodType) { mutableStateOf(state.iceBloodType) }
+    var iceAllergiesInput by remember(state.iceAllergies) { mutableStateOf(state.iceAllergies) }
+    var iceContactInput by remember(state.iceEmergencyContact) { mutableStateOf(state.iceEmergencyContact) }
+    var iceSavedNotice by remember { mutableStateOf("") }
+    var shareFileNameInput by remember { mutableStateOf("field-note.txt") }
+    var shareFileTextInput by remember { mutableStateOf("") }
+    var shareFileNotice by remember { mutableStateOf("") }
+    var tripExportNotice by remember { mutableStateOf("") }
+    var joinQrImportInput by remember { mutableStateOf("") }
+    var joinQrFeedback by remember { mutableStateOf("") }
+    var showInstantJoinQrDialog by remember { mutableStateOf(false) }
+    var decoyPinInput by remember { mutableStateOf("") }
+    var decoyFeedback by remember { mutableStateOf("") }
+
+    val isGreek = state.appLanguage == "el"
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -151,138 +185,6 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // -------------------------------------------------------------
-        // v1.2.5 SIMPLIFIED HORIZONTAL QUICK-SETTINGS STACK
-        // -------------------------------------------------------------
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "QUICK SETTINGS STACK (SWIPE HORIZONTALLY)",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = p.textMuted,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
-                )
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                @Composable
-                fun QuickSettingTile(
-                    title: String,
-                    value: String,
-                    accent: Color,
-                    icon: androidx.compose.ui.graphics.vector.ImageVector,
-                    onClick: () -> Unit,
-                    tag: String = ""
-                ) {
-                    Surface(
-                        color = p.card,
-                        shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.2.dp, accent.copy(alpha = 0.7f)),
-                        modifier = Modifier
-                            .width(128.dp)
-                            .clickable { onClick() }
-                            .then(if (tag.isNotBlank()) Modifier.testTag(tag) else Modifier)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(icon, contentDescription = title, tint = accent, modifier = Modifier.size(18.dp))
-                            Text(
-                                text = title,
-                                color = p.textMuted,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = value,
-                                color = accent,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                QuickSettingTile(
-                    title = "TRANSPORT",
-                    value = if (state.isInternetEnabled) "HYBRID" else "OFF-GRID",
-                    accent = if (state.isInternetEnabled) AmberRootBoost else EmeraldMesh,
-                    icon = Icons.Default.Sensors,
-                    onClick = onToggleInternetEnabled
-                )
-                QuickSettingTile(
-                    title = "HOTSPOT",
-                    value = if (state.hotspotState.isActive) "ACTIVE" else "HOST AP",
-                    accent = if (state.hotspotState.isActive) EmeraldMesh else CyanGateway,
-                    icon = Icons.Default.WifiTethering,
-                    onClick = { if (state.hotspotState.isActive) onStopHotspot() else onHostHotspot() }
-                )
-                QuickSettingTile(
-                    title = "WEB PORTAL",
-                    value = if (state.webPortalStatus.isRunning) ":${state.webPortalStatus.port} ON" else "START",
-                    accent = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
-                    icon = Icons.Default.QrCode2,
-                    onClick = onToggleWebPortal
-                )
-                QuickSettingTile(
-                    title = "GPS PRIVACY",
-                    value = state.locationShareMode.label,
-                    accent = when (state.locationShareMode) {
-                        LocationShareMode.EXACT -> EmeraldMesh
-                        LocationShareMode.COARSE -> AmberRootBoost
-                        LocationShareMode.OFF -> RedSosAlert
-                    },
-                    icon = Icons.Default.LocationOn,
-                    onClick = {
-                        val next = when (state.locationShareMode) {
-                            LocationShareMode.EXACT -> LocationShareMode.COARSE
-                            LocationShareMode.COARSE -> LocationShareMode.OFF
-                            LocationShareMode.OFF -> LocationShareMode.EXACT
-                        }
-                        onSelectLocationShareMode(next)
-                    }
-                )
-                QuickSettingTile(
-                    title = "THEME",
-                    value = state.appTheme.displayName.substringBefore(" ").uppercase(),
-                    accent = CyanGateway,
-                    icon = Icons.Default.Palette,
-                    onClick = onToggleLightMode
-                )
-                QuickSettingTile(
-                    title = "ACCOUNT DATA",
-                    value = "ERASE ALL",
-                    accent = RedSosAlert,
-                    icon = Icons.Default.DeleteForever,
-                    onClick = {
-                        deleteAccountUsernameInput = state.claimedUsername
-                        deleteAccountFeedback = ""
-                        showDeleteAccountDialog = true
-                    },
-                    tag = "quick_delete_account_tile"
-                )
-            }
-            if (deleteAccountFeedback.isNotBlank()) {
-                Text(
-                    text = deleteAccountFeedback,
-                    color = EmeraldMesh,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
         // -------------------------------------------------------------
         // TOP PERMANENT MODE SWITCH PILL: MODE: EASY / MODE: PRO
         // -------------------------------------------------------------
@@ -326,14 +228,18 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (state.isSimpleMode) "UI Layout: Easy Mode" else "UI Layout: Pro Mode",
+                            text = if (state.isSimpleMode) {
+                                if (isGreek) "Διάταξη: Απλή Λειτουργία" else "UI Layout: Easy Mode"
+                            } else {
+                                if (isGreek) "Διάταξη: Λειτουργία Pro" else "UI Layout: Pro Mode"
+                            },
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = p.textPrimary
                             )
                         )
                         Text(
-                            text = "Tap to switch instantly between Easy Mode and Pro Mode",
+                            text = if (isGreek) "Πάτησε για εναλλαγή Easy / Pro" else "Tap to switch instantly between Easy Mode and Pro Mode",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = p.textSecondary,
                                 fontSize = 11.sp
@@ -379,8 +285,112 @@ fun SettingsScreen(
         }
 
         // -------------------------------------------------------------
-        // APPEARANCE THEME PICKER: ORIGINAL CLASSIC / TACTICAL HUD / DAYLIGHT LIGHT / FRUTIGER AERO
+        // v1.3.0 HORIZONTAL EXPANDABLE SETTINGS TOPIC LANES
         // -------------------------------------------------------------
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = if (isGreek) "ΕΠΙΛΕΞΕ ΚΑΤΗΓΟΡΙΑ ΡΥΘΜΙΣΕΩΝ (ΣΥΡΕ ΟΡΙΖΟΝΤΙΑ)" else "TAP A SETTINGS LANE TO EXPAND (SWIPE HORIZONTALLY)",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = p.textMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp
+                )
+            )
+            data class SettingsLaneSpec(
+                val id: String,
+                val labelEn: String,
+                val labelEl: String,
+                val subEn: String,
+                val icon: androidx.compose.ui.graphics.vector.ImageVector,
+                val accent: Color
+            )
+            val lanes = listOf(
+                SettingsLaneSpec("APPEARANCE", "THEME & LANG", "ΘΕΜΑ & ΓΛΩΣΣΑ", state.appTheme.displayName.substringBefore(" "), Icons.Default.Palette, p.cyan),
+                SettingsLaneSpec("IDENTITY", "ACCOUNT & QR", "ΛΟΓΑΡΙΑΣΜΟΣ", if (state.claimedUsername.isNotBlank()) "@${state.claimedUsername}" else "Cloudflare D1", Icons.Default.Badge, EmeraldMesh),
+                SettingsLaneSpec("HOTSPOT", "HOTSPOT & SSL", "HOTSPOT & SSL", if (state.webPortalStatus.isRunning) "HTTP+HTTPS ON" else "Portal & Mesh", Icons.Default.WifiTethering, CyanGateway),
+                SettingsLaneSpec("SAFETY", "SAFETY & SOS", "ΑΣΦΑΛΕΙΑ/SOS", if (state.geofenceEnabled) "Fence ${state.geofenceRadiusMeters}m" else "ICE & Status", Icons.Default.HealthAndSafety, RedSosAlert),
+                SettingsLaneSpec("MAPS", "MAPS & WEATHER", "ΧΑΡΤΗΣ/ΚΑΙΡΟΣ", if (state.hasBarometerSensor) "${state.barometricPressureHpa?.toInt() ?: "--"} hPa" else "GPS & GPX", Icons.Default.Map, AmberRootBoost),
+                SettingsLaneSpec("FILES", "FILES & EXPORT", "ΑΡΧΕΙΑ", "${state.sharedFiles.size} shared", Icons.Default.FolderShared, p.emerald),
+                SettingsLaneSpec("POWER", "BATTERY & HW", "ΜΠΑΤΑΡΙΑ/HW", if (state.expeditionModeEnabled) "EXPEDITION" else "Radios & HW", Icons.Default.BatterySaver, AmberRootBoost),
+                SettingsLaneSpec("SECURITY", "SECURITY/DECOY", "ΑΣΦΑΛΕΙΑ/PIN", if (state.hasDecoyPin) "DECOY ARMED" else "Keys & Wipe", Icons.Default.Security, p.cyan)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (lane in lanes) {
+                    val isSelected = selectedLane == lane.id
+                    Surface(
+                        color = if (isSelected) lane.accent.copy(alpha = 0.22f) else p.card,
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (isSelected) 1.8.dp else 1.dp,
+                            if (isSelected) lane.accent else p.border
+                        ),
+                        modifier = Modifier
+                            .width(122.dp)
+                            .clickable { selectedLane = lane.id }
+                            .testTag("settings_lane_${lane.id.lowercase()}")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = lane.icon,
+                                    contentDescription = lane.labelEn,
+                                    tint = lane.accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null,
+                                    tint = if (isSelected) lane.accent else p.textMuted,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                            Text(
+                                text = if (isGreek) lane.labelEl else lane.labelEn,
+                                color = if (isSelected) lane.accent else p.textPrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = lane.subEn,
+                                color = p.textSecondary,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // PRO-ONLY REAL-TIME D3 / RECHARTS MESH RSSI TELEMETRY CHART
+        // -------------------------------------------------------------
+        if (!state.isSimpleMode) {
+            ProMeshRssiChartCard(state = state)
+        }
+
+        // -------------------------------------------------------------
+        // LANE 1: APPEARANCE & LANGUAGE (DEFAULT EXPANDED)
+        // -------------------------------------------------------------
+        if (selectedLane == "APPEARANCE") {
         Surface(
             color = if (p.isAero) Color.Transparent else p.card,
             shape = cardShape,
@@ -508,12 +518,7 @@ fun SettingsScreen(
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        if (themeValue == AppTheme.TACTICAL_LIGHT && !isLightMode) {
-                                            onSelectAppTheme(themeValue)
-                                            onToggleLightMode()
-                                        } else {
-                                            onSelectAppTheme(themeValue)
-                                        }
+                                        onSelectAppTheme(themeValue)
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = if (isSelected && p.isAero) {
@@ -563,17 +568,56 @@ fun SettingsScreen(
             }
         }
 
-        // -------------------------------------------------------------
-        // PRO-ONLY REAL-TIME D3 / RECHARTS MESH RSSI TELEMETRY CHART
-        // -------------------------------------------------------------
-        if (!state.isSimpleMode) {
-            ProMeshRssiChartCard(state = state)
+        // 3.4 Multi-Language Switcher (English / Ελληνικά)
+        Surface(
+            color = p.card,
+            shape = cardShape,
+            border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isGreek) "Γλώσσα Εφαρμογής & Φωνητικών (3.4)" else "App & Voice Language (3.4)",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = p.textPrimary)
+                    )
+                    Text(
+                        text = if (isGreek) "English ή Ελληνικά για κείμενο & φωνητικές καταστάσεις" else "Switch UI & Quick-Status voice TTS between English and Greek",
+                        style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary, fontSize = 11.sp)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = { onSetAppLanguage("en") },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (!isGreek) p.emerald else p.border),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.testTag("settings_lang_en_button")
+                    ) {
+                        Text("EN", fontWeight = FontWeight.Bold, color = if (!isGreek) p.emerald else p.textSecondary, fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onSetAppLanguage("el") },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isGreek) p.cyan else p.border),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.testTag("settings_lang_el_button")
+                    ) {
+                        Text("ΕΛ", fontWeight = FontWeight.Bold, color = if (isGreek) p.cyan else p.textSecondary, fontSize = 11.sp)
+                    }
+                }
+            }
         }
+        } // end selectedLane == "APPEARANCE"
 
         // -------------------------------------------------------------
         // PRO MODE COMPACT TELEMETRY & QUICK-ACTION CONSOLE STRIP
         // -------------------------------------------------------------
-        if (!state.isSimpleMode) {
+        if (!state.isSimpleMode && selectedLane == "POWER") {
             Surface(
                 color = p.card,
                 shape = cardShape,
@@ -739,8 +783,9 @@ fun SettingsScreen(
         }
 
         // -------------------------------------------------------------
-        // SECTION 1: TRANSPORT NETWORK POSTURE (OFF-GRID VS HYBRID)
+        // LANE: HOTSPOT & SSL (TRANSPORT POSTURE, HOTSPOT & HTTP/HTTPS PORTAL)
         // -------------------------------------------------------------
+        if (selectedLane == "HOTSPOT") {
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -974,7 +1019,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.2.9 HOTSPOT WEB PORTAL & iPHONE QR",
+                                    text = "v1.3.0 HOTSPOT WEB PORTAL (HTTP + SSL) & QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -988,7 +1033,8 @@ fun SettingsScreen(
                                             state.webPortalStatus.selfTestPassed -> "LOCAL HTTP 200 OK"
                                             else -> "STARTING"
                                         }
-                                        "$verifiedStr • ${state.webPortalStatus.activeClientCount} linked • ${state.webPortalStatus.requestsServed} hits"
+                                        val sslStr = if (state.webPortalStatus.sslEnabled) " • SSL :${state.webPortalStatus.httpsPort}" else ""
+                                        "$verifiedStr$sslStr • ${state.webPortalStatus.activeClientCount} linked • ${state.webPortalStatus.requestsServed} hits"
                                     } else if (state.webPortalStatus.bindError.isNotBlank()) {
                                         "Bind error: ${state.webPortalStatus.bindError}"
                                     } else {
@@ -1046,6 +1092,18 @@ fun SettingsScreen(
                                                     fontFamily = FontFamily.Monospace
                                                 )
                                             )
+                                            if (state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
+                                                Text(
+                                                    text = "🔒 SSL HTTPS: ${state.webPortalStatus.httpsPortalUrl}",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        color = AmberRootBoost,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 10.sp
+                                                    ),
+                                                    modifier = Modifier.testTag("hotspot_https_url_text")
+                                                )
+                                            }
                                             val altLabeled = state.webPortalStatus.labeledReachableUrls.filter { it.first != state.webPortalStatus.portalUrl }
                                             if (altLabeled.isNotEmpty()) {
                                                 Text(
@@ -1562,10 +1620,67 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end selectedLane == "HOTSPOT"
 
         // -------------------------------------------------------------
-        // SECTION 2: 75+ PHONE CHIPSET DATABASE & HARDWARE MATCHING
+        // LANE: POWER & HARDWARE (2.2 EXPEDITION MODE + 75+ CHIPSET PROFILES)
         // -------------------------------------------------------------
+        if (selectedLane == "POWER") {
+        // 2.2 Battery-Saver Duty-Cycle Mode ("Expedition Mode")
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, if (state.expeditionModeEnabled) AmberRootBoost else p.border, cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Expedition Battery-Saver Mode (2.2)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AmberRootBoost)
+                        )
+                        Text(
+                            text = "Duty-cycles BLE scans & beacons to extend multi-day off-grid battery life.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.expeditionModeEnabled,
+                        onCheckedChange = { onToggleExpeditionMode() },
+                        modifier = Modifier.testTag("toggle_expedition_mode")
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Auto-Enable Below 20% Battery",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Automatically engages duty-cycling when battery drops to 20% or lower.",
+                            style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.expeditionAutoBelow20,
+                        onCheckedChange = { onToggleExpeditionAutoBelow20() },
+                        modifier = Modifier.testTag("toggle_expedition_auto20")
+                    )
+                }
+            }
+        }
+
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1702,10 +1817,222 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end selectedLane == "POWER" (part 1)
 
         // -------------------------------------------------------------
-        // SECTION 3: TACTICAL MESH LINK-QUALITY SWEEP & AUTO CHECK-IN TIMER
+        // LANE: SAFETY & SOS (1.3 QUICK STATUS + 1.4 ICE & DEAD-MAN + 1.5 GEOFENCE + CHECK-IN)
         // -------------------------------------------------------------
+        if (selectedLane == "SAFETY") {
+        // 1.3 Tactical Quick-Status (Text + Voice TTS)
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, EmeraldMesh.copy(alpha = 0.7f), cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isGreek) "Ταχεία Κατάσταση & Φωνή (1.3)" else "Quick-Status & Voice Check-Ins (1.3)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = EmeraldMesh)
+                        )
+                        Text(
+                            text = if (isGreek) "Στείλε με 1 πάτημα κείμενο + φωνητική εκφώνηση στο δίκτυο" else "Broadcast one-tap status beacons with optional spoken voice announcement",
+                            style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.quickStatusVoiceEnabled,
+                        onCheckedChange = { onToggleQuickStatusVoice() },
+                        modifier = Modifier.testTag("settings_quick_status_voice_switch")
+                    )
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    for (code in com.example.model.QuickStatusCode.entries) {
+                        val accent = when (code) {
+                            com.example.model.QuickStatusCode.ALL_OK -> EmeraldMesh
+                            com.example.model.QuickStatusCode.NEED_HELP -> RedSosAlert
+                            com.example.model.QuickStatusCode.LOW_BATTERY,
+                            com.example.model.QuickStatusCode.NEED_WATER -> AmberRootBoost
+                            else -> CyanGateway
+                        }
+                        OutlinedButton(
+                            onClick = { onSendQuickStatus(code) },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, accent),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = if (isGreek) code.labelEl else code.labelEn,
+                                color = accent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1.4 Offline Emergency Medical / ICE Card + Dead-Man's Switch
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, RedSosAlert.copy(alpha = 0.7f), cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = if (isGreek) "Κάρτα ICE & Διακόπτης Dead-Man (1.4)" else "Emergency Medical / ICE Card & Dead-Man Switch (1.4)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = RedSosAlert)
+                )
+                Text(
+                    text = "Medical info is attached automatically to SOS distress broadcasts. Dead-Man's Switch auto-triggers SOS if you don't check in before countdown ends.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                )
+                OutlinedTextField(
+                    value = iceBloodInput,
+                    onValueChange = { iceBloodInput = it },
+                    label = { Text("Blood Type (e.g. O+, A-)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = iceAllergiesInput,
+                    onValueChange = { iceAllergiesInput = it },
+                    label = { Text("Allergies / Medical Notes") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = iceContactInput,
+                    onValueChange = { iceContactInput = it },
+                    label = { Text("ICE Contact Name / Phone") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = {
+                            onSaveIceMedicalCard(iceBloodInput, iceAllergiesInput, iceContactInput)
+                            iceSavedNotice = "ICE medical card saved offline."
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("SAVE ICE CARD", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    if (state.deadManSwitchMinutes > 0) {
+                        Button(
+                            onClick = onCheckInDeadManSwitch,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("I'M OK (${state.deadManRemainingSeconds / 60}m)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+                if (iceSavedNotice.isNotBlank()) {
+                    Text(iceSavedNotice, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+                Text(
+                    text = "Dead-Man's Switch Countdown:",
+                    style = MaterialTheme.typography.labelSmall.copy(color = p.textMuted, fontWeight = FontWeight.Bold)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    for ((mins, label) in listOf(0 to "OFF", 15 to "15m", 30 to "30m", 60 to "60m", 120 to "2h")) {
+                        val active = state.deadManSwitchMinutes == mins
+                        OutlinedButton(
+                            onClick = { onSetDeadManSwitchMinutes(mins) },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (active) RedSosAlert else p.border),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (active) RedSosAlert else p.textSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1.5 Geofence / Perimeter Alerts
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, if (state.geofenceEnabled) AmberRootBoost else p.border, cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Geofence Perimeter Alert (1.5)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AmberRootBoost)
+                        )
+                        Text(
+                            text = "Draws a perimeter on the map around your location and alerts when any mesh peer drifts outside.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                        )
+                    }
+                    Switch(
+                        checked = state.geofenceEnabled,
+                        onCheckedChange = { onConfigureGeofence(it, state.geofenceRadiusMeters) },
+                        modifier = Modifier.testTag("toggle_geofence_switch")
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    for (radius in listOf(100, 250, 500, 1000, 2000)) {
+                        val active = state.geofenceRadiusMeters == radius
+                        OutlinedButton(
+                            onClick = { onConfigureGeofence(true, radius) },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (active) AmberRootBoost else p.border),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = if (radius >= 1000) "${radius / 1000}km" else "${radius}m",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (active) AmberRootBoost else p.textSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // SECTION 3: TACTICAL MESH LINK-QUALITY SWEEP & AUTO CHECK-IN TIMER
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1875,10 +2202,72 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end selectedLane == "SAFETY"
 
         // -------------------------------------------------------------
-        // SECTION 3B: ECDH P-256 E2EE + TOFU, PASSPHRASE (PRO ONLY) & BLE PRIVACY
+        // LANE: SECURITY & DECOY (4.2 DECOY PIN + ECDH E2EE + LOCATION PRIVACY)
         // -------------------------------------------------------------
+        if (selectedLane == "SECURITY" || selectedLane == "SAFETY") {
+        // 4.2 Decoy / Panic Mode Profile (only shown in SECURITY lane)
+        if (selectedLane == "SECURITY") {
+            ElevatedCard(
+                shape = cardShape,
+                colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, CyanGateway.copy(alpha = 0.7f), cardShape)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Decoy / Panic Mode Profile (4.2)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
+                    )
+                    Text(
+                        text = "Set a separate Decoy PIN (4-8 digits). Entering it switches the screen into a benign Hiking Trail Log without erasing your encrypted vault.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                    )
+                    OutlinedTextField(
+                        value = decoyPinInput,
+                        onValueChange = { decoyPinInput = it },
+                        label = { Text("Decoy PIN (4-8 digits)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val ok = onSetDecoyPin(decoyPinInput)
+                                decoyFeedback = if (ok) "Decoy PIN armed." else "Enter 4 to 8 digits."
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (state.hasDecoyPin) "UPDATE DECOY PIN" else "ARM DECOY PIN", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (state.hasDecoyPin) {
+                            OutlinedButton(
+                                onClick = {
+                                    val triggered = onTriggerDecoyMode(decoyPinInput)
+                                    decoyFeedback = if (triggered) "Decoy Mode active." else "Enter your armed Decoy PIN to activate."
+                                },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AmberRootBoost),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("ENTER DECOY", color = AmberRootBoost, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    if (decoyFeedback.isNotBlank()) {
+                        Text(decoyFeedback, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -2073,10 +2462,12 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end selectedLane == "SECURITY" || "SAFETY"
 
         // -------------------------------------------------------------
-        // SECTION 4: OPERATOR PROFILE, UNIQUE @USERNAME & RECOVERY KEY
+        // LANE: IDENTITY & QR (CLOUDFLARE D1 @USERNAME + 3.3 QR INSTANT JOIN)
         // -------------------------------------------------------------
+        if (selectedLane == "IDENTITY") {
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -2356,9 +2747,135 @@ fun SettingsScreen(
             }
         }
 
+        // 3.3 QR Contact & Group Instant Join Card
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, CyanGateway.copy(alpha = 0.7f), cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "QR Contact & Group Instant Join (3.3)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
+                )
+                Text(
+                    text = "Share your scannable pulsemesh://join QR code (Node ID, Callsign, Channel & Public Key) or paste a peer's join URI to add them offline.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { showInstantJoinQrDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black),
+                        modifier = Modifier.weight(1f).testTag("settings_show_join_qr_button")
+                    ) {
+                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("MY JOIN QR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val payload = onBuildInstantJoinQr()
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh Join URI", payload))
+                            joinQrFeedback = "Copied pulsemesh://join URI to clipboard."
+                        },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("COPY URI", color = CyanGateway, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                OutlinedTextField(
+                    value = joinQrImportInput,
+                    onValueChange = { joinQrImportInput = it },
+                    label = { Text("Paste pulsemesh://join?... URI") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        val (ok, msg) = onImportInstantJoinQr(joinQrImportInput)
+                        joinQrFeedback = msg
+                        if (ok) joinQrImportInput = ""
+                    },
+                    enabled = joinQrImportInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("IMPORT PEER & JOIN CHANNEL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+                if (joinQrFeedback.isNotBlank()) {
+                    Text(joinQrFeedback, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+        } // end selectedLane == "IDENTITY" (part 1)
+
         // -------------------------------------------------------------
+        // LANE: MAPS & WEATHER (2.3 BAROMETRIC STORM ALERT + GPS)
+        // -------------------------------------------------------------
+        if (selectedLane == "MAPS") {
+        // 2.3 Offline Weather & Barometric Storm Alert (ONLY for phones that support a barometer sensor)
+        if (state.hasBarometerSensor) {
+            ElevatedCard(
+                shape = cardShape,
+                colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, if (state.isStormAlertActive) RedSosAlert else CyanGateway, cardShape)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Barometric Weather & Storm Alert (2.3)",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.isStormAlertActive) RedSosAlert else CyanGateway
+                        )
+                    )
+                    Text(
+                        text = buildString {
+                            append("Pressure: ")
+                            append(state.barometricPressureHpa?.let { "%.1f hPa".format(it) } ?: "Calibrating...")
+                            append(" • Trend: ")
+                            append(state.weatherTrendLabel)
+                            state.pressureTrendHpaPer3h?.let { append(" (%+.1f hPa/3h)".format(it)) }
+                        },
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = if (state.isStormAlertActive) RedSosAlert else EmeraldMesh,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Text(
+                        text = if (state.isStormAlertActive) {
+                            "STORM ALERT: Rapid pressure drop detected (<= -3.0 hPa / 3h). Weather warning broadcast to nearby mesh peers."
+                        } else {
+                            "Hardware barometer active. Automatically monitors 3-hour pressure trends offline and alerts your team before incoming storms."
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                    )
+                }
+            }
+        } else {
+            Surface(
+                color = p.surfaceVariant,
+                shape = cardShape,
+                border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Offline Barometric Weather (2.3): Not available on this phone (no hardware barometer sensor detected).",
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textMuted, fontSize = 11.sp),
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+
         // SECTION 5: REAL GPS SENSOR & COORDINATE MANAGEMENT
-        // -------------------------------------------------------------
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -2442,10 +2959,155 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end selectedLane == "MAPS" (part 1)
+
+        // -------------------------------------------------------------
+        // LANE: FILES & EXPORT (1.1 OFFLINE FILE TRANSFER + 3.2 TRIP ARCHIVE)
+        // -------------------------------------------------------------
+        if (selectedLane == "FILES") {
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, EmeraldMesh.copy(alpha = 0.7f), cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Offline File & Document Transfer (1.1)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = EmeraldMesh)
+                )
+                Text(
+                    text = "Share notes, GPX routes, or field checklists over the Hotspot HTTP/HTTPS portal with SHA-256 checksum verification (up to 5 MB per file).",
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                )
+                OutlinedTextField(
+                    value = shareFileNameInput,
+                    onValueChange = { shareFileNameInput = it },
+                    label = { Text("File Name (e.g. rally-plan.txt)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = shareFileTextInput,
+                    onValueChange = { shareFileTextInput = it },
+                    label = { Text("Document Content / Checklist") },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val ok = onShareLocalFile(
+                                shareFileNameInput.ifBlank { "note.txt" },
+                                "text/plain",
+                                shareFileTextInput.toByteArray(Charsets.UTF_8)
+                            )
+                            shareFileNotice = if (ok) "Shared over Hotspot Portal with SHA-256!" else "Failed to share file."
+                            if (ok) shareFileTextInput = ""
+                        },
+                        enabled = shareFileTextInput.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("SHARE TO PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val gpx = onExportGpx()
+                            val ok = onShareLocalFile("pulsemesh-trail.gpx", "application/gpx+xml", gpx.toByteArray(Charsets.UTF_8))
+                            shareFileNotice = if (ok) "GPX trail published to Hotspot Portal!" else "Could not publish GPX."
+                        },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("SHARE GPX TRAIL", color = CyanGateway, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+                if (shareFileNotice.isNotBlank()) {
+                    Text(shareFileNotice, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+                if (state.sharedFiles.isNotEmpty()) {
+                    HorizontalDivider(color = p.border)
+                    Text(
+                        text = "SHARED FILES ON HOTSPOT PORTAL (${state.sharedFiles.size}):",
+                        style = MaterialTheme.typography.labelSmall.copy(color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    )
+                    for (file in state.sharedFiles) {
+                        Surface(
+                            color = p.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(file.name, color = p.textPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(
+                                        "${file.sizeBytes} B • SHA-256: ${file.sha256.take(12)}...",
+                                        color = p.textMuted,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                TextButton(onClick = { onDeleteSharedFile(file.id) }) {
+                                    Text("REMOVE", color = RedSosAlert, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3.2 Trip Log & Chat Archive Export
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, CyanGateway.copy(alpha = 0.7f), cardShape)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Trip Log & Chat Archive Export (3.2)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
+                )
+                Text(
+                    text = "Bundle your chats, pinned messages, waypoints, and breadcrumb coordinates into a portable JSON archive.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                )
+                Button(
+                    onClick = {
+                        val json = onExportTripArchive()
+                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh Trip Archive JSON", json))
+                        onShareLocalFile("pulsemesh-trip-archive.json", "application/json", json.toByteArray(Charsets.UTF_8))
+                        tripExportNotice = "Trip archive (${json.length} chars) copied & published to Hotspot Files!"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("EXPORT TRIP ARCHIVE (CLIPBOARD + PORTAL)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+                if (tripExportNotice.isNotBlank()) {
+                    Text(tripExportNotice, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+        } // end selectedLane == "FILES"
 
         // -----------------------------------------------------------------
-        // PULSEMESH v1.1 TACTICAL SUITE (RELAY FGS, HW PTT, VOX, DEAD-RECKONING, GPX, P2P TILES, DURESS)
+        // PULSEMESH FIELD RELAY, AUDIO, MAPS & SECURITY CONTROLS
         // -----------------------------------------------------------------
+        if (selectedLane == "POWER" || selectedLane == "MAPS" || selectedLane == "SECURITY") {
         Card(
             colors = CardDefaults.cardColors(containerColor = p.card),
             shape = cardShape,
@@ -2689,8 +3351,10 @@ fun SettingsScreen(
                 }
             }
         }
+        } // end Field Relay/Audio/Security Card
 
-        // Delete Account Information Card (v1.2.5)
+        // Delete Account Information Card (inside IDENTITY lane)
+        if (selectedLane == "IDENTITY") {
         Surface(
             color = p.card,
             shape = cardShape,
@@ -2744,6 +3408,64 @@ fun SettingsScreen(
                     modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
                 )
             }
+        }
+        } // end selectedLane == "IDENTITY" (part 2)
+
+        if (showInstantJoinQrDialog) {
+            val joinPayload = remember(state.localNodeId, state.operatorCallsign, state.meshChannel, state.x25519Fingerprint) {
+                onBuildInstantJoinQr()
+            }
+            val joinBmp = remember(joinPayload) {
+                com.example.util.QrCodeGenerator.generateBitmap(joinPayload, 360)?.asImageBitmap()
+            }
+            AlertDialog(
+                onDismissRequest = { showInstantJoinQrDialog = false },
+                containerColor = p.card,
+                title = {
+                    Text(
+                        text = "INSTANT CONTACT & GROUP JOIN QR",
+                        color = EmeraldMesh,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp
+                    )
+                },
+                text = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (joinBmp != null) {
+                            Surface(
+                                color = Color.White,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.size(220.dp)
+                            ) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = joinBmp,
+                                    contentDescription = "Instant Join QR",
+                                    modifier = Modifier.fillMaxSize().padding(8.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = joinPayload,
+                            color = CyanGateway,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showInstantJoinQrDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black)
+                    ) {
+                        Text("DONE", fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
 
         if (showDeleteAccountDialog) {
@@ -2852,7 +3574,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2.9 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.3.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

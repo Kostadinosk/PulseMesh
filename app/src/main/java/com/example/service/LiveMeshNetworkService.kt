@@ -916,6 +916,39 @@ class LiveMeshNetworkService(
         publishUsernameClaimWithStatus(record, isUpdate = false, allowDirectLookup = allowDirectLookup).success
 
     /**
+     * Permanently deletes a claimed username and its queued inbox from the Cloudflare D1 relay.
+     * Authenticated via `X-PM-Auth` token and/or ECDSA P-256 signature over `DELETE|<username>`.
+     */
+    suspend fun deleteUsernameFromRelay(
+        username: String,
+        authToken: String = "",
+        privateKeyBase64: String = "",
+        allowDirectLookup: Boolean = true
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!allowDirectLookup && !isInternetEnabled()) return@withContext false
+        val norm = com.example.crypto.TacticalE2eeManager.normalizeUsername(username)
+        val customBase = activeUsernameRelayBaseUrl()
+        if (norm.length < 3 || customBase.isEmpty()) return@withContext false
+        runCatching {
+            val url = URL("$customBase/v1/users/$norm")
+            withRelayConnectionFallback(url) { conn ->
+                conn.requestMethod = "DELETE"
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                if (authToken.isNotBlank()) conn.setRequestProperty("X-PM-Auth", authToken.trim())
+                if (privateKeyBase64.isNotBlank()) {
+                    val sig = com.example.crypto.TacticalE2eeManager.signMessageWithEcKey(
+                        privateKeyBase64 = privateKeyBase64,
+                        message = "DELETE|$norm"
+                    )
+                    if (sig.isNotBlank()) conn.setRequestProperty("X-PM-Signature", sig)
+                }
+                conn.responseCode in 200..299
+            }
+        }.getOrDefault(false)
+    }
+
+    /**
      * Uploads an encrypted (GZIP + AES-256-GCM "PMB1:") full-account backup snapshot
      * (chats, contacts, trusted peer keys, mesh groups & settings) for cross-device migration.
      */

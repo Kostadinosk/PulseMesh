@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.9)</title>
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.3.0)</title>
   <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -880,7 +880,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.2.9</span>
+      <span class="version-tag">v1.3.0</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
@@ -934,12 +934,28 @@
               <p id="activeThreadSub">Broadcast mesh channel (TTL=7 flood)</p>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="search" id="chatSearchInput" placeholder="Search..." style="width:110px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:4px 7px;color:var(--text-primary);font-family:var(--mono);font-size:11px;" />
             <button type="button" class="btn btn-emerald" id="chatHeaderCallBtn" style="display:none;padding:5px 10px;font-size:11px;">📞 Call</button>
             <span class="badge-e2ee" id="activeThreadBadge">MESH</span>
           </div>
         </div>
+        <!-- v1.3.0 Tactical Quick-Status Bar (Text + Web Speech Voice!) -->
+        <div id="quickStatusBar" style="display:flex;gap:6px;overflow-x:auto;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--bg-card);align-items:center;">
+          <button type="button" class="btn" id="qsVoiceToggleBtn" style="padding:4px 8px;font-size:10px;white-space:nowrap;">🔊 Voice ON</button>
+          <button type="button" class="btn quick-status-btn" data-code="ALL_OK" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--emerald);color:var(--emerald);">✅ ALL OK</button>
+          <button type="button" class="btn quick-status-btn" data-code="LOW_BATTERY" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--amber);color:var(--amber);">🔋 LOW BAT</button>
+          <button type="button" class="btn quick-status-btn" data-code="NEED_WATER" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--amber);color:var(--amber);">💧 WATER</button>
+          <button type="button" class="btn quick-status-btn" data-code="MOVING" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--cyan);color:var(--cyan);">🚶 MOVING</button>
+          <button type="button" class="btn quick-status-btn" data-code="NEED_HELP" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--red);color:var(--red);">🆘 HELP</button>
+        </div>
         <div class="messages-list" id="messagesList"></div>
+        <div id="quickRepliesBar" style="display:flex;gap:6px;overflow-x:auto;padding:4px 10px;border-top:1px solid var(--border);">
+          <button type="button" class="btn quick-reply-chip" data-text="Roger / Copy" style="padding:3px 8px;font-size:10px;">Roger</button>
+          <button type="button" class="btn quick-reply-chip" data-text="On my way" style="padding:3px 8px;font-size:10px;">On my way</button>
+          <button type="button" class="btn quick-reply-chip" data-text="Holding position" style="padding:3px 8px;font-size:10px;">Holding</button>
+          <button type="button" class="btn quick-reply-chip" data-text="Check map pin" style="padding:3px 8px;font-size:10px;">Check map</button>
+        </div>
         <form class="chat-composer" id="chatForm">
           <label class="btn" title="Attach Photo (200px Tactical JPEG)" style="cursor:pointer;padding:9px 11px;">
             📷
@@ -1005,16 +1021,19 @@
       </div>
     </section>
 
-    <!-- TAB 5: SETTINGS & PORTAL -->
+    <!-- TAB 5: SETTINGS & PORTAL (v1.3.0 HORIZONTAL EXPANDABLE TOPIC LANES) -->
     <section class="tab-view scroll-panel" id="tab-settings">
       <div class="panel-container">
         <div class="h-stack" id="quickSettingsStack">
+          <div class="h-tile lane-tile active" data-lane="identity" id="laneIdentity"><span class="ht-lbl">ACCOUNT &amp; QR</span><span class="ht-val" style="color:var(--emerald);">CLOUDFLARE D1</span></div>
+          <div class="h-tile lane-tile" data-lane="portal" id="lanePortal"><span class="ht-lbl">HOTSPOT &amp; SSL</span><span class="ht-val" style="color:var(--cyan);">:8080 / :8443</span></div>
+          <div class="h-tile lane-tile" data-lane="files" id="laneFiles"><span class="ht-lbl">FILES &amp; EXPORT</span><span class="ht-val" id="qsFilesVal">OFFLINE SHARE</span></div>
+          <div class="h-tile lane-tile" data-lane="safety" id="laneSafety"><span class="ht-lbl">GEOFENCE &amp; LANG</span><span class="ht-val" id="qsLangVal">EN / FENCE</span></div>
           <div class="h-tile" id="qsThemeTile"><span class="ht-lbl">THEME</span><span class="ht-val" id="qsThemeVal">DARK</span></div>
           <div class="h-tile" id="qsLocTile"><span class="ht-lbl">GPS PRIVACY</span><span class="ht-val" id="qsLocVal">EXACT</span></div>
           <div class="h-tile" id="qsAudioTile"><span class="ht-lbl">VOICE RX</span><span class="ht-val" id="qsAudioVal">ON</span></div>
-          <div class="h-tile" id="qsLoginTile"><span class="ht-lbl">ACCOUNT</span><span class="ht-val" style="color:var(--cyan);">LOGIN / SETUP</span></div>
           <div class="h-tile" id="qsPingTile"><span class="ht-lbl">MESH PING</span><span class="ht-val">PING NOW</span></div>
-          <div class="h-tile" id="qsDeleteTile" style="border-color:var(--red);"><span class="ht-lbl">ERASE DATA</span><span class="ht-val" style="color:var(--red);">DELETE ACCT</span></div>
+          <div class="h-tile lane-tile" data-lane="danger" id="qsDeleteTile" style="border-color:var(--red);"><span class="ht-lbl">ERASE DATA</span><span class="ht-val" style="color:var(--red);">DELETE ACCT</span></div>
         </div>
 
         <div class="card" id="localPortalCard" style="display:none;border-color:var(--emerald);">
@@ -1022,8 +1041,8 @@
           <p id="localPortalDetails" style="font-size:13px;color:var(--text-secondary);line-height:1.5;"></p>
         </div>
 
-        <div class="card">
-          <h3>OPERATOR IDENTITY &amp; ENCRYPTION</h3>
+        <div class="card lane-panel" data-lane-panel="identity">
+          <h3>OPERATOR IDENTITY, CLOUDFLARE D1 &amp; QR JOIN (3.3)</h3>
           <div class="form-grid">
             <div class="field">
               <label for="setCallsign">Operator Callsign / @username</label>
@@ -1051,25 +1070,66 @@
             <button type="button" class="btn btn-primary" id="openSetupWizardBtn">Account Login / Setup Wizard</button>
             <button type="button" class="btn" id="regenKeysBtn">Rotate ECDH Keys</button>
             <button type="button" class="btn" id="pingMeshBtn">Presence Ping</button>
+            <button type="button" class="btn" id="copyJoinUriBtn">📋 Copy Join URI</button>
           </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+            <input type="text" id="importJoinUriInput" placeholder="Paste pulsemesh://join?... URI" style="flex:1;min-width:190px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text-primary);font-family:var(--mono);font-size:11px;" />
+            <button type="button" class="btn btn-primary" id="importJoinUriBtn">Import Peer</button>
+          </div>
+          <div id="joinUriStatus" style="font-family:var(--mono);font-size:11px;color:var(--emerald);margin-top:6px;"></div>
         </div>
 
-        <div class="card">
-          <h3>IPHONE &amp; WI-FI DIRECT LOCAL PORTAL</h3>
+        <div class="card lane-panel" data-lane-panel="portal" style="display:none;">
+          <h3>IPHONE &amp; WI-FI DIRECT LOCAL PORTAL (HTTP + SSL HTTPS)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
-            On iPhone, scan the Android host's 2-step QR codes (Settings &rarr; Wi-Fi Direct Web Portal) or jump directly to the local offline portal after joining its Wi-Fi:
+            On iPhone, scan the Android host's 2-step QR codes (Settings &rarr; Hotspot &amp; SSL) or jump directly to HTTP <code>:8080</code> or SSL HTTPS <code>:8443</code> (enables browser mic &amp; GPS offline):
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input type="text" id="localHostUrlInput" value="http://192.168.49.1:8080" style="flex:1;min-width:200px;background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text-primary);font-family:var(--mono);font-size:12px;" />
             <button type="button" class="btn btn-primary" id="openLocalPortalBtn">Open Local Portal</button>
             <a class="btn" href="http://192.168.43.1:8080">Hotspot :8080</a>
+            <a class="btn btn-emerald" href="https://192.168.43.1:8443">🔒 SSL :8443</a>
           </div>
         </div>
 
-        <div class="card" style="border-color:var(--red);">
+        <div class="card lane-panel" data-lane-panel="files" style="display:none;">
+          <h3>OFFLINE FILE TRANSFER (1.1) &amp; TRIP ARCHIVE (3.2)</h3>
+          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
+            Share documents, GPX tracks, or notes over the Android Hotspot portal with SHA-256 verification (up to 5 MB), or export your full trip archive JSON.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+            <input type="file" id="offlineFileUploadInput" style="flex:1;min-width:180px;font-size:11px;color:var(--text-primary);" />
+            <button type="button" class="btn btn-emerald" id="uploadOfflineFileBtn">⬆ Upload to Portal</button>
+            <button type="button" class="btn" id="refreshFilesBtn">↻ Refresh</button>
+            <button type="button" class="btn btn-primary" id="exportTripJsonBtn">📦 Export Trip JSON</button>
+          </div>
+          <div id="offlineFilesStatus" style="font-family:var(--mono);font-size:11px;color:var(--cyan);margin-bottom:8px;"></div>
+          <div id="offlineFilesList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </div>
+
+        <div class="card lane-panel" data-lane-panel="safety" style="display:none;">
+          <h3>GEOFENCE PERIMETER (1.5) &amp; LANGUAGE (3.4)</h3>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+            <label style="font-size:12px;color:var(--text-secondary);">Language:</label>
+            <button type="button" class="btn btn-emerald" id="langEnBtn">English (EN)</button>
+            <button type="button" class="btn" id="langElBtn">Ελληνικά (EL)</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <label style="font-size:12px;color:var(--text-secondary);">Map Geofence Circle:</label>
+            <select id="geofenceRadiusSelect" style="background:var(--glass-input);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text-primary);font-family:var(--mono);font-size:12px;">
+              <option value="0">OFF</option>
+              <option value="250">250 m</option>
+              <option value="500">500 m</option>
+              <option value="1000">1 km</option>
+              <option value="2000">2 km</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card lane-panel" data-lane-panel="danger" style="display:none;border-color:var(--red);">
           <h3 style="color:var(--red);">DELETE ACCOUNT INFORMATION</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
-            Permanently erase saved credentials, keys, and local chat history for an account. You must either be <strong>signed in</strong> to that account, or provide <strong>BOTH its PIN and Recovery Key</strong>.
+            Permanently erase saved credentials, keys, Cloudflare D1 registry record, and local chat history for an account. You must either be <strong>signed in</strong> to that account, or provide <strong>BOTH its PIN and Recovery Key</strong>.
           </p>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1085,10 +1145,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.9)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.3.0)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
-            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>).<br /><br />
-            <strong>PulseMesh v1.2.9 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>HTTPS :8443 SSL</strong> local portal, <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong>.<br /><br />
+            <strong>PulseMesh v1.3.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1110,7 +1170,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.2.9 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.3.0 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -1279,6 +1339,7 @@
     const CHANNEL_PREFIX = "PM2:";
     const VAULT_PREFIX = "PV1:";
     const NTFY_BASE = "https://ntfy.sh";
+    const CLOUDFLARE_RELAY = "https://pulsemesh-username-relay.pulsemesh.workers.dev";
 
     function loadSavedConfig() {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
@@ -1579,6 +1640,21 @@
     }
 
     async function pollUsernameClaim(username) {
+      // 1. Primary: Cloudflare Workers + D1 atomic global username registry
+      try {
+        const cfRes = await fetch(`${CLOUDFLARE_RELAY}/v1/users/${encodeURIComponent(username)}`, {
+          headers: { "Accept": "application/json" }
+        });
+        if (cfRes.ok) {
+          const j = await cfRes.json();
+          if (j && j.found && j.record) return j.record;
+          if (j && j.found === false) {
+            // Also check legacy ntfy fallback in case older client claimed before v1.3.0
+          }
+        }
+      } catch (_) {}
+
+      // 2. Fallback: public ntfy.sh claim stream
       const topic = await deriveUsernameClaimTopic(username);
       const res = await fetch(`${NTFY_BASE}/${topic}/json?poll=1&since=all`, { headers: { "Accept": "application/x-ndjson" } });
       if (!res.ok) throw new Error("Registry unreachable (HTTP " + res.status + ")");
@@ -1629,13 +1705,14 @@
         state.nodeId = vault.nid;
         state.callsign = vault.dn || ("@" + norm);
         state.claimedUsername = norm;
+        state.authToken = vault.tok || "";
         state.pubKeyB64 = vault.pub;
         state.privKeyB64 = vault.priv;
         state.fingerprint = format12HexFingerprint(await sha256Bytes(b64ToBytes(vault.pub)));
         state.setupDone = true;
         saveConfig({
           setupDone: true, nodeId: state.nodeId, callsign: state.callsign,
-          claimedUsername: norm, pubKeyB64: state.pubKeyB64, privKeyB64: state.privKeyB64, fingerprint: state.fingerprint
+          claimedUsername: norm, authToken: state.authToken, pubKeyB64: state.pubKeyB64, privKeyB64: state.privKeyB64, fingerprint: state.fingerprint
         });
         syncSettingsInputs();
         renderPeersAndHeader();
@@ -1686,21 +1763,38 @@
           publicKeyBase64: state.pubKeyB64, saltHex, claimedAt: Date.now(),
           v: 2, pinVault, recoveryVault, authVerifierHash
         };
-        const topic = await deriveUsernameClaimTopic(norm);
-        const postRes = await fetch(`${NTFY_BASE}/${topic}`, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-          body: JSON.stringify(claimRec)
-        });
-        if (!postRes.ok) throw new Error("Publish failed (" + postRes.status + ")");
+        let claimedViaCloudflare = false;
+        try {
+          const cfPost = await fetch(`${CLOUDFLARE_RELAY}/v1/users/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(claimRec)
+          });
+          if (cfPost.status === 409) {
+            setLoginStatus(`@${norm} is already claimed on Cloudflare D1. Enter its PIN to Sign In, or pick another handle.`, "err");
+            return;
+          }
+          if (cfPost.ok) claimedViaCloudflare = true;
+        } catch (_) {}
+
+        if (!claimedViaCloudflare) {
+          const topic = await deriveUsernameClaimTopic(norm);
+          const postRes = await fetch(`${NTFY_BASE}/${topic}`, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+            body: JSON.stringify(claimRec)
+          });
+          if (!postRes.ok) throw new Error("Publish failed (" + postRes.status + ")");
+        }
 
         state.callsign = "@" + norm;
         state.claimedUsername = norm;
+        state.authToken = authToken;
         state.setupDone = true;
-        saveConfig({ setupDone: true, callsign: state.callsign, claimedUsername: norm });
+        saveConfig({ setupDone: true, callsign: state.callsign, claimedUsername: norm, authToken });
         syncSettingsInputs();
         renderPeersAndHeader();
-        setLoginStatus(`Claimed @${norm}! SAVE YOUR RECOVERY KEY: ${recoveryKey}`, "ok");
+        setLoginStatus(`Claimed @${norm} (${claimedViaCloudflare ? "Cloudflare D1" : "Relay"})! SAVE RECOVERY KEY: ${recoveryKey}`, "ok");
         sendPresencePing();
       } catch (e) {
         setLoginStatus("Could not claim @" + norm + ": " + e.message, "err");
@@ -2000,11 +2094,62 @@
         document.getElementById("sosBanner").classList.add("active");
         document.getElementById("sosBannerText").textContent = `⚠ EMERGENCY SOS FROM ${pkt.srcCallsign || pkt.srcNodeId}: ${pkt.payload || "DISTRESS"}`;
         playSosSiren();
+        if (pkt.lat && pkt.lng) {
+          state.waypoints.set(`SOS-${pkt.srcNodeId}`, {
+            id: `SOS-${pkt.srcNodeId}`, title: `SOS (${pkt.srcCallsign || pkt.srcNodeId})`,
+            type: "SOS", latitude: pkt.lat, longitude: pkt.lng,
+            creatorCallsign: pkt.srcCallsign || pkt.srcNodeId, timestamp: pkt.timestamp || Date.now()
+          });
+          drawMap();
+        }
         addChatMessage({
           id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
           srcNodeId: pkt.srcNodeId, text: `⚠ SOS DISTRESS: ${pkt.payload || "EMERGENCY ALERT"}`,
           kind: "sos", isSelf, transport: sourceTransportLabel || "MESH", hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
         });
+        return;
+      }
+      if (type === "SOS_CLEAR") {
+        state.waypoints.delete(`SOS-${pkt.srcNodeId}`);
+        for (const [k, wp] of state.waypoints.entries()) {
+          if (wp && wp.type === "SOS" && (k.includes(pkt.srcNodeId) || wp.creatorCallsign === pkt.srcCallsign)) {
+            state.waypoints.delete(k);
+          }
+        }
+        state.isSosActive = false;
+        document.getElementById("sosBanner").classList.remove("active");
+        addChatMessage({
+          id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId, text: `✅ SOS CANCELLED by ${pkt.srcCallsign || pkt.srcNodeId}`,
+          kind: "text", isSelf, transport: sourceTransportLabel || "MESH", hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
+        });
+        drawMap();
+        return;
+      }
+      if (type === "QUICK_STATUS") {
+        const parts = String(pkt.payload || "").split("|");
+        const label = parts[1] || parts[0] || "STATUS";
+        addChatMessage({
+          id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
+          srcNodeId: pkt.srcNodeId, text: `⚡ QUICK STATUS: ${label}`,
+          kind: "text", isSelf, transport: sourceTransportLabel || "MESH", hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
+        });
+        if (!isSelf) speakQuickStatusWeb(`${pkt.srcCallsign || pkt.srcNodeId}: ${label}`);
+        return;
+      }
+      if (type === "REACTION") {
+        const parts = String(pkt.payload || "").split("|");
+        if (parts.length >= 2) {
+          const targetId = parts[0], emoji = parts[1];
+          const target = state.packets.find((p) => p.id === targetId);
+          if (target) {
+            target.reactions = target.reactions || {};
+            const set = new Set(target.reactions[emoji] || []);
+            set.add(pkt.srcCallsign || pkt.srcNodeId);
+            target.reactions[emoji] = Array.from(set);
+            renderMessages();
+          }
+        }
         return;
       }
       if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
@@ -2131,7 +2276,8 @@
 
     function renderMessages() {
       const list = document.getElementById("messagesList");
-      const msgs = state.packets.filter((p) => p.threadId === state.selectedThreadId);
+      const searchQ = (document.getElementById("chatSearchInput")?.value || "").trim().toLowerCase();
+      const msgs = state.packets.filter((p) => p.threadId === state.selectedThreadId && (!searchQ || (p.text || "").toLowerCase().includes(searchQ) || (p.sender || "").toLowerCase().includes(searchQ)));
       if (!msgs.length) {
         list.innerHTML = `<div style="margin:auto;text-align:center;color:var(--text-muted);font-family:var(--mono);font-size:12px;padding:24px;">No messages in this thread yet.<br/>Type below to broadcast across the mesh.</div>`;
         return;
@@ -2148,11 +2294,21 @@
         } else {
           bodyHtml = `<div class="msg-text">${escapeHtml(m.text)}</div>`;
         }
+        const rxEntries = Object.entries(m.reactions || {});
+        const rxBadges = rxEntries.map(([em, actors]) => `<span style="background:rgba(25,230,140,0.18);border:1px solid var(--emerald);border-radius:10px;padding:1px 6px;font-size:10px;">${escapeHtml(em)} ${actors.length}</span>`).join(" ");
+        const safeMid = escapeHtml(m.id);
         return `
           <div class="${cls}">
             <div class="msg-meta"><span class="msg-sender">${escapeHtml(m.sender)}</span><span>${ts}</span></div>
             ${bodyHtml}
-            <div class="msg-badge">${escapeHtml(m.transport)} • Hop ${m.hops}</div>
+            <div class="msg-badge" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+              <span>${escapeHtml(m.transport)} • Hop ${m.hops} ${rxBadges}</span>
+              <span style="cursor:pointer;">
+                <span onclick="window.__reactMsg('${safeMid}','👍')">👍</span>
+                <span onclick="window.__reactMsg('${safeMid}','✅')">✅</span>
+                <span onclick="window.__reactMsg('${safeMid}','⚠️')">⚠️</span>
+              </span>
+            </div>
           </div>
         `;
       }).join("");
@@ -2308,7 +2464,13 @@
         }
       }
       if (Array.isArray(snap.groups)) state.groups = snap.groups;
-      if (Array.isArray(snap.waypoints)) for (const wp of snap.waypoints) if (wp && wp.id) state.waypoints.set(wp.id, wp);
+      if (Array.isArray(snap.waypoints)) {
+        state.waypoints.clear();
+        for (const wp of snap.waypoints) if (wp && wp.id) state.waypoints.set(wp.id, wp);
+      }
+      if (!snap.isSosActive) {
+        document.getElementById("sosBanner").classList.remove("active");
+      }
       if (Array.isArray(snap.packets)) {
         for (const p of snap.packets) {
           if (!p.id || state.packets.some((x) => x.id === p.id)) continue;
@@ -2577,6 +2739,34 @@
         const t = latLonToTile(lat, lng, z);
         return { x: w / 2 + (t.x - center.x) * tileSize, y: h / 2 + (t.y - center.y) * tileSize };
       };
+      // 1.5 Geofence Perimeter Circle
+      const gfRadM = Number(localStorage.getItem("pulsemesh-geofence-m") || "0");
+      if (gfRadM > 0 && state.lat != null && state.lng != null) {
+        const selfPt = project(state.lat, state.lng);
+        const metersPerPx = (156543.03392 * Math.cos(state.lat * Math.PI / 180)) / Math.pow(2, z);
+        const radPx = Math.max(18, gfRadM / Math.max(0.1, metersPerPx));
+        mctx.save();
+        mctx.fillStyle = "rgba(255, 176, 46, 0.10)";
+        mctx.strokeStyle = "rgba(255, 176, 46, 0.78)";
+        mctx.lineWidth = 2;
+        mctx.setLineDash([7, 5]);
+        mctx.beginPath(); mctx.arc(selfPt.x, selfPt.y, radPx, 0, Math.PI * 2); mctx.fill(); mctx.stroke();
+        mctx.restore();
+      }
+      // 1.2 Mesh Topology Link Lines
+      if (state.lat != null && state.lng != null) {
+        const selfPt = project(state.lat, state.lng);
+        mctx.save();
+        mctx.setLineDash([6, 4]);
+        mctx.lineWidth = 2;
+        for (const n of state.nodes.values()) {
+          if (!n.latitude && !n.longitude) continue;
+          const peerPt = project(n.latitude, n.longitude);
+          mctx.strokeStyle = (n.hopCount || 1) <= 1 ? "rgba(25, 230, 140, 0.65)" : "rgba(255, 176, 46, 0.65)";
+          mctx.beginPath(); mctx.moveTo(selfPt.x, selfPt.y); mctx.lineTo(peerPt.x, peerPt.y); mctx.stroke();
+        }
+        mctx.restore();
+      }
       const wpColors = { RALLY: "#19E68C", HAZARD: "#FF4D6D", SUPPLY: "#FFB02E", SOS: "#FF1744", CAMP: "#38CFFF", WATER: "#00E5FF" };
       for (const wp of state.waypoints.values()) {
         if (!wp.latitude && !wp.longitude) continue;
@@ -3007,15 +3197,207 @@
       const locStr = (loc.lat != null && loc.lng != null) ? ` @ ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : "";
       document.getElementById("sosBanner").classList.add("active");
       document.getElementById("sosBannerText").textContent = `⚠ EMERGENCY SOS BROADCASTING (${state.callsign}${locStr})`;
+      if (loc.lat != null && loc.lng != null) {
+        state.waypoints.set(`SOS-${state.nodeId}`, {
+          id: `SOS-${state.nodeId}`, title: `SOS (${state.callsign})`,
+          type: "SOS", latitude: loc.lat, longitude: loc.lng,
+          creatorCallsign: state.callsign, timestamp: Date.now()
+        });
+        drawMap();
+      }
       playSosSiren();
       spikeWaveRibbon();
       await sendMeshAction({ type: "SOS", text: `PRIORITY SOS FROM ${state.callsign}${locStr}` }).catch(() => {});
     }
     document.getElementById("topSosBtn").addEventListener("click", triggerSos);
     document.getElementById("voiceSosBtn").addEventListener("click", triggerSos);
-    document.getElementById("cancelSosBtn").addEventListener("click", () => {
-      state.isSosActive = false; document.getElementById("sosBanner").classList.remove("active");
+    document.getElementById("cancelSosBtn").addEventListener("click", async () => {
+      state.isSosActive = false;
+      document.getElementById("sosBanner").classList.remove("active");
+      state.waypoints.delete(`SOS-${state.nodeId}`);
+      for (const [k, wp] of state.waypoints.entries()) {
+        if (wp && wp.type === "SOS" && (k.includes(state.nodeId) || wp.creatorCallsign === state.callsign)) {
+          state.waypoints.delete(k);
+        }
+      }
+      drawMap();
+      await sendMeshAction({ type: "SOS_CLEAR", text: `SOS CANCELLED by ${state.callsign}` }).catch(() => {});
     });
+
+    // v1.3.0 Quick-Status (Text + Web Speech Voice!), Reactions, Quick Replies, Search, Lanes, Files, QR Join & Language
+    let quickStatusVoiceOn = true;
+    function speakQuickStatusWeb(phrase) {
+      if (!quickStatusVoiceOn) return;
+      try {
+        if ("speechSynthesis" in window) {
+          const u = new SpeechSynthesisUtterance(phrase);
+          u.lang = (localStorage.getItem("pulsemesh-lang") || "en") === "el" ? "el-GR" : "en-US";
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        }
+      } catch (_) {}
+    }
+    document.getElementById("qsVoiceToggleBtn")?.addEventListener("click", (e) => {
+      quickStatusVoiceOn = !quickStatusVoiceOn;
+      e.target.textContent = quickStatusVoiceOn ? "🔊 Voice ON" : "🔇 Voice OFF";
+    });
+    const quickStatusLabels = {
+      ALL_OK: "ALL OK", LOW_BATTERY: "LOW BATTERY", NEED_WATER: "NEED WATER", MOVING: "MOVING", NEED_HELP: "NEED HELP"
+    };
+    document.querySelectorAll(".quick-status-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const code = btn.getAttribute("data-code") || "ALL_OK";
+        const label = quickStatusLabels[code] || code;
+        speakQuickStatusWeb(`${state.callsign}: ${label}`);
+        await sendMeshAction({ type: "QUICK_STATUS", threadId: "channel_primary", payload: `${code}|${label}`, text: `⚡ QUICK STATUS: ${label}` }).catch(() => {});
+      });
+    });
+    document.querySelectorAll(".quick-reply-chip").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const txt = btn.getAttribute("data-text") || "";
+        if (txt) await sendMeshAction({ type: "CHAT", threadId: state.selectedThreadId, text: txt }).catch(() => {});
+      });
+    });
+    document.getElementById("chatSearchInput")?.addEventListener("input", renderMessages);
+    window.__reactMsg = async function (pktId, emoji) {
+      const target = state.packets.find((p) => p.id === pktId);
+      if (target) {
+        target.reactions = target.reactions || {};
+        const s = new Set(target.reactions[emoji] || []);
+        s.add(state.callsign);
+        target.reactions[emoji] = Array.from(s);
+        renderMessages();
+      }
+      await sendMeshAction({ type: "REACTION", threadId: state.selectedThreadId, payload: `${pktId}|${emoji}`, text: `${pktId}|${emoji}` }).catch(() => {});
+    };
+
+    // Horizontal Expandable Settings Topic Lanes
+    function selectWebSettingsLane(laneId) {
+      document.querySelectorAll(".lane-tile").forEach((t) => {
+        const active = t.getAttribute("data-lane") === laneId;
+        t.style.borderColor = active ? "var(--emerald)" : "";
+        t.style.background = active ? "rgba(25,230,140,0.12)" : "";
+      });
+      document.querySelectorAll(".lane-panel").forEach((p) => {
+        p.style.display = p.getAttribute("data-lane-panel") === laneId ? "block" : "none";
+      });
+      if (laneId === "files") refreshOfflineFiles();
+    }
+    document.querySelectorAll(".lane-tile").forEach((t) => {
+      t.addEventListener("click", () => selectWebSettingsLane(t.getAttribute("data-lane")));
+    });
+    selectWebSettingsLane("identity");
+
+    // 1.1 Offline File Transfer (Hotspot /api/files, /api/files/upload, /api/files/download)
+    async function refreshOfflineFiles() {
+      const listEl = document.getElementById("offlineFilesList");
+      const statusEl = document.getElementById("offlineFilesStatus");
+      if (!listEl || !statusEl) return;
+      if (state.mode !== "LOCAL_DIRECT") {
+        statusEl.textContent = "Connect to an Android Hotspot Portal (:8080 or SSL :8443) to share offline files up to 5 MB.";
+        listEl.innerHTML = "";
+        return;
+      }
+      try {
+        const res = await fetch("/api/files", { cache: "no-store" });
+        const j = await res.json();
+        const files = j.files || [];
+        statusEl.textContent = `${files.length} shared file(s) on Hotspot Portal`;
+        listEl.innerHTML = files.map((f) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border);border-radius:8px;gap:8px;">
+            <div>
+              <div style="font-weight:700;font-size:12px;">${escapeHtml(f.fileName || f.name || "file")}</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--text-muted);">${f.sizeBytes} B • SHA-256: ${escapeHtml((f.sha256 || "").slice(0, 12))}...</div>
+            </div>
+            <a class="btn btn-emerald" href="/api/files/download?id=${encodeURIComponent(f.id)}" download="${escapeHtml(f.fileName || f.name || "file")}" style="padding:5px 9px;font-size:11px;">⬇ Download</a>
+          </div>
+        `).join("");
+      } catch (e) {
+        statusEl.textContent = "Could not load portal files: " + e.message;
+      }
+    }
+    document.getElementById("refreshFilesBtn")?.addEventListener("click", refreshOfflineFiles);
+    document.getElementById("uploadOfflineFileBtn")?.addEventListener("click", async () => {
+      const inp = document.getElementById("offlineFileUploadInput");
+      const statusEl = document.getElementById("offlineFilesStatus");
+      const file = inp && inp.files && inp.files[0];
+      if (!file) { statusEl.textContent = "Pick a file first."; return; }
+      if (file.size > 5 * 1024 * 1024) { statusEl.textContent = "File exceeds 5 MB limit."; return; }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const b64 = String(reader.result || "").split(",")[1] || "";
+        try {
+          const res = await fetch("/api/files/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/octet-stream", senderCallsign: state.callsign, base64Data: b64 })
+          });
+          const j = await res.json();
+          statusEl.textContent = j.ok ? `Uploaded ${file.name} (SHA-256: ${(j.sha256 || "").slice(0, 12)}...)` : (j.error || "Upload failed");
+          refreshOfflineFiles();
+        } catch (err) {
+          statusEl.textContent = "Upload requires Hotspot Portal connection: " + err.message;
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 3.2 Trip Log JSON Export
+    document.getElementById("exportTripJsonBtn")?.addEventListener("click", () => {
+      const payload = JSON.stringify({
+        exportedAt: Date.now(), version: "1.3.0", nodeId: state.nodeId, callsign: state.callsign,
+        waypoints: Array.from(state.waypoints.values()), packets: state.packets
+      }, null, 2);
+      const blob = new Blob([payload], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `pulsemesh-trip-${state.nodeId}.json`;
+      a.click();
+    });
+
+    // 3.3 QR / URI Instant Join Export & Import
+    document.getElementById("copyJoinUriBtn")?.addEventListener("click", async () => {
+      const uri = `pulsemesh://join?id=${encodeURIComponent(state.nodeId)}&cs=${encodeURIComponent(state.callsign)}&ch=${encodeURIComponent(state.passphrase)}&pk=${encodeURIComponent(state.pubKeyB64 || "")}`;
+      try { await navigator.clipboard.writeText(uri); } catch (_) {}
+      document.getElementById("joinUriStatus").textContent = "Copied: " + uri.slice(0, 64) + "...";
+    });
+    document.getElementById("importJoinUriBtn")?.addEventListener("click", () => {
+      const raw = (document.getElementById("importJoinUriInput")?.value || "").trim();
+      const statusEl = document.getElementById("joinUriStatus");
+      if (!raw.startsWith("pulsemesh://join")) { statusEl.textContent = "Invalid pulsemesh://join URI."; return; }
+      const qs = new URLSearchParams(raw.split("?")[1] || "");
+      const node = qs.get("id") || qs.get("node") || "", cs = qs.get("cs") || node, pk = qs.get("pk") || "";
+      if (!node) { statusEl.textContent = "Missing node ID."; return; }
+      state.nodes.set(normId(node), { id: node, callsign: cs, publicKeyBase64: pk, rssiDbm: -45, hopCount: 1, batteryPercent: 100, transports: new Set(["QR JOIN"]), lastSeenMs: Date.now() });
+      renderPeersAndHeader();
+      statusEl.textContent = `Imported peer ${cs} (${node})!`;
+    });
+
+    // 3.4 Multi-Language Switcher (EN / EL) & 1.5 Geofence Selector
+    function applyWebLang(lang) {
+      localStorage.setItem("pulsemesh-lang", lang);
+      const el = lang === "el";
+      const navMap = { map: el ? "ΧΑΡΤΗΣ" : "MAP", chat: el ? "ΜΗΝΥΜΑΤΑ" : "CHAT", voice: el ? "ΦΩΝΗ" : "PTT", nodes: el ? "ΚΟΜΒΟΙ" : "NODES", settings: el ? "ΡΥΘΜΙΣΕΙΣ" : "SETUP" };
+      document.querySelectorAll(".nav-btn").forEach((b) => {
+        const k = b.getAttribute("data-tab");
+        const spans = b.querySelectorAll("span");
+        if (spans[1] && navMap[k]) spans[1].textContent = navMap[k];
+      });
+      const qsLang = document.getElementById("qsLangVal");
+      if (qsLang) qsLang.textContent = el ? "ΕΛ / FENCE" : "EN / FENCE";
+    }
+    document.getElementById("langEnBtn")?.addEventListener("click", () => applyWebLang("en"));
+    document.getElementById("langElBtn")?.addEventListener("click", () => applyWebLang("el"));
+    applyWebLang(localStorage.getItem("pulsemesh-lang") || "en");
+
+    const gfSel = document.getElementById("geofenceRadiusSelect");
+    if (gfSel) {
+      gfSel.value = localStorage.getItem("pulsemesh-geofence-m") || "0";
+      gfSel.addEventListener("change", () => {
+        localStorage.setItem("pulsemesh-geofence-m", gfSel.value);
+        drawMap();
+      });
+    }
 
     function switchTab(tabName) {
       document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
@@ -3065,12 +3447,7 @@
       syncSettingsInputs();
     });
     document.getElementById("qsAudioTile").addEventListener("click", () => { document.getElementById("voiceRxToggleBtn").click(); syncSettingsInputs(); });
-    document.getElementById("qsLoginTile").addEventListener("click", () => openSetupOverlay("login"));
     document.getElementById("qsPingTile").addEventListener("click", () => { sendPresencePing(); spikeWaveRibbon(); logLine("PING", "Presence beacon sent."); });
-    document.getElementById("qsDeleteTile").addEventListener("click", () => {
-      document.getElementById("deleteAccountInput").focus();
-      document.getElementById("deleteAccountInput").scrollIntoView({ behavior: "smooth", block: "center" });
-    });
 
     // Delete All Account Information Handler (v1.2.9: strictly requires active login OR BOTH PIN + Recovery Key)
     document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
@@ -3126,7 +3503,16 @@
       }
 
       const label = effectiveUser ? ("@" + effectiveUser) : "your active browser account";
-      if (!confirm(`Permanently delete ALL local account information, keys, and chat messages for ${label}?`)) return;
+      if (!confirm(`Permanently delete ALL local & Cloudflare D1 account information, keys, and chat messages for ${label}?`)) return;
+
+      if (effectiveUser && state.authToken) {
+        try {
+          await fetch(`${CLOUDFLARE_RELAY}/v1/users/${encodeURIComponent(effectiveUser)}`, {
+            method: "DELETE",
+            headers: { "X-PulseMesh-Auth-Token": state.authToken }
+          });
+        } catch (_) {}
+      }
 
       const isActive = isLoggedInToTarget || (effectiveUser && effectiveUser === activeUser);
       state.packets = state.packets.filter((p) => {
