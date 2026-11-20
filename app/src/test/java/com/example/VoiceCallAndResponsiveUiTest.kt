@@ -663,7 +663,7 @@ class VoiceCallAndResponsiveUiTest {
         composeTestRule.onNodeWithTag("settings_top_mode_toggle").performClick()
         composeTestRule.waitForIdle()
         assertFalse(isSimpleMode)
-        composeTestRule.onNodeWithTag("pro_mesh_rssi_chart_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("pro_mesh_rssi_chart_card").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -1339,6 +1339,20 @@ class VoiceCallAndResponsiveUiTest {
                 rawHexBadge = "[BLE]",
                 isIncoming = false,
                 isDelivered = false,
+                timestamp = System.currentTimeMillis() - 10_000L,
+            ),
+            com.example.model.MeshPacket(
+                id = "pkt_out_fresh",
+                sourceId = "0x4F2A",
+                destId = "0x9B1C",
+                sourceCallsign = "Alpha-1",
+                type = com.example.model.PacketType.TEXT,
+                content = "Just sent",
+                hops = 0,
+                rawHexBadge = "[BLE]",
+                isIncoming = false,
+                isDelivered = false,
+                timestamp = System.currentTimeMillis(),
             ),
             com.example.model.MeshPacket(
                 id = "pkt_img_bad",
@@ -1375,6 +1389,7 @@ class VoiceCallAndResponsiveUiTest {
         assertEquals("dm_0x9B1C", selectedThread)
         composeTestRule.onNodeWithTag("conversation_thread_view").assertIsDisplayed()
         composeTestRule.onNodeWithTag("retry_send_message_prompt_pkt_out_1").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("retry_send_message_prompt_pkt_out_fresh").assertDoesNotExist()
         composeTestRule.onNodeWithTag("chat_input_field").assertIsDisplayed()
         composeTestRule.onNodeWithTag("chat_send_button").assertIsDisplayed()
     }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.8)</title>
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.2.9)</title>
   <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -880,7 +880,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.2.8</span>
+      <span class="version-tag">v1.2.9</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
@@ -1085,10 +1085,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.8)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.2.9)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
             Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong> (<code>PM2:</code> / <code>E2EE_ECDH_V2:</code>).<br /><br />
-            <strong>PulseMesh v1.2.8 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            <strong>PulseMesh v1.2.9 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1110,7 +1110,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.2.8 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.2.9 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -3072,7 +3072,7 @@
       document.getElementById("deleteAccountInput").scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
-    // Delete All Account Information Handler (v1.2.8: strictly requires active login OR BOTH PIN + Recovery Key)
+    // Delete All Account Information Handler (v1.2.9: strictly requires active login OR BOTH PIN + Recovery Key)
     document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
       const statusEl = document.getElementById("deleteAccountStatus");
       const rawTarget = document.getElementById("deleteAccountInput").value.trim();

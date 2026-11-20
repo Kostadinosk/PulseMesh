@@ -974,7 +974,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.2.8 HOTSPOT WEB PORTAL & iPHONE QR",
+                                    text = "v1.2.9 HOTSPOT WEB PORTAL & iPHONE QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -2852,7 +2852,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.2.8 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.2.9 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

@@ -126,7 +126,11 @@ class PulseMeshWebServer(
     @Volatile
     private var acceptThread: Thread? = null
     private var maintenanceJob: Job? = null
-    private val workerExecutor = Executors.newCachedThreadPool()
+    private val workerExecutor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "PulseMesh-HTTP-Worker").apply {
+            isDaemon = true
+        }
+    }
 
     private val activeClients = ConcurrentHashMap<String, Long>()
     private val sseStreams = CopyOnWriteArrayList<SseConnection>()

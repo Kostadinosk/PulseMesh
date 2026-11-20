@@ -120,7 +120,8 @@ class PersistentChatManager(private val context: Context) {
         val trimmed = content.trim()
         if (trimmed.startsWith("[[PM_VOICEDROP]]:") ||
             trimmed.startsWith("[[PM_AUDIO]]:") ||
-            trimmed.startsWith("[[PM_IMAGE]]:")
+            trimmed.startsWith("[[PM_IMAGE]]:") ||
+            trimmed.startsWith("[[PM_IMG]]:")
         ) {
             return false
         }

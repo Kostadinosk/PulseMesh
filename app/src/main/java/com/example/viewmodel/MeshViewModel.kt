@@ -4171,9 +4171,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     ): com.example.service.WireMeshPacket? {
         val normSrc = normalizeId(packet.srcNodeId)
         val normSelf = normalizeId(selfNodeId)
+        val normDst = normalizeId(packet.dstNodeId)
         if (normSrc.isBlank() || normSrc == normSelf) return null
         if (packet.ttl <= 1) return null
         if (packet.packetId.startsWith("ble_") || packet.packetId.startsWith("udp_hb_")) return null
+
+        // Do not relay unicast packets that have already reached their final destination (self),
+        // and never flood-relay broadcast CHAT_ACK packets.
+        val isBroadcastDst = normDst.isBlank() || normDst == "ALL" || normDst == "BROADCAST"
+        if (packet.type == "CHAT_ACK" && (isBroadcastDst || normDst == normSelf)) return null
+        if ((packet.type == "E2EE_DM" || packet.type == "TILE_REQ") && normDst == normSelf) return null
 
         val allowedRelayType = packet.type == "CHAT" ||
             packet.type == "E2EE_DM" ||
@@ -5202,10 +5209,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         sourceCallsign = effectiveCallsign,
                         type = PacketType.WAYPOINT,
                         content = "SHARED PIN [$wpTypeStr]: $wpTitle @ ${String.format("%.4f", wpLat)}, ${String.format("%.4f", wpLon)}",
-                        hops = maxOf(1, packet.hops),
-                        rssiDbm = -50,
+                        hops = receivedHops,
+                        rssiDbm = resolvedRssiDbm,
                         transport = "Shared Map Pin",
-                        rawHexBadge = "[WAYPOINT | $canonicalSrcId->ALL | Hop ${packet.hops}]",
+                        rawHexBadge = "[WAYPOINT | $canonicalSrcId->ALL | Hop $receivedHops]",
                         isIncoming = true,
                         waypointData = incomingWp
                     )
@@ -5236,10 +5243,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     sourceCallsign = effectiveCallsign,
                     type = PacketType.SOS,
                     content = "SOS ALERT FROM $effectiveCallsign: ${packet.payload}",
-                    hops = maxOf(1, packet.hops),
-                    rssiDbm = resolvedRssiDbm ?: -40,
+                    hops = receivedHops,
+                    rssiDbm = resolvedRssiDbm,
                     transport = resolvedTransport,
-                    rawHexBadge = "[SOS | $canonicalSrcId->ALL | PRIORITY]",
+                    rawHexBadge = "[SOS | $canonicalSrcId->ALL | Hop $receivedHops | PRIORITY]",
                     isIncoming = true,
                     timestamp = packet.timestamp
                 )
@@ -6947,7 +6954,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.2.8")
+            put("version", "1.2.9")
             put("hostNodeId", state.localNodeId)
             put("hostCallsign", state.operatorCallsign)
             put("ssid", state.hotspotState.ssid)
@@ -7015,7 +7022,20 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val pktsArr = org.json.JSONArray()
-        val recentPackets = state.packets.take(160).reversed()
+        // Merge persisted chat threads + in-memory packets so web/iPhone clients see ALL BLE/Wi-Fi/Internet chats & DMs
+        val mergedById = LinkedHashMap<String, MeshPacket>()
+        for ((_, list) in persistentChatManager.exportAllThreadsMap()) {
+            for (pkt in list) {
+                mergedById.putIfAbsent(pkt.id, pkt)
+            }
+        }
+        for (pkt in state.packets.take(160)) {
+            mergedById.putIfAbsent(pkt.id, pkt)
+        }
+        val recentPackets = mergedById.values
+            .sortedBy { it.timestamp }
+            .takeLast(200)
+
         for (p in recentPackets) {
             val dst = p.destId
             val srcNorm = normalizeId(p.sourceId)
@@ -7069,6 +7089,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             val cleanId = reg.nodeId.trim()
             if (cleanId.isBlank()) return@launch
             val norm = normalizeId(cleanId)
+            if (norm.isBlank() || norm == normalizeId(_uiState.value.localNodeId)) return@launch
             if (reg.publicKeyBase64.isNotBlank() && TacticalE2eeManager.isValidEcPublicKeyBase64(reg.publicKeyBase64)) {
                 prefs.verifyOrTrustPeerPublicKey(cleanId, reg.publicKeyBase64)
             }
@@ -7091,8 +7112,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 transports = (prev?.transports ?: emptySet()) + "WEB PORTAL"
             )
             peersBackingMap[norm] = updated
-            val snapshotNodes = peersBackingMap.values.sortedByDescending { it.lastSeenMs }
-            _uiState.update { it.copy(nodes = snapshotNodes, activePeerCount = snapshotNodes.size) }
+            _uiState.update { cur ->
+                val mergedNodes = buildMergedNodesList(cur.nodes)
+                cur.copy(nodes = mergedNodes, activePeerCount = mergedNodes.count { !it.isSelf })
+            }
             refreshConversationsList()
 
             // Announce web peer presence to the rest of the BLE / Wi-Fi / Relay mesh
@@ -7239,6 +7262,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         isIncoming = true,
                         timestamp = now
                     )
+                    persistentChatManager.savePacket("channel_primary", pkt)
                     _uiState.update {
                         it.copy(
                             packets = listOf(pkt) + it.packets,
@@ -7277,6 +7301,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         isDm -> tid.removePrefix("dm_")
                         else -> "ALL"
                     }
+                    val isDmToHost = isDm && normalizeId(dstNodeId) == normalizeId(_uiState.value.localNodeId)
+                    val effectiveThreadId = if (isDmToHost) "dm_$srcId" else tid
                     val meshPkt = MeshPacket(
                         id = submitted.packetId,
                         sourceId = srcId,
@@ -7292,33 +7318,35 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         timestamp = now
                     )
                     _uiState.update { it.copy(packets = listOf(meshPkt) + it.packets) }
-                    persistentChatManager.savePacket(tid, meshPkt)
+                    persistentChatManager.savePacket(effectiveThreadId, meshPkt)
                     refreshConversationsList()
 
-                    val wireType = when {
-                        isDm -> "E2EE_DM"
-                        isGroup -> "GROUP_CHAT"
-                        else -> "CHAT"
-                    }
-                    val wirePayload = when {
-                        isDm -> "PLAINTEXT:$text"
-                        else -> text
-                    }
-                    sendOmniPacket(
-                        com.example.service.WireMeshPacket(
-                            packetId = submitted.packetId,
-                            srcNodeId = srcId,
-                            srcCallsign = srcCallsign,
-                            dstNodeId = dstNodeId,
-                            type = wireType,
-                            payload = wirePayload,
-                            ttl = 7,
-                            hops = 1,
-                            groupId = if (isGroup) dstNodeId else "",
-                            senderPubKey = submitted.publicKeyBase64,
-                            timestamp = now
+                    if (!isDmToHost) {
+                        val wireType = when {
+                            isDm -> "E2EE_DM"
+                            isGroup -> "GROUP_CHAT"
+                            else -> "CHAT"
+                        }
+                        val wirePayload = when {
+                            isDm -> "PLAINTEXT:$text"
+                            else -> text
+                        }
+                        sendOmniPacket(
+                            com.example.service.WireMeshPacket(
+                                packetId = submitted.packetId,
+                                srcNodeId = srcId,
+                                srcCallsign = srcCallsign,
+                                dstNodeId = dstNodeId,
+                                type = wireType,
+                                payload = wirePayload,
+                                ttl = 7,
+                                hops = 1,
+                                groupId = if (isGroup) dstNodeId else "",
+                                senderPubKey = submitted.publicKeyBase64,
+                                timestamp = now
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
