@@ -199,13 +199,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // 4-Tab structure: MESH MAP, CHATS, VOICE & PTT, RF & SETTINGS
-                val tabs = remember {
+                // Clean 4-Tab structure: Map, Chats, Voice, Settings (localized EN/EL)
+                val tabs = remember(state.appLanguage) {
                     listOf(
-                        NavTabItem("MESH MAP", Icons.Default.Map),
-                        NavTabItem("CHATS", Icons.AutoMirrored.Filled.Chat),
-                        NavTabItem("VOICE & PTT", Icons.Default.Radio),
-                        NavTabItem("RF & SETTINGS", Icons.Default.Settings),
+                        NavTabItem(com.example.util.AppStrings.tr(state.appLanguage, "Map", "Χάρτης"), Icons.Default.Map),
+                        NavTabItem(com.example.util.AppStrings.tr(state.appLanguage, "Chats", "Μηνύματα"), Icons.AutoMirrored.Filled.Chat),
+                        NavTabItem(com.example.util.AppStrings.tr(state.appLanguage, "Voice", "Φωνή"), Icons.Default.Radio),
+                        NavTabItem(com.example.util.AppStrings.tr(state.appLanguage, "Settings", "Ρυθμίσεις"), Icons.Default.Settings),
                     )
                 }
 
@@ -513,6 +513,10 @@ class MainActivity : ComponentActivity() {
                                 onSendReaction = { pktId, emoji -> viewModel.sendReaction(pktId, emoji) },
                                 onTogglePinMessage = { threadId, pktId -> viewModel.togglePinMessage(threadId, pktId) },
                                 onSetThreadBurnTtl = { threadId, ttl -> viewModel.setThreadBurnTtl(threadId, ttl) },
+                                onOpenWebPortal = {
+                                    if (!state.webPortalStatus.isRunning) viewModel.toggleWebPortal()
+                                    viewModel.setTab(3)
+                                },
                             )
                             2 -> SimpleCallVoiceScreen(
                                 state = state,

@@ -75,6 +75,7 @@ fun MeshChatScreen(
     onSendReaction: (String, String) -> Unit = { _, _ -> },
     onTogglePinMessage: (String, String) -> Unit = { _, _ -> },
     onSetThreadBurnTtl: (String, Int) -> Unit = { _, _ -> },
+    onOpenWebPortal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (state.selectedThreadId == null) {
@@ -87,6 +88,7 @@ fun MeshChatScreen(
             onConnectByUsername = onConnectByUsername,
             onSendQuickStatus = onSendQuickStatus,
             onToggleQuickStatusVoice = onToggleQuickStatusVoice,
+            onOpenWebPortal = onOpenWebPortal,
             modifier = modifier
         )
     } else {
@@ -122,6 +124,7 @@ private fun ConversationListView(
     onConnectByUsername: (String, (Boolean, String) -> Unit) -> Unit = { _, _ -> },
     onSendQuickStatus: (com.example.model.QuickStatusCode) -> Unit = {},
     onToggleQuickStatusVoice: () -> Unit = {},
+    onOpenWebPortal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -408,6 +411,100 @@ private fun ConversationListView(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 10.dp, bottom = 76.dp)
         ) {
+            // 0-Peer Quick-Connect Onboarding Card (PulseMesh v1.4.5)
+            if (discoveredPeers.isEmpty() && state.searchQuery.isBlank()) {
+                item(key = "empty_peer_quick_connect") {
+                    Surface(
+                        color = p.card,
+                        shape = cardShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("chat_zero_peer_connect_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.WifiTethering, contentDescription = null, tint = p.cyan, modifier = Modifier.size(18.dp))
+                                Text(
+                                    text = com.example.util.AppStrings.tr(
+                                        state.appLanguage,
+                                        "No Nearby Mesh Peers Yet",
+                                        "Δεν Βρέθηκαν Κοντινοί Κόμβοι Ακόμα"
+                                    ),
+                                    color = p.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            Text(
+                                text = com.example.util.AppStrings.tr(
+                                    state.appLanguage,
+                                    "Nearby Android phones appear automatically over BLE & Wi-Fi Aware. Connect an iPhone/laptop via local Web Portal or add a distant @username friend:",
+                                    "Κοντινά Android εμφανίζονται αυτόματα μέσω BLE & Wi-Fi Aware. Συνδέστε iPhone/laptop μέσω τοπικής Πύλης Web ή προσθέστε φίλο με @username:"
+                                ),
+                                color = p.textSecondary,
+                                fontSize = 12.sp
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = onBroadcastGpsPin,
+                                    colors = ButtonDefaults.buttonColors(containerColor = p.emerald, contentColor = Color.Black),
+                                    shape = btnShape,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "Scan Now", "Σάρωση"),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenWebPortal,
+                                    shape = btnShape,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "iPhone/Web", "iPhone/Web"),
+                                        color = p.cyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = { showConnectUsernameDialog = true },
+                                    shape = btnShape,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, p.amber),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "@username",
+                                        color = p.amber,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 1. Public Mesh Broadcast (ALL)
             if (pinnedChannels.isNotEmpty()) {
                 item {

@@ -226,25 +226,25 @@ fun PulseMeshTopBar(
                     state.hotspotButtonText.contains("LINKED", ignoreCase = true) -> "HS:LINK"
                     state.hotspotButtonText.contains("HOST", ignoreCase = true) -> "HS:HOST"
                     state.hotspotButtonText.contains("START", ignoreCase = true) -> "HS:..."
-                    else -> "HS:OFF"
+                    else -> ""
                 }
-                val hsActive = hsShort != "HS:OFF"
-                val hsColor = if (hsActive) p.cyan else p.textSecondary
-                Box(
-                    modifier = Modifier
-                        .clip(pillShape)
-                        .background(if (hsActive) p.cyanDim else p.surfaceVariant)
-                        .border(1.dp, if (hsActive) p.cyan else p.border, pillShape)
-                        .clickable { onAutoConnectHotspot() }
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = hsShort,
-                        color = hsColor,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                if (hsShort.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .clip(pillShape)
+                            .background(p.cyanDim)
+                            .border(1.dp, p.cyan, pillShape)
+                            .clickable { onAutoConnectHotspot() }
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = hsShort,
+                            color = p.cyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
 
                 val hasPeers = state.activePeerCount > 0
@@ -253,15 +253,26 @@ fun PulseMeshTopBar(
                         .clip(pillShape)
                         .background(if (hasPeers) p.emeraldDim else p.surfaceVariant)
                         .border(1.dp, if (hasPeers) p.emerald else p.border, pillShape)
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
-                    Text(
-                        text = "P:${state.activePeerCount}",
-                        color = if (hasPeers) p.emerald else p.textSecondary,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(if (hasPeers) p.emerald else p.textMuted)
+                        )
+                        Text(
+                            text = "${state.activePeerCount}",
+                            color = if (hasPeers) p.emerald else p.textSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
 
