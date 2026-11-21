@@ -109,6 +109,8 @@ fun SettingsScreen(
     onSetDecoyPin: (String) -> Boolean = { false },
     onTriggerDecoyMode: (String) -> Boolean = { false },
     onCheckForUpdateNow: () -> Unit = {},
+    onToggleBell202Modem: () -> Unit = {},
+    onTransmitBell202Chirp: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -3761,6 +3763,41 @@ fun SettingsScreen(
                         }
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onToggleBell202Modem,
+                        shape = btnShape,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (state.bell202ModemEnabled) p.emerald else p.border
+                        ),
+                        modifier = Modifier.testTag("bell202_toggle_btn")
+                    ) {
+                        Text(
+                            text = if (state.bell202ModemEnabled) "BELL 202 AFSK RX: ON" else "BELL 202 AFSK RX: OFF",
+                            color = if (state.bell202ModemEnabled) p.emerald else p.textSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onTransmitBell202Chirp,
+                        shape = btnShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan),
+                        modifier = Modifier.testTag("bell202_chirp_btn")
+                    ) {
+                        Text(
+                            text = "CHIRP BELL 202",
+                            color = p.cyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 if (state.updateCheckStatus.isNotBlank()) {
                     Text(
                         text = state.updateCheckStatus,
@@ -3774,7 +3811,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.4.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.4.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

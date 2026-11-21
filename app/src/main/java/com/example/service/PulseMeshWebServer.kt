@@ -991,7 +991,8 @@ class PulseMeshWebServer(
                     isCallAudio = submitted.type == "CALL_AUDIO"
                 )
             }
-            "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
+            "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END",
+            "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE" -> {
                 notifyCallSignal(
                     submitted.type,
                     submitted.clientNodeId,

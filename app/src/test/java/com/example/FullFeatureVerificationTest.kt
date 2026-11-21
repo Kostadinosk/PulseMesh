@@ -1017,4 +1017,95 @@ class FullFeatureVerificationTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun `verify v1_4_1 Bell202AcousticModem modulate and Goertzel demodulate round-trip with CRC-16`() {
+        val frame = com.example.service.Bell202AcousticModem.encodeFrameBytes(
+            typeByte = com.example.service.Bell202AcousticModem.TYPE_SOS,
+            srcNodeIdHex = "0x4F2A",
+            text = "SOS Ridge 4 OK!"
+        )
+        assertTrue("Frame must start with PM sync bytes", frame[0] == 0x50.toByte() && frame[1] == 0x4D.toByte())
+        val directDecoded = com.example.service.Bell202AcousticModem.decodeFrameBytes(frame)
+        assertNotNull(directDecoded)
+        assertEquals(com.example.service.Bell202AcousticModem.TYPE_SOS, directDecoded!!.typeByte)
+        assertEquals("0x4F2A", directDecoded.srcNodeIdHex)
+        assertEquals("SOS Ridge 4 OK!", directDecoded.text)
+
+        // Corrupt 1 payload bit -> CRC-16 must strictly reject
+        val corrupted = frame.copyOf()
+        corrupted[7] = (corrupted[7].toInt() xor 0x04).toByte()
+        assertNull("Corrupted CRC-16 Bell 202 frame must be rejected", com.example.service.Bell202AcousticModem.decodeFrameBytes(corrupted))
+
+        // Full audio PCM waveform synthesis + leading silence offset -> Goertzel demodulation
+        val pcm = com.example.service.Bell202AcousticModem.modulateFrameToPcm(frame, 44100)
+        val padded = ShortArray(pcm.size + 400)
+        System.arraycopy(pcm, 0, padded, 200, pcm.size)
+        val demod = com.example.service.Bell202AcousticModem.demodulatePcm(padded, 44100)
+        assertNotNull("Goertzel demodulator must recover Bell 202 PCM burst", demod)
+        assertEquals("0x4F2A", demod!!.srcNodeIdHex)
+        assertEquals("SOS Ridge 4 OK!", demod.text)
+        assertEquals(com.example.service.Bell202AcousticModem.TYPE_SOS, demod.typeByte)
+    }
+
+    @Test
+    fun `verify v1_4_1 WebRTC signaling priority fan-out and WebServer relay`() {
+        val router = com.example.service.LinkCostRouter()
+        for (sigType in listOf("WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE")) {
+            val pkt = WireMeshPacket(
+                packetId = "rtc_$sigType",
+                srcNodeId = "0x1111",
+                srcCallsign = "WebA",
+                dstNodeId = "0x2222",
+                type = sigType,
+                payload = """{"type":"offer","sdp":"v=0"}"""
+            )
+            val plan = router.planRoute(
+                packet = pkt,
+                hasLocalWifiOrNan = true,
+                hasBleL2cap = true,
+                hasBleGatt = true,
+                isInternetEnabled = true
+            )
+            assertTrue("$sigType must always fan out immediately across all radios", plan.fanOutAll)
+            assertEquals(4, plan.orderedTiers.size)
+        }
+
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val submittedList = CopyOnWriteArrayList<WebSubmittedPacket>()
+        val server = PulseMeshWebServer(
+            context = app,
+            scope = scope,
+            buildInfoJson = { url, cnt -> JSONObject().put("pulsemeshHost", true).put("version", "1.4.1").put("portalUrl", url).put("webClientCount", cnt) },
+            buildStateJson = { JSONObject().put("ok", true) },
+            onClientRegistered = {},
+            onWebPacketSubmitted = { submittedList.add(it) }
+        )
+        server.start("127.0.0.1")
+        val deadline = System.currentTimeMillis() + 4000L
+        while ((!server.isRunning() || !server.status.value.selfTestPassed) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50L)
+        }
+        try {
+            val port = server.status.value.port
+            val conn = (URL("http://127.0.0.1:$port/api/send").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                outputStream.use {
+                    it.write("""{"packetId":"rtc_1","clientNodeId":"0xW1","callsign":"iPhone1","dstNodeId":"0xW2","type":"WEBRTC_OFFER","payload":"{\"type\":\"offer\",\"sdp\":\"v=0\"}"}""".toByteArray())
+                }
+            }
+            assertEquals(200, conn.responseCode)
+            val signals = server.getRecentCallSignalsJson()
+            assertTrue("WebServer must buffer WEBRTC_OFFER in call signals", signals.length() >= 1)
+            assertEquals("WEBRTC_OFFER", signals.getJSONObject(signals.length() - 1).getString("type"))
+            assertEquals(1, submittedList.size)
+            assertEquals("WEBRTC_OFFER", submittedList[0].type)
+        } finally {
+            server.stop()
+            scope.cancel()
+        }
+    }
 }

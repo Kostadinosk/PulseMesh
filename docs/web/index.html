@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.4.0)</title>
-  <meta name="description" content="Official PulseMesh v1.4.0 Web &amp; iPhone PWA client for Wi-Fi Direct Local WebSockets, 2-Tier Root CA SSL, and encrypted E2EE hybrid mesh channels." />
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.4.1)</title>
+  <meta name="description" content="Official PulseMesh v1.4.1 Web &amp; iPhone PWA client with WebRTC P2P Opus + DataChannel, Bell 202 Acoustic AFSK Modem, Local WebSockets, and 2-Tier Root CA SSL." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -895,7 +895,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.4.0</span>
+      <span class="version-tag">v1.4.1</span>
     </div>
     <div class="topbar-right">
       <a class="pill emerald" id="webUpdatePill" href="https://github.com/Kostadinosk/PulseMesh/releases/latest" target="_blank" rel="noopener" style="display:none;text-decoration:none;font-weight:800;">⬆ Update</a>
@@ -1019,6 +1019,40 @@
             <button type="button" class="btn quick-macro" data-msg="MOVING TO RALLY POINT">MOVING</button>
             <button type="button" class="btn quick-macro" data-msg="RADIO CHECK — REPORT SIGNAL">RADIO CHECK</button>
           </div>
+        </div>
+      </div>
+
+      <div class="voice-card" style="border-color:var(--emerald);">
+        <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--emerald);">
+          ⚡ WEBRTC P2P DIRECT (OPUS AUDIO + DTLS DATACHANNEL)
+        </div>
+        <div id="webrtcStatusBox" style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);">
+          IDLE • Connects direct browser-to-browser / iPhone-to-iPhone (Offline LAN ICE or Online STUN)
+        </div>
+        <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap;align-items:center;">
+          <select id="webrtcPeerSelect" style="flex:1;min-width:140px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-family:var(--mono);font-size:12px;">
+            <option value="">Select peer for WebRTC P2P...</option>
+          </select>
+          <button type="button" class="btn btn-emerald" id="webrtcConnectBtn">⚡ Connect P2P Opus+DC</button>
+          <button type="button" class="btn" id="webrtcHangupBtn" style="display:none;">✕ Close P2P</button>
+        </div>
+        <audio id="webrtcRemoteAudio" autoplay playsinline style="display:none;"></audio>
+      </div>
+
+      <div class="voice-card" style="border-color:var(--cyan);">
+        <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--cyan);">
+          📡 BELL 202 ACOUSTIC AFSK MODEM (1200 / 2200 Hz • ZERO-RF)
+        </div>
+        <div id="bell202StatusBox" style="font-family:var(--mono);font-size:11px;color:var(--text-secondary);">
+          READY • Air-gap speaker/mic modem compatible with Android Bell 202 AFSK (50 baud, CRC-16)
+        </div>
+        <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap;">
+          <input type="text" id="bell202MsgInput" maxlength="96" placeholder="Short air-gap message (max 96 chars)..." style="flex:1;min-width:160px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:12.5px;" />
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;">
+          <button type="button" class="btn btn-primary" id="bell202TxBtn">🔊 Chirp Message</button>
+          <button type="button" class="btn btn-danger" id="bell202SosBtn">🆘 Acoustic SOS</button>
+          <button type="button" class="btn" id="bell202RxToggleBtn">🎙 Listen Acoustic RX: OFF</button>
         </div>
       </div>
 
@@ -1210,10 +1244,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.4.0)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.4.1)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
-            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>RFC 6455 Local WebSockets (<code>/ws</code>)</strong>, <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>2-Tier Local Root CA SSL (:8443) + Zero-Warning HTTP (:8080) Native Mobile Voice Calling</strong>, <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong>.<br /><br />
-            <strong>PulseMesh v1.4.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>WebRTC P2P Opus + DTLS DataChannels</strong>, <strong>Bell 202 Acoustic AFSK (1200/2200 Hz)</strong> air-gap modem, <strong>RFC 6455 Local WebSockets (<code>/ws</code>)</strong>, <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>2-Tier Local Root CA SSL (:8443) + Zero-Warning HTTP (:8080)</strong>, and <strong>AES-256-GCM</strong>.<br /><br />
+            <strong>PulseMesh v1.4.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1235,7 +1269,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.4.0 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.4.1 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -2201,8 +2235,8 @@
         });
         drawMap(); return;
       }
-      if (type === "CALL_RING" || type === "CALL_INVITE" || type === "CALL_ACCEPT" || type === "CALL_DECLINE" || type === "CALL_END") {
-        if (!isSelf) handleIncomingCallSignal(type, pkt.srcNodeId, pkt.srcCallsign || pkt.srcNodeId, pkt.dstNodeId || "ALL");
+      if (type === "CALL_RING" || type === "CALL_INVITE" || type === "CALL_ACCEPT" || type === "CALL_DECLINE" || type === "CALL_END" || type === "WEBRTC_OFFER" || type === "WEBRTC_ANSWER" || type === "WEBRTC_ICE") {
+        if (!isSelf) handleIncomingCallSignal(type, pkt.srcNodeId, pkt.srcCallsign || pkt.srcNodeId, pkt.dstNodeId || "ALL", pkt.payload || "");
         return;
       }
       if (type === "SOS") {
@@ -2342,6 +2376,7 @@
       document.getElementById("peerCountPill").textContent = `PEERS: ${state.nodes.size}`;
       document.getElementById("topIdentity").textContent = `${state.callsign} (${state.nodeId})`;
       document.getElementById("setFingerprint").value = `${state.nodeId} • ${state.fingerprint}`;
+      if (typeof refreshWebRtcPeerDropdown === "function") refreshWebRtcPeerDropdown();
 
       const nodesList = document.getElementById("nodesList");
       const arr = Array.from(state.nodes.values()).sort((a, b) => (b.lastSeenMs || 0) - (a.lastSeenMs || 0));
@@ -2510,6 +2545,23 @@
       const loc = getEffectiveLocation();
       spikeWaveRibbon();
 
+      // PulseMesh v1.4.1: Direct DTLS-encrypted WebRTC RTCDataChannel fast-path for DMs when connected!
+      const directPeerNorm = normId(dstNodeId || (threadId && threadId.startsWith("dm_") ? threadId.slice(3) : ""));
+      if ((type === "CHAT" || type === "E2EE_DM") && directPeerNorm && typeof trySendViaWebRtcDataChannel === "function") {
+        const dcSent = trySendViaWebRtcDataChannel(directPeerNorm, {
+          packetId: pktId, srcNodeId: state.nodeId, srcCallsign: state.callsign,
+          dstNodeId: dstNodeId || threadId.slice(3), type: "E2EE_DM", text: text || payload, timestamp: Date.now()
+        });
+        if (dcSent) {
+          addChatMessage({
+            id: pktId, threadId: threadId || `dm_${directPeerNorm}`, sender: state.callsign + " (You)",
+            srcNodeId: state.nodeId, text: text || payload, kind: "text", isSelf: true,
+            transport: "WEBRTC P2P DC", hops: 0, timestamp: Date.now()
+          });
+          return;
+        }
+      }
+
       if (state.mode === "LOCAL_DIRECT") {
         const sendPayload = {
           packetId: pktId, clientNodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64,
@@ -2612,7 +2664,7 @@
         packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
         srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: "BROADCAST",
         type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
-        payload: "PulseMesh Web/iPhone Node v1.4.0", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
+        payload: "PulseMesh Web/iPhone Node v1.4.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
       if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
@@ -2692,7 +2744,7 @@
           if (!sig || typeof sig.seq !== "number" || sig.seq <= state.lastCallSignalSeq) continue;
           state.lastCallSignalSeq = sig.seq;
           if (normId(sig.srcNodeId) !== normId(state.nodeId)) {
-            handleIncomingCallSignal(sig.type, sig.srcNodeId, sig.srcCallsign || sig.srcNodeId, sig.dstNodeId || "ALL");
+            handleIncomingCallSignal(sig.type, sig.srcNodeId, sig.srcCallsign || sig.srcNodeId, sig.dstNodeId || "ALL", sig.payload || "");
           }
         }
       }
@@ -2739,7 +2791,7 @@
           playMuLawBase64(msg.payload);
           document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
         } else if (msg.event === "call" && normId(msg.srcNodeId) !== normId(state.nodeId)) {
-          handleIncomingCallSignal(msg.type, msg.srcNodeId, msg.srcCallsign || msg.srcNodeId, msg.dstNodeId || "ALL");
+          handleIncomingCallSignal(msg.type, msg.srcNodeId, msg.srcCallsign || msg.srcNodeId, msg.dstNodeId || "ALL", msg.payload || "");
         } else if (msg.event === "state" && msg.data) {
           applyLocalSnapshot(msg.data);
           document.getElementById("connDot").className = "brand-dot";
@@ -3668,10 +3720,15 @@
       logLine("CALL", `Calling ${callState.peerName} (${peerId})...`);
     }
 
-    function handleIncomingCallSignal(type, srcId, srcName, dstId) {
+    function handleIncomingCallSignal(type, srcId, srcName, dstId, payload = "") {
       const myNorm = normId(state.nodeId);
       const targetedToMe = dstId === "ALL" || dstId === "BROADCAST" || normId(dstId) === myNorm;
       if (!targetedToMe) return;
+
+      if (type === "WEBRTC_OFFER" || type === "WEBRTC_ANSWER" || type === "WEBRTC_ICE") {
+        handleWebRtcSignal(type, srcId, srcName || srcId, payload);
+        return;
+      }
 
       if ((type === "CALL_RING" || type === "CALL_INVITE") && callState.status === "IDLE") {
         callState.status = "RINGING_IN";
@@ -3692,6 +3749,548 @@
         logLine("CALL", `Call ended by ${srcName}`);
       }
     }
+
+    // =========================================================================
+    // PULSEMESH v1.4.1: WEBRTC P2P (OPUS FULL-DUPLEX AUDIO + DTLS DATACHANNEL)
+    // =========================================================================
+    const webrtcState = {
+      peers: new Map(),         // normId -> { pc, dc, peerId, peerName, localStream, remoteStream, connected }
+      dataChannels: new Map(),  // normId -> RTCDataChannel
+      activePeerNorm: ""
+    };
+
+    function refreshWebRtcPeerDropdown() {
+      const sel = document.getElementById("webrtcPeerSelect");
+      if (!sel) return;
+      const prev = sel.value;
+      const options = [];
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = state.nodes.size ? "Select peer for WebRTC P2P..." : "Waiting for discovered peers...";
+      options.push(placeholder);
+      for (const n of state.nodes.values()) {
+        const opt = document.createElement("option");
+        opt.value = n.id;
+        const hasDc = webrtcState.dataChannels.get(normId(n.id))?.readyState === "open";
+        opt.textContent = `${n.callsign || n.id} (${n.id})${hasDc ? " ⚡P2P" : ""}`;
+        options.push(opt);
+      }
+      sel.replaceChildren(...options);
+      if (prev && Array.from(sel.options).some((o) => o.value === prev)) {
+        sel.value = prev;
+      }
+    }
+
+    function updateWebRtcStatusUi(msg, isConnected = false) {
+      const box = document.getElementById("webrtcStatusBox");
+      const hangBtn = document.getElementById("webrtcHangupBtn");
+      if (box) {
+        box.textContent = msg;
+        box.style.color = isConnected ? "var(--emerald)" : "var(--text-secondary)";
+      }
+      if (hangBtn) hangBtn.style.display = webrtcState.peers.size > 0 ? "inline-flex" : "none";
+    }
+
+    function buildRtcConfig() {
+      // Offline Local Hotspot uses LAN host ICE candidates (zero external STUN needed); Hybrid uses STUN
+      if (state.mode === "LOCAL_DIRECT") {
+        return { iceServers: [] };
+      }
+      return {
+        iceServers: [
+          { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }
+        ]
+      };
+    }
+
+    function attachWebRtcDataChannel(dc, peerId, peerName) {
+      const pNorm = normId(peerId);
+      dc.binaryType = "arraybuffer";
+      dc.onopen = () => {
+        webrtcState.dataChannels.set(pNorm, dc);
+        refreshWebRtcPeerDropdown();
+        updateWebRtcStatusUi(`⚡ CONNECTED P2P: ${peerName} (DTLS DataChannel + Opus Ready)`, true);
+        logLine("WEBRTC", `Direct RTCDataChannel open with ${peerName} (${peerId})`);
+      };
+      dc.onclose = () => {
+        if (webrtcState.dataChannels.get(pNorm) === dc) webrtcState.dataChannels.delete(pNorm);
+        refreshWebRtcPeerDropdown();
+        if (webrtcState.peers.size === 0) {
+          updateWebRtcStatusUi("IDLE • Connects direct browser-to-browser / iPhone-to-iPhone", false);
+        }
+      };
+      dc.onmessage = (ev) => {
+        try {
+          const textData = typeof ev.data === "string"
+            ? ev.data
+            : new TextDecoder("utf-8").decode(new Uint8Array(ev.data));
+          const msg = JSON.parse(textData);
+          if (!msg || !msg.packetId || state.seenIds.has(msg.packetId)) return;
+          state.seenIds.add(msg.packetId);
+          spikeWaveRibbon();
+          addChatMessage({
+            id: msg.packetId,
+            threadId: `dm_${pNorm}`,
+            sender: msg.srcCallsign || peerName,
+            srcNodeId: msg.srcNodeId || peerId,
+            text: msg.text || "",
+            kind: "text",
+            isSelf: false,
+            transport: "WEBRTC P2P DC",
+            hops: 0,
+            timestamp: msg.timestamp || Date.now()
+          });
+          notifyIncomingEvent(msg.srcCallsign || peerName, msg.text || "Direct P2P message");
+        } catch (_) {}
+      };
+    }
+
+    function trySendViaWebRtcDataChannel(peerNorm, obj) {
+      const dc = webrtcState.dataChannels.get(peerNorm);
+      if (!dc || dc.readyState !== "open") return false;
+      try {
+        dc.send(JSON.stringify(obj));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function ensureWebRtcPeerConnection(peerId, peerName, isInitiator) {
+      if (typeof RTCPeerConnection === "undefined") {
+        updateWebRtcStatusUi("WebRTC RTCPeerConnection unsupported in this browser", false);
+        return null;
+      }
+      const pNorm = normId(peerId);
+      const existing = webrtcState.peers.get(pNorm);
+      if (existing && existing.pc.connectionState !== "failed" && existing.pc.connectionState !== "closed") {
+        return existing;
+      }
+      const pc = new RTCPeerConnection(buildRtcConfig());
+      const entry = { pc, dc: null, peerId, peerName, localStream: null, connected: false };
+      webrtcState.peers.set(pNorm, entry);
+      webrtcState.activePeerNorm = pNorm;
+
+      // Attach live microphone Opus audio track when browser secure context allows getUserMedia
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            video: false
+          });
+          entry.localStream = stream;
+          for (const track of stream.getAudioTracks()) {
+            pc.addTrack(track, stream);
+          }
+        } catch (_) {
+          // Plain HTTP or mic denied: continue with DataChannel-only P2P cleanly!
+        }
+      }
+
+      pc.ontrack = (ev) => {
+        const audioEl = document.getElementById("webrtcRemoteAudio");
+        if (audioEl && ev.streams && ev.streams[0]) {
+          audioEl.srcObject = ev.streams[0];
+          audioEl.play().catch(() => {});
+          updateWebRtcStatusUi(`🔊 WEBRTC OPUS VOICE + P2P ACTIVE WITH ${peerName}`, true);
+        }
+      };
+
+      pc.ondatachannel = (ev) => {
+        entry.dc = ev.channel;
+        attachWebRtcDataChannel(ev.channel, peerId, peerName);
+      };
+
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          sendMeshAction({
+            type: "WEBRTC_ICE",
+            dstNodeId: peerId,
+            payload: JSON.stringify(ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate)
+          }).catch(() => {});
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        const st = pc.connectionState;
+        if (st === "connected") {
+          entry.connected = true;
+          updateWebRtcStatusUi(`⚡ CONNECTED P2P: ${peerName} (${state.mode === "LOCAL_DIRECT" ? "Offline LAN ICE" : "STUN P2P"})`, true);
+        } else if (st === "disconnected" || st === "failed" || st === "closed") {
+          closeWebRtcPeer(pNorm);
+        }
+      };
+
+      if (isInitiator) {
+        const dc = pc.createDataChannel("pulsemesh-v141", { ordered: true });
+        entry.dc = dc;
+        attachWebRtcDataChannel(dc, peerId, peerName);
+      }
+      return entry;
+    }
+
+    async function startWebRtcPeerSession(peerId) {
+      if (!peerId) {
+        updateWebRtcStatusUi("Pick a discovered peer first before connecting WebRTC P2P.", false);
+        return;
+      }
+      const peerObj = state.nodes.get(normId(peerId));
+      const peerName = peerObj ? (peerObj.callsign || peerId) : peerId;
+      updateWebRtcStatusUi(`Negotiating WebRTC Opus + DataChannel with ${peerName}...`, false);
+      const entry = await ensureWebRtcPeerConnection(peerId, peerName, true);
+      if (!entry) return;
+      try {
+        const offer = await entry.pc.createOffer({ offerToReceiveAudio: true });
+        await entry.pc.setLocalDescription(offer);
+        await sendMeshAction({
+          type: "WEBRTC_OFFER",
+          dstNodeId: peerId,
+          payload: JSON.stringify({ type: offer.type, sdp: offer.sdp })
+        });
+        logLine("WEBRTC", `Sent SDP offer to ${peerName} (${peerId})`);
+      } catch (err) {
+        updateWebRtcStatusUi(`WebRTC offer failed: ${err.message}`, false);
+      }
+    }
+
+    async function handleWebRtcSignal(type, srcId, srcName, payloadStr) {
+      if (!payloadStr) return;
+      let data = null;
+      try { data = JSON.parse(payloadStr); } catch (_) { return; }
+      const pNorm = normId(srcId);
+      try {
+        if (type === "WEBRTC_OFFER") {
+          const entry = await ensureWebRtcPeerConnection(srcId, srcName, false);
+          if (!entry) return;
+          await entry.pc.setRemoteDescription(new RTCSessionDescription(data));
+          const answer = await entry.pc.createAnswer();
+          await entry.pc.setLocalDescription(answer);
+          await sendMeshAction({
+            type: "WEBRTC_ANSWER",
+            dstNodeId: srcId,
+            payload: JSON.stringify({ type: answer.type, sdp: answer.sdp })
+          });
+          updateWebRtcStatusUi(`Accepted WebRTC P2P offer from ${srcName}...`, false);
+          logLine("WEBRTC", `Answered SDP offer from ${srcName}`);
+        } else if (type === "WEBRTC_ANSWER") {
+          const entry = webrtcState.peers.get(pNorm);
+          if (entry && entry.pc.signalingState === "have-local-offer") {
+            await entry.pc.setRemoteDescription(new RTCSessionDescription(data));
+            logLine("WEBRTC", `Applied SDP answer from ${srcName}`);
+          }
+        } else if (type === "WEBRTC_ICE") {
+          const entry = webrtcState.peers.get(pNorm);
+          if (entry && data && data.candidate) {
+            await entry.pc.addIceCandidate(new RTCIceCandidate(data));
+          }
+        }
+      } catch (err) {
+        logLine("WEBRTC", `Signal ${type} error: ${err.message}`);
+      }
+    }
+
+    function closeWebRtcPeer(pNorm) {
+      const entry = webrtcState.peers.get(pNorm);
+      if (entry) {
+        try { if (entry.dc) entry.dc.close(); } catch (_) {}
+        try { if (entry.localStream) entry.localStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        try { entry.pc.close(); } catch (_) {}
+        webrtcState.peers.delete(pNorm);
+      }
+      webrtcState.dataChannels.delete(pNorm);
+      refreshWebRtcPeerDropdown();
+      if (webrtcState.peers.size === 0) {
+        updateWebRtcStatusUi("IDLE • Connects direct browser-to-browser / iPhone-to-iPhone", false);
+      }
+    }
+
+    document.getElementById("webrtcConnectBtn").addEventListener("click", () => {
+      const sel = document.getElementById("webrtcPeerSelect");
+      startWebRtcPeerSession(sel ? sel.value : "");
+    });
+    document.getElementById("webrtcHangupBtn").addEventListener("click", () => {
+      for (const key of Array.from(webrtcState.peers.keys())) closeWebRtcPeer(key);
+    });
+
+    // =========================================================================
+    // PULSEMESH v1.4.1: BELL 202 ACOUSTIC AFSK MODEM (1200/2200 Hz • ANDROID INTEROP)
+    // =========================================================================
+    const BELL202_SYM_MS = 20;        // 50 baud room-reverb resilient
+    const BELL202_PREAMBLE_SYMS = 4;  // 80 ms pilot @ 1650 Hz
+    const BELL202_FREQ_PRE = 1650;
+    const BELL202_FREQ_MARK = 1200;   // bit 1
+    const BELL202_FREQ_SPACE = 2200;  // bit 0
+    const bell202State = { listening: false, stream: null, procNode: null, sourceNode: null, sampleBuf: [] };
+
+    function bell202Crc16Ccitt(bytes, offset = 0, len = bytes.length - offset) {
+      let crc = 0xFFFF;
+      for (let i = offset; i < offset + len; i++) {
+        crc ^= (bytes[i] & 0xFF) << 8;
+        for (let b = 0; b < 8; b++) {
+          crc = (crc & 0x8000) ? (((crc << 1) ^ 0x1021) & 0xFFFF) : ((crc << 1) & 0xFFFF);
+        }
+      }
+      return crc & 0xFFFF;
+    }
+
+    function encodeBell202Frame(typeByte, srcNodeIdHex, text) {
+      const enc = new TextEncoder().encode(String(text || "")).slice(0, 96);
+      const srcShort = parseInt(normId(srcNodeIdHex), 16) || 1;
+      const body = new Uint8Array(4 + enc.length);
+      body[0] = typeByte & 0xFF;
+      body[1] = (srcShort >>> 8) & 0xFF;
+      body[2] = srcShort & 0xFF;
+      body[3] = enc.length & 0xFF;
+      body.set(enc, 4);
+      const crc = bell202Crc16Ccitt(body);
+      const frame = new Uint8Array(2 + body.length + 2);
+      frame[0] = 0x50; // 'P'
+      frame[1] = 0x4D; // 'M'
+      frame.set(body, 2);
+      frame[2 + body.length] = (crc >>> 8) & 0xFF;
+      frame[2 + body.length + 1] = crc & 0xFF;
+      return frame;
+    }
+
+    function decodeBell202Frame(frame) {
+      if (!frame || frame.length < 8 || frame[0] !== 0x50 || frame[1] !== 0x4D) return null;
+      const typeByte = frame[2] & 0xFF;
+      const srcShort = ((frame[3] & 0xFF) << 8) | (frame[4] & 0xFF);
+      const pLen = frame[5] & 0xFF;
+      if (pLen > 96 || frame.length < 8 + pLen) return null;
+      const calcCrc = bell202Crc16Ccitt(frame, 2, 4 + pLen);
+      const rxCrc = ((frame[6 + pLen] & 0xFF) << 8) | (frame[7 + pLen] & 0xFF);
+      if (calcCrc !== rxCrc) return null;
+      const text = new TextDecoder("utf-8").decode(frame.subarray(6, 6 + pLen));
+      return { typeByte, srcNodeId: "0x" + srcShort.toString(16).toUpperCase().padStart(4, "0"), text };
+    }
+
+    function goertzelPower(samples, offset, len, freqHz, sampleRate) {
+      const k = Math.floor(0.5 + (len * freqHz) / sampleRate);
+      const omega = (2 * Math.PI * k) / len;
+      const coeff = 2 * Math.cos(omega);
+      let q0 = 0, q1 = 0, q2 = 0;
+      for (let i = 0; i < len; i++) {
+        q0 = coeff * q1 - q2 + samples[offset + i];
+        q2 = q1;
+        q1 = q0;
+      }
+      return q1 * q1 + q2 * q2 - q1 * q2 * coeff;
+    }
+
+    async function transmitBell202Acoustic(typeByte, text) {
+      const statusBox = document.getElementById("bell202StatusBox");
+      const ctx = getAudioCtx();
+      if (ctx.state === "suspended") await ctx.resume();
+      const sr = ctx.sampleRate;
+      const symSamples = Math.round((sr * BELL202_SYM_MS) / 1000);
+      const frame = encodeBell202Frame(typeByte, state.nodeId, text);
+      const totalSyms = BELL202_PREAMBLE_SYMS + frame.length * 8;
+      const buf = ctx.createBuffer(1, totalSyms * symSamples, sr);
+      const ch = buf.getChannelData(0);
+      const ramp = Math.round((sr * 2) / 1000);
+      let phase = 0, idx = 0;
+
+      const writeSym = (freq, isFirst, isLast) => {
+        const dPhase = (2 * Math.PI * freq) / sr;
+        for (let i = 0; i < symSamples; i++) {
+          let env = 1.0;
+          if (isFirst && i < ramp) env = 0.5 * (1 - Math.cos((Math.PI * i) / ramp));
+          else if (isLast && i > symSamples - ramp) env = 0.5 * (1 - Math.cos((Math.PI * (symSamples - i)) / ramp));
+          ch[idx++] = Math.sin(phase) * env * 0.65;
+          phase += dPhase;
+          if (phase >= 2 * Math.PI) phase -= 2 * Math.PI;
+        }
+      };
+
+      for (let p = 0; p < BELL202_PREAMBLE_SYMS; p++) writeSym(BELL202_FREQ_PRE, p === 0, false);
+      const totalBits = frame.length * 8;
+      for (let bp = 0; bp < totalBits; bp++) {
+        const bit = (frame[bp >>> 3] >>> (7 - (bp & 7))) & 1;
+        writeSym(bit === 1 ? BELL202_FREQ_MARK : BELL202_FREQ_SPACE, false, bp === totalBits - 1);
+      }
+
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      const durSec = (buf.duration).toFixed(1);
+      if (statusBox) {
+        statusBox.textContent = `🔊 TX BELL 202 (${frame.length}B • ${durSec}s @ 1200/2200 Hz)...`;
+        statusBox.style.color = "var(--cyan)";
+      }
+      spikeWaveRibbon();
+      src.onended = () => {
+        if (statusBox) {
+          statusBox.textContent = `✓ Bell 202 TX complete (${frame.length}B CRC-16 frame sent over speaker)`;
+          statusBox.style.color = "var(--emerald)";
+        }
+      };
+      src.start();
+      logLine("BELL202", `Chirp TX (${typeByte === 2 ? "SOS" : "CHAT"}): ${text}`);
+    }
+
+    function tryDemodulateBell202Ring(buf, sampleRate) {
+      const symSamples = Math.round((sampleRate * BELL202_SYM_MS) / 1000);
+      if (buf.length < symSamples * (BELL202_PREAMBLE_SYMS + 64)) return null;
+      const step = Math.max(1, Math.floor(symSamples / 4));
+      let off = 0, preHits = 0, locked = false;
+      while (off + symSamples <= buf.length) {
+        const pPre = goertzelPower(buf, off, symSamples, BELL202_FREQ_PRE, sampleRate);
+        const p1 = goertzelPower(buf, off, symSamples, BELL202_FREQ_MARK, sampleRate);
+        const p0 = goertzelPower(buf, off, symSamples, BELL202_FREQ_SPACE, sampleRate);
+        if (pPre > 0.08 && pPre > p1 * 1.4 && pPre > p0 * 1.4) {
+          preHits++;
+          off += symSamples;
+          if (preHits >= BELL202_PREAMBLE_SYMS - 1) {
+            while (off + symSamples <= buf.length) {
+              const pp = goertzelPower(buf, off, symSamples, BELL202_FREQ_PRE, sampleRate);
+              const pm = goertzelPower(buf, off, symSamples, BELL202_FREQ_MARK, sampleRate);
+              const ps = goertzelPower(buf, off, symSamples, BELL202_FREQ_SPACE, sampleRate);
+              if (pp > pm * 1.3 && pp > ps * 1.3) off += symSamples;
+              else break;
+            }
+            locked = true;
+            break;
+          }
+        } else {
+          preHits = 0;
+          off += step;
+        }
+      }
+      if (!locked) return null;
+
+      const readByte = (pos) => {
+        if (pos + symSamples * 8 > buf.length) return -1;
+        let b = 0;
+        for (let bi = 0; bi < 8; bi++) {
+          const sOff = pos + bi * symSamples;
+          const pMark = goertzelPower(buf, sOff, symSamples, BELL202_FREQ_MARK, sampleRate);
+          const pSpace = goertzelPower(buf, sOff, symSamples, BELL202_FREQ_SPACE, sampleRate);
+          b = (b << 1) | (pMark >= pSpace ? 1 : 0);
+        }
+        return b & 0xFF;
+      };
+
+      const hdr = new Uint8Array(6);
+      let cursor = off;
+      for (let i = 0; i < 6; i++) {
+        const v = readByte(cursor);
+        if (v < 0) return { needMore: true };
+        hdr[i] = v;
+        cursor += symSamples * 8;
+      }
+      if (hdr[0] !== 0x50 || hdr[1] !== 0x4D || hdr[5] > 96) return null;
+      const totalBytes = 6 + hdr[5] + 2;
+      if (off + totalBytes * 8 * symSamples > buf.length) return { needMore: true };
+      const full = new Uint8Array(totalBytes);
+      full.set(hdr, 0);
+      for (let i = 6; i < totalBytes; i++) {
+        full[i] = readByte(cursor);
+        cursor += symSamples * 8;
+      }
+      const decoded = decodeBell202Frame(full);
+      return decoded ? { decoded, consumedTo: cursor } : null;
+    }
+
+    async function toggleBell202Rx() {
+      const btn = document.getElementById("bell202RxToggleBtn");
+      const statusBox = document.getElementById("bell202StatusBox");
+      if (bell202State.listening) {
+        bell202State.listening = false;
+        try { if (bell202State.procNode) bell202State.procNode.disconnect(); } catch (_) {}
+        try { if (bell202State.sourceNode) bell202State.sourceNode.disconnect(); } catch (_) {}
+        try { if (bell202State.stream) bell202State.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+        bell202State.sampleBuf = [];
+        if (btn) btn.textContent = "🎙 Listen Acoustic RX: OFF";
+        if (statusBox) {
+          statusBox.textContent = "READY • Air-gap speaker/mic modem compatible with Android Bell 202 AFSK (50 baud, CRC-16)";
+          statusBox.style.color = "var(--text-secondary)";
+        }
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (statusBox) statusBox.textContent = "Mic RX requires HTTPS (:8443) or localhost. Chirp TX still works on HTTP!";
+        return;
+      }
+      try {
+        const ctx = getAudioCtx();
+        if (ctx.state === "suspended") await ctx.resume();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          video: false
+        });
+        const source = ctx.createMediaStreamSource(stream);
+        const proc = ctx.createScriptProcessor(4096, 1, 1);
+        bell202State.stream = stream;
+        bell202State.sourceNode = source;
+        bell202State.procNode = proc;
+        bell202State.listening = true;
+        bell202State.sampleBuf = [];
+        let lastScanMs = 0;
+        const maxBufSamples = ctx.sampleRate * 12;
+
+        proc.onaudioprocess = (ev) => {
+          if (!bell202State.listening) return;
+          const input = ev.inputBuffer.getChannelData(0);
+          for (let i = 0; i < input.length; i++) bell202State.sampleBuf.push(input[i]);
+          if (bell202State.sampleBuf.length > maxBufSamples) {
+            bell202State.sampleBuf.splice(0, bell202State.sampleBuf.length - maxBufSamples);
+          }
+          const now = Date.now();
+          if (now - lastScanMs < 400) return;
+          lastScanMs = now;
+          const res = tryDemodulateBell202Ring(bell202State.sampleBuf, ctx.sampleRate);
+          if (res && res.decoded) {
+            bell202State.sampleBuf.splice(0, res.consumedTo);
+            const f = res.decoded;
+            spikeWaveRibbon();
+            if (statusBox) {
+              statusBox.textContent = `✓ RX DECODED (CRC-16 OK) from ${f.srcNodeId}: "${f.text}"`;
+              statusBox.style.color = "var(--emerald)";
+            }
+            if (f.typeByte === 2) {
+              document.getElementById("sosBanner").classList.add("active");
+              document.getElementById("sosBannerText").textContent = `⚠ ACOUSTIC BELL 202 SOS (${f.srcNodeId}): ${f.text}`;
+              playSosSiren();
+            }
+            addChatMessage({
+              id: `b202_${Date.now()}`,
+              threadId: "channel_primary",
+              sender: `Acoustic ${f.srcNodeId}`,
+              srcNodeId: f.srcNodeId,
+              text: f.typeByte === 2 ? `⚠ ACOUSTIC SOS: ${f.text}` : f.text,
+              kind: "text",
+              isSelf: false,
+              transport: "ACOUSTIC BELL202",
+              hops: 0,
+              timestamp: Date.now()
+            });
+            logLine("BELL202", `Decoded air-gap frame from ${f.srcNodeId}: ${f.text}`);
+          }
+        };
+        source.connect(proc);
+        proc.connect(ctx.destination);
+        if (btn) btn.textContent = "🎙 Listen Acoustic RX: ON";
+        if (statusBox) {
+          statusBox.textContent = `🎧 LISTENING @ ${ctx.sampleRate} Hz for Bell 202 AFSK (1650 / 1200 / 2200 Hz)...`;
+          statusBox.style.color = "var(--emerald)";
+        }
+      } catch (err) {
+        if (statusBox) statusBox.textContent = `Mic RX error: ${err.message} (Chirp TX still works!)`;
+      }
+    }
+
+    document.getElementById("bell202TxBtn").addEventListener("click", () => {
+      const inp = document.getElementById("bell202MsgInput");
+      const msg = (inp ? inp.value : "").trim() || `PulseMesh Ping from ${state.callsign}`;
+      transmitBell202Acoustic(1, msg);
+    });
+    document.getElementById("bell202SosBtn").addEventListener("click", () => {
+      const inp = document.getElementById("bell202MsgInput");
+      const msg = (inp ? inp.value : "").trim() || `SOS ${state.callsign}`;
+      transmitBell202Acoustic(2, msg);
+    });
+    document.getElementById("bell202RxToggleBtn").addEventListener("click", toggleBell202Rx);
 
     document.getElementById("btnAcceptCall").addEventListener("click", async () => {
       getAudioCtx();
@@ -3892,7 +4491,7 @@
     // Trip Log JSON & GPX Trail Export
     document.getElementById("exportTripJsonBtn")?.addEventListener("click", () => {
       const payload = JSON.stringify({
-        exportedAt: Date.now(), version: "1.4.0", nodeId: state.nodeId, callsign: state.callsign,
+        exportedAt: Date.now(), version: "1.4.1", nodeId: state.nodeId, callsign: state.callsign,
         breadcrumbs: state.breadcrumbs || [],
         waypoints: Array.from(state.waypoints.values()), packets: state.packets
       }, null, 2);
@@ -3908,7 +4507,7 @@
         ? state.breadcrumbs
         : (state.lat != null && state.lng != null ? [{ lat: state.lat, lng: state.lng, ts: Date.now() }] : []);
       const trkpts = pts.map((p) => `      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><time>${new Date(p.ts || Date.now()).toISOString()}</time></trkpt>`).join("\n");
-      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.4.0">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.4.1">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
       const blob = new Blob([gpx], { type: "application/gpx+xml" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -4325,10 +4924,10 @@
       const maxProbes = isLocalOrigin ? 3 : 1;
       for (let attempt = 0; attempt < maxProbes && !localInfo; attempt++) {
         try {
-          const ctrl = new AbortController();
-          const tid = setTimeout(() => ctrl.abort(), 3500);
-          const res = await fetch("/api/info", { signal: ctrl.signal, cache: "no-store" });
-          clearTimeout(tid);
+          const timeoutSig = (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function")
+            ? AbortSignal.timeout(3500)
+            : undefined;
+          const res = await fetch("/api/info", { signal: timeoutSig, cache: "no-store" });
           if (res.ok) {
             const j = await res.json();
             if (j && j.pulsemeshHost === true) localInfo = j;
@@ -4342,7 +4941,7 @@
       if (localInfo) await startLocalDirectMode(localInfo);
       else {
         await startHybridNtfyMode();
-        checkWebUpdateOnline("1.4.0");
+        checkWebUpdateOnline("1.4.1");
       }
     }
 

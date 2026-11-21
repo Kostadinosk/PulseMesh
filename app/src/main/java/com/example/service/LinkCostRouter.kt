@@ -54,7 +54,8 @@ class LinkCostRouter {
         private const val TIER_FRESHNESS_MS = 90_000L
         private val CRITICAL_FANOUT_TYPES = setOf(
             "SOS", "SOS_CLEAR",
-            "CALL_RING", "CALL_INVITE", "CALL_ACCEPT", "CALL_ACCEPT_ACK", "CALL_DECLINE", "CALL_END"
+            "CALL_RING", "CALL_INVITE", "CALL_ACCEPT", "CALL_ACCEPT_ACK", "CALL_DECLINE", "CALL_END",
+            "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE"
         )
     }
 

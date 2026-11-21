@@ -181,6 +181,7 @@ data class MeshUiState(
     val pendingDtnCount: Int = 0,
     val wifiAwareEnabled: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
     val ultrasonicModemEnabled: Boolean = false,
+    val bell202ModemEnabled: Boolean = false,
     val activeL2capChannelsCount: Int = 0,
     val localL2capPsm: Int = 0,
     val callAckConfirmed: Boolean = false,
@@ -475,6 +476,39 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 payload = "Ultrasonic 18.5kHz Acoustic Frame",
                 sourceTransport = "ULTRASONIC",
                 rssiDbm = -50
+            )
+            viewModelScope.launch(Dispatchers.Main) {
+                handleIncomingPacket(pkt)
+            }
+        }
+    )
+
+    val bell202Modem = com.example.service.Bell202AcousticModem(
+        context = application,
+        scope = viewModelScope,
+        isVoiceMicBusy = {
+            tacticalCallService.callState.value.isInCall ||
+                _uiState.value.duplexCallState.isInCall ||
+                audioService.isRecording.value ||
+                _uiState.value.isPttPressed ||
+                !appInForeground
+        },
+        onBell202FrameDecoded = { frame ->
+            val pktType = when (frame.typeByte) {
+                com.example.service.Bell202AcousticModem.TYPE_SOS -> "SOS"
+                com.example.service.Bell202AcousticModem.TYPE_CALL_RING -> "CALL_RING"
+                com.example.service.Bell202AcousticModem.TYPE_KEY_VERIFY -> "KEY_VERIFY"
+                else -> "CHAT"
+            }
+            val pkt = com.example.service.WireMeshPacket(
+                packetId = "b202_${frame.srcNodeIdHex}_${System.currentTimeMillis()}",
+                srcNodeId = frame.srcNodeIdHex,
+                srcCallsign = peersBackingMap[normalizeId(frame.srcNodeIdHex)]?.callsign ?: "Acoustic-${frame.srcNodeIdHex}",
+                dstNodeId = "ALL",
+                type = pktType,
+                payload = frame.text.ifBlank { "Bell 202 AFSK Signal" },
+                sourceTransport = "ACOUSTIC BELL202",
+                rssiDbm = -48
             )
             viewModelScope.launch(Dispatchers.Main) {
                 handleIncomingPacket(pkt)
@@ -4363,6 +4397,25 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(availableUpdate = null) }
     }
 
+    fun toggleBell202Modem() {
+        val next = !_uiState.value.bell202ModemEnabled
+        bell202Modem.setListening(next)
+        _uiState.update { it.copy(bell202ModemEnabled = next) }
+        triggerHaptic(35)
+    }
+
+    fun transmitBell202AcousticMessage(text: String, isSos: Boolean = false) {
+        val st = _uiState.value
+        val typeByte = if (isSos) {
+            com.example.service.Bell202AcousticModem.TYPE_SOS
+        } else {
+            com.example.service.Bell202AcousticModem.TYPE_CHAT
+        }
+        val cleanText = text.trim().ifBlank { if (isSos) "SOS from ${st.operatorCallsign}" else "PulseMesh Bell202 Ping (${st.operatorCallsign})" }
+        bell202Modem.transmitMessage(typeByte, st.localNodeId, cleanText)
+        triggerHaptic(50)
+    }
+
     /**
      * Handles raw incoming JSON line from BLE GATT, Hotspot TCP/UDP, or Hybrid stream.
      */
@@ -5529,6 +5582,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 triggerHaptic(60)
+            }
+            "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE" -> {
+                // Relay WebRTC P2P signaling frames directly to connected Web/iPhone PWA clients over /ws & SSE
+                pulseMeshWebServer.notifyCallSignal(
+                    type = packet.type,
+                    srcNodeId = packet.srcNodeId,
+                    srcCallsign = effectiveCallsign,
+                    dstNodeId = packet.dstNodeId.ifBlank { "ALL" },
+                    payload = packet.payload
+                )
             }
             "CALL_END" -> {
                 val curUi = _uiState.value
@@ -7755,7 +7818,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.4.0")
+            put("version", "1.4.1")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7927,7 +7990,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.4.0")
+            put("version", "1.4.1")
+            put("webrtcSignaling", true)
+            put("bell202Acoustic", true)
             put("sslEnabled", state.webPortalStatus.sslEnabled)
             put("httpsSelfTestPassed", state.webPortalStatus.httpsSelfTestPassed)
             put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)
@@ -8136,6 +8201,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             val srcCallsign = submitted.callsign.ifBlank { "WebNode" }
 
             when (submitted.type) {
+                "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE" -> {
+                    val targetDst = submitted.dstNodeId.ifBlank { "ALL" }
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = targetDst,
+                        type = submitted.type,
+                        payload = submitted.payload,
+                        ttl = 7,
+                        hops = 1,
+                        sourceTransport = "WEB PORTAL",
+                        timestamp = now
+                    )
+                    sendMeshPacket(wire)
+                }
                 "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
                     val targetDst = submitted.dstNodeId.ifBlank { _uiState.value.localNodeId }
                     val wire = com.example.service.WireMeshPacket(

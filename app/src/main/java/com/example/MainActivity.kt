@@ -621,6 +621,8 @@ class MainActivity : ComponentActivity() {
                                         onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
                                         onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
                                         onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
+                                        onToggleBell202Modem = { viewModel.toggleBell202Modem() },
+                                        onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
                                     )
                                 } else {
                                     Column(
@@ -805,6 +807,8 @@ class MainActivity : ComponentActivity() {
                                                 onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
                                                 onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
                                                 onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
+                                                onToggleBell202Modem = { viewModel.toggleBell202Modem() },
+                                                onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
                                             )
                                         } else {
                                             RootBoosterScreen(
