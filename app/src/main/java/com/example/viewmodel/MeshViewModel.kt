@@ -285,8 +285,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             detectedHardware = detectedHw,
             selectedPhoneProfile = initialSelectedProfile,
             hardwareMismatchReport = initialMismatch,
-            isMismatchOverrideConfirmed = prefs.isMismatchOverrideConfirmed,
-            showMismatchWarningDialog = initialMismatch.isMismatched && !prefs.isMismatchOverrideConfirmed,
+            isMismatchOverrideConfirmed = true,
+            showMismatchWarningDialog = false,
             isSimpleMode = prefs.isSimpleMode,
             appTheme = prefs.appTheme,
             encryptionKeyEpoch = prefs.encryptionKeyEpoch,
@@ -1599,8 +1599,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPhoneProfile = profile,
                 localDeviceModel = profile.modelName,
                 hardwareMismatchReport = mismatch,
-                isMismatchOverrideConfirmed = false,
-                showMismatchWarningDialog = mismatch.isMismatched,
+                isMismatchOverrideConfirmed = true,
+                showMismatchWarningDialog = false,
                 nodes = updatedNodes
             )
         }
@@ -1725,7 +1725,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 hardwareMismatchReport = mismatch,
                 nodes = updatedNodes,
                 showSetupWizard = false,
-                showMismatchWarningDialog = mismatch.isMismatched && !current.isMismatchOverrideConfirmed
+                showMismatchWarningDialog = false
             )
         }
         meshNetworkService.refreshInternetState()
@@ -6911,26 +6911,21 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             _uiState.update { current ->
-                val newTxPower = if (probe.isRooted) "+25 dBm ROOT" else "+14 dBm (Unrooted)"
-                val newMult = if (probe.isRooted) {
-                    calculateRangeMultiplier(current.bleCodedPhyEnabled, current.wifiBeaconStuffingEnabled, current.unthrottledScanEnabled)
-                } else {
-                    1.0f
-                }
+                val newTxPower = if (probe.isRooted) "OS Radio (Root uid=0)" else "Standard OS Radio"
                 current.copy(
                     isRootVerifying = false,
                     isRootGranted = probe.isRooted,
                     rootStatusMessage = if (probe.isRooted) {
-                        "KernelSU Next Root Verified (${probe.rootType}) — Superuser uid=0(root) active."
+                        "Root Verified (${probe.rootType}) — uid=0(root) active (Wi-Fi power_save disabled)."
                     } else {
-                        "Root Not Granted — Open KernelSU Next Manager -> Superuser -> Enable PulseMesh, then tap Verify Root."
+                        "Standard Unrooted Android Mode — All PulseMesh transports operate natively without root."
                     },
                     rootProbeLogs = probe.probeLogs,
                     txPowerDesc = newTxPower,
-                    rangeMultiplier = newMult,
-                    wifiBeaconStuffingEnabled = if (probe.isRooted) current.wifiBeaconStuffingEnabled else false,
-                    unthrottledScanEnabled = if (probe.isRooted) current.unthrottledScanEnabled else false,
-                    systemlessMountEnabled = if (probe.isRooted) current.systemlessMountEnabled else false
+                    rangeMultiplier = 1.0f,
+                    wifiBeaconStuffingEnabled = false,
+                    unthrottledScanEnabled = false,
+                    systemlessMountEnabled = false
                 )
             }
         }
@@ -6997,13 +6992,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(40)
     }
 
-    private fun calculateRangeMultiplier(ble: Boolean, wifi: Boolean, scan: Boolean): Float {
-        var mult = 1.0f
-        if (ble) mult += 0.8f
-        if (wifi) mult += 1.0f
-        if (scan) mult += 0.4f
-        return mult
-    }
+    private fun calculateRangeMultiplier(ble: Boolean, wifi: Boolean, scan: Boolean): Float = 1.0f
 
     private fun triggerHaptic(durationMs: Long) {
         try {
@@ -7772,7 +7761,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.4.2")
+            put("version", "1.4.3")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7944,7 +7933,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.4.2")
+            put("version", "1.4.3")
             put("webrtcSignaling", true)
             put("bell202Acoustic", true)
             put("sslEnabled", state.webPortalStatus.sslEnabled)

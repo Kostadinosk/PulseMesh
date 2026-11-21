@@ -542,95 +542,12 @@ class MainActivity : ComponentActivity() {
                                 viewModel.recordAndSendVoiceDropToPeer(peerId, peerName)
                             }
                             else -> {
-                                if (state.isSimpleMode) {
-                                    SettingsScreen(
-                                        state = state,
-                                        onToggleSimpleMode = { viewModel.toggleSimpleMode() },
-                                        onToggleTransportMode = { viewModel.toggleInternetEnabled() },
-                                        onSelectPhoneProfile = { viewModel.selectPhoneModel(it) },
-                                        onAutoMatchHardware = { viewModel.autoSwitchToDetectedHardware() },
-                                        onRegenerateNodeId = { viewModel.regenerateNodeId() },
-                                        onUpdateCallsign = { viewModel.updateCallsign(it) },
-                                        onUpdateMeshChannel = { viewModel.setMeshChannel(it) },
-                                        onPingMeshNow = { viewModel.pingMeshNow() },
-                                        onRequestGpsPermission = {
-                                            permissionLauncher.launch(permissionsToRequest)
-                                            viewModel.requestGpsUpdates()
-                                        },
-                                        onSetManualLocation = { lat, lon ->
-                                            viewModel.setManualGpsLocation(lat, lon)
-                                        },
-                                        onOpenSetupWizard = { viewModel.openSetupWizard() },
-                                        onVerifyRoot = { viewModel.verifyRootStatus() },
-                                        onToggleInternetEnabled = { viewModel.toggleInternetEnabled() },
-                                        onToggleSpokenCallerId = { viewModel.toggleSpokenCallerId() },
-                                        onReconnectRelay = { viewModel.reconnectRelay() },
-                                        onRotateKeys = { viewModel.rotateEncryptionKeys() },
-                                        onToggleHotspot = { viewModel.toggleOrConnectHotspot() },
-                                        onHostHotspot = { viewModel.hostHotspotExplicitly() },
-                                        onJoinHotspot = { viewModel.joinPeerHotspotExplicitly() },
-                                        onStopHotspot = { viewModel.stopHotspotExplicitly() },
-                                        onForceGattReDiscovery = { viewModel.forceGattReDiscovery() },
-                                        onToggleBroadcastCoarseLocation = { viewModel.toggleBroadcastCoarseLocationInBle() },
-                                        onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
-                                        onUpdateMeshPassphrase = { viewModel.setMeshPassphrase(it) },
-                                        onToggleHotspotAutoPopup = { viewModel.setHotspotAutoPopupEnabled(it) },
-                                        onRunMeshLinkSweep = { viewModel.runMeshLinkQualitySweep() },
-                                        onSelectAutoCheckInInterval = { viewModel.setAutoCheckInIntervalMin(it) },
-                                        onToggleLightMode = { viewModel.toggleLightMode() },
-                                        onSelectAppTheme = { viewModel.setAppTheme(it) },
-                                        onClaimOrRecoverUsername = { u, pin, rk, rec, cb ->
-                                            viewModel.claimOrRecoverUsername(u, pin, rk, rec, cb)
-                                        },
-                                        onUpdateUsernameRelayUrl = { url, cb ->
-                                            viewModel.setUsernameRelayUrl(url, cb)
-                                        },
-                                        onSyncAccountBackupNow = { cb ->
-                                            viewModel.syncAccountBackupNow(cb)
-                                        },
-                                        onToggleBackgroundRelayService = { viewModel.toggleBackgroundRelayService() },
-                                        onToggleVolumeButtonPtt = { viewModel.toggleVolumeButtonPtt() },
-                                        onToggleRadioVoxBridge = { viewModel.toggleRadioVoxBridge() },
-                                        onToggleDeadReckoning = { viewModel.toggleDeadReckoning() },
-                                        onToggleBreadcrumbRecording = { viewModel.toggleBreadcrumbRecording() },
-                                        onClearBreadcrumbTrail = { viewModel.clearBreadcrumbTrail() },
-                                        onShareBreadcrumbTrail = { viewModel.shareBreadcrumbTrailToMesh() },
-                                        onBroadcastOfflineMapTiles = { viewModel.broadcastOfflineMapTilesToPeers() },
-                                        onTransmitKeyVerifyChirp = { viewModel.transmitUltrasonicKeyVerifyChirp() },
-                                        onCycleMessageBurnTtl = { viewModel.cycleMessageBurnTtl() },
-                                        onSetDuressPin = { pin -> viewModel.setDuressPin(pin) },
-                                        onTriggerDuressWipe = { pin -> viewModel.verifyOrTriggerDuressWipe(pin) },
-                                        onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
-                                        onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
-                                        onToggleWebPortal = { viewModel.toggleWebPortal() },
-                                        onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
-                                        onSetAppLanguage = { lang -> viewModel.setAppLanguage(lang) },
-                                        onShareLocalFile = { name, _, bytes -> viewModel.shareLocalFileToPortal(name, bytes) != null },
-                                        onDeleteSharedFile = { id -> viewModel.deleteSharedFileFromPortal(id) },
-                                        onSendQuickStatus = { code -> viewModel.sendQuickStatus(code) },
-                                        onToggleQuickStatusVoice = { viewModel.toggleQuickStatusVoice() },
-                                        onSaveIceMedicalCard = { b, a, c -> viewModel.saveIceMedicalCard(b, a, "", c) },
-                                        onSetDeadManSwitchMinutes = { m -> viewModel.setDeadManSwitchMinutes(m) },
-                                        onCheckInDeadManSwitch = { viewModel.checkInDeadManSwitch() },
-                                        onConfigureGeofence = { en, rad -> viewModel.configureGeofence(enabled = en, radiusMeters = rad) },
-                                        onToggleExpeditionMode = { viewModel.toggleExpeditionMode() },
-                                        onToggleExpeditionAutoBelow20 = { viewModel.toggleExpeditionAutoBelow20() },
-                                        onExportTripArchive = { viewModel.exportTripArchiveJson() },
-                                        onBuildInstantJoinQr = { viewModel.buildInstantJoinQrPayload() },
-                                        onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
-                                        onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
-                                        onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
-                                        onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
-                                        onToggleBell202Modem = { viewModel.toggleBell202Modem() },
-                                        onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
-                                        onPurgePhantomPeers = { viewModel.purgePhantomAndCachedPeers() },
-                                    )
-                                } else {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .aeroCanvasBackground(p)
-                                    ) {
+                                // Unified Settings & Live Radio Diagnostics (no Simple vs Pro lock)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .aeroCanvasBackground(p)
+                                ) {
                                         val subTabShape = tacticalButtonShape(false, p.isOriginal, p.isAero)
                                         Row(
                                             modifier = Modifier
@@ -685,7 +602,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "SYSTEM & CRYPTO", "ΣΥΣΤΗΜΑ & ΚΡΥΠΤΟ"),
+                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "SETTINGS", "ΡΥΘΜΙΣΕΙΣ"),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -720,7 +637,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "RF LAB & KERNEL", "RF LAB & ΠΥΡΗΝΑΣ"),
+                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "RADIO DIAGNOSTICS", "ΔΙΑΓΝΩΣΤΙΚΑ ΡΑΔΙΟΥ"),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -837,7 +754,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                        }
 
                         // Persistent Corner SOS Beacon Button (Start corner, hidden inside chat threads and active/ringing calls so it never blocks message/call controls)
                         var showSosConfirmDialog by remember { mutableStateOf(false) }
@@ -1193,16 +1109,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Hardware Mismatch Warning Dialog (Risk Modal)
-                val mismatch = state.hardwareMismatchReport
-                if (state.showMismatchWarningDialog && mismatch != null) {
-                    com.example.ui.components.HardwareMismatchWarningDialog(
-                        report = mismatch,
-                        selectedProfile = state.selectedPhoneProfile,
-                        onAutoSwitchToDetected = { viewModel.autoSwitchToDetectedHardware() },
-                        onForceOverrideAnyway = { viewModel.forceOverrideMismatch() },
-                    ) { viewModel.closeMismatchDialog() }
-                }
+                // Hardware mismatch popups removed in v1.4.3 (Android hardware is auto-detected)
 
                 // Manual / Pocket Call Cover Overlay (when device is unlocked and user tapped LOCK COVER)
                 if ((effectiveCallSignaling != CallSignalingState.IDLE) && manualLockCoverRequested) {
