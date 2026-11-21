@@ -7761,7 +7761,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.4.5")
+            put("version", "1.4.6")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7933,7 +7933,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.4.5")
+            put("version", "1.4.6")
             put("webrtcSignaling", true)
             put("bell202Acoustic", true)
             put("sslEnabled", state.webPortalStatus.sslEnabled)

@@ -542,6 +542,10 @@ class MainActivity : ComponentActivity() {
                                 onHealHotspot = { viewModel.healHotspotLinkNow() },
                                 onCycleVoiceClarity = { viewModel.cycleVoiceClarityPreset() },
                                 onOpenLockScreenCover = { manualLockCoverRequested = true },
+                                onToggleBell202Modem = { viewModel.toggleBell202Modem() },
+                                onTransmitBell202Message = { msg, isSos ->
+                                    viewModel.transmitBell202AcousticMessage(msg, isSos = isSos)
+                                },
                             ) { peerId, peerName ->
                                 viewModel.recordAndSendVoiceDropToPeer(peerId, peerName)
                             }

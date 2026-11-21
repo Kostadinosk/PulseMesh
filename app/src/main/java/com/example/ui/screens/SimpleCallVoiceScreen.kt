@@ -80,6 +80,8 @@ fun SimpleCallVoiceScreen(
     onHealHotspot: () -> Unit = {},
     onCycleVoiceClarity: () -> Unit = {},
     onOpenLockScreenCover: () -> Unit = {},
+    onToggleBell202Modem: () -> Unit = {},
+    onTransmitBell202Message: (text: String, isSos: Boolean) -> Unit = { _, _ -> },
     onLeaveVoiceDrop: (peerId: String, peerCallsign: String) -> Unit = { _, _ -> },
 ) {
     val p = LocalPulsePalette.current
@@ -267,7 +269,7 @@ fun SimpleCallVoiceScreen(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = com.example.util.AppStrings.tr(appLanguage, "WALKIE-TALKIE PTT", "ΑΣΥΡΜΑΤΟΣ PTT"),
+                            text = com.example.util.AppStrings.tr(appLanguage, "WALKIE & BELL 202", "ΑΣΥΡΜΑΤΟΣ & BELL 202"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelMedium.copy(
@@ -1953,6 +1955,117 @@ fun SimpleCallVoiceScreen(
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace
                         )
+                    }
+
+                    // Inline Bell 202 Acoustic AFSK Air-Gap Modem Card (PulseMesh v1.4.6)
+                    var bell202Draft by remember { mutableStateOf("") }
+                    Surface(
+                        color = p.card,
+                        shape = cardShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .widthIn(max = 420.dp)
+                            .fillMaxWidth(0.92f)
+                            .testTag("voice_bell202_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = com.example.util.AppStrings.tr(
+                                        appLanguage,
+                                        "BELL 202 ACOUSTIC AFSK (1200/2200 Hz)",
+                                        "ΑΚΟΥΣΤΙΚΟ MODEM BELL 202 (1200/2200 Hz)"
+                                    ),
+                                    color = p.cyan,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "TX:${state.txAudioCount} • RX:$totalVoiceRx",
+                                    color = p.textMuted,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            OutlinedTextField(
+                                value = bell202Draft,
+                                onValueChange = { if (it.length <= 96) bell202Draft = it },
+                                placeholder = {
+                                    Text(
+                                        com.example.util.AppStrings.tr(
+                                            appLanguage,
+                                            "Zero-RF air-gap message (max 96 chars)...",
+                                            "Μήνυμα χωρίς σήμα (έως 96 χαρακτήρες)..."
+                                        ),
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        onTransmitBell202Message(bell202Draft, false)
+                                        bell202Draft = ""
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = p.cyan, contentColor = Color.Black),
+                                    shape = btnShape,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        com.example.util.AppStrings.tr(appLanguage, "Chirp TX", "Εκπομπή"),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                                Button(
+                                    onClick = { onTransmitBell202Message(bell202Draft, true) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = p.red, contentColor = Color.White),
+                                    shape = btnShape,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        com.example.util.AppStrings.tr(appLanguage, "Acoustic SOS", "SOS Ήχου"),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = onToggleBell202Modem,
+                                    shape = btnShape,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (state.bell202ModemEnabled) p.emerald else p.border
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = if (state.bell202ModemEnabled) "RX: ON" else "RX: OFF",
+                                        color = if (state.bell202ModemEnabled) p.emerald else p.textSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(52.dp))
