@@ -310,14 +310,11 @@ fun SettingsScreen(
                 val accent: Color
             )
             val lanes = listOf(
+                SettingsLaneSpec("IDENTITY", "IDENTITY & @USER", "ΛΟΓΑΡΙΑΣΜΟΣ", if (state.claimedUsername.isNotBlank()) "@${state.claimedUsername}" else "QR & E2EE", Icons.Default.Badge, EmeraldMesh),
+                SettingsLaneSpec("RADIOS", "RADIOS & PORTAL", "ΡΑΔΙΟ & ΠΥΛΗ", if (state.webPortalStatus.isRunning) (if (isGreek) "HTTP+WS ΟΚ" else "HTTP+WS ON") else (if (isGreek) "Hotspot & Αρχεία" else "Hotspot & Files"), Icons.Default.WifiTethering, CyanGateway),
+                SettingsLaneSpec("SAFETY", "FIELD SAFETY", "ΑΣΦΑΛΕΙΑ ΠΕΔΙΟΥ", if (state.hasDecoyPin) (if (isGreek) "ICE & Δόλωμα" else "ICE & Decoy") else (if (isGreek) "ICE, GPS & PIN" else "ICE, GPS & PIN"), Icons.Default.HealthAndSafety, RedSosAlert),
                 SettingsLaneSpec("APPEARANCE", "THEME & LANG", "ΘΕΜΑ & ΓΛΩΣΣΑ", state.appTheme.displayName.substringBefore(" "), Icons.Default.Palette, p.cyan),
-                SettingsLaneSpec("IDENTITY", "ACCOUNT & QR", "ΛΟΓΑΡΙΑΣΜΟΣ", if (state.claimedUsername.isNotBlank()) "@${state.claimedUsername}" else "Cloudflare D1", Icons.Default.Badge, EmeraldMesh),
-                SettingsLaneSpec("HOTSPOT", "HOTSPOT & SSL", "HOTSPOT & SSL", if (state.webPortalStatus.isRunning) (if (isGreek) "HTTP+HTTPS ΟΚ" else "HTTP+HTTPS ON") else (if (isGreek) "Πύλη & Mesh" else "Portal & Mesh"), Icons.Default.WifiTethering, CyanGateway),
-                SettingsLaneSpec("SAFETY", "SAFETY & SOS", "ΑΣΦΑΛΕΙΑ/SOS", if (state.geofenceEnabled) (if (isGreek) "Περίμετρος ${state.geofenceRadiusMeters}μ" else "Fence ${state.geofenceRadiusMeters}m") else (if (isGreek) "ICE & Κατάσταση" else "ICE & Status"), Icons.Default.HealthAndSafety, RedSosAlert),
-                SettingsLaneSpec("MAPS", "MAPS & WEATHER", "ΧΑΡΤΗΣ/ΚΑΙΡΟΣ", if (state.hasBarometerSensor) "${state.barometricPressureHpa?.toInt() ?: "--"} hPa" else "GPS & GPX", Icons.Default.Map, AmberRootBoost),
-                SettingsLaneSpec("FILES", "FILES & EXPORT", "ΑΡΧΕΙΑ", if (isGreek) "${state.sharedFiles.size} αρχεία" else "${state.sharedFiles.size} shared", Icons.Default.FolderShared, p.emerald),
-                SettingsLaneSpec("POWER", "BATTERY & HW", "ΜΠΑΤΑΡΙΑ/HW", if (state.expeditionModeEnabled) (if (isGreek) "ΕΚΣΤΡΑΤΕΙΑ" else "EXPEDITION") else (if (isGreek) "Ασύρματοι & HW" else "Radios & HW"), Icons.Default.BatterySaver, AmberRootBoost),
-                SettingsLaneSpec("SECURITY", "SECURITY/DECOY", "ΑΣΦΑΛΕΙΑ/PIN", if (state.hasDecoyPin) (if (isGreek) "ΔΟΛΩΜΑ ΕΝΕΡΓΟ" else "DECOY ARMED") else (if (isGreek) "Κλειδιά & Wipe" else "Keys & Wipe"), Icons.Default.Security, p.cyan)
+                SettingsLaneSpec("UPDATES", "ROUTER & UPDATES", "ΔΡΟΜΟΛΟΓΗΣΗ", if (state.availableUpdate != null) "UPDATE!" else "PMB2 & Cache", Icons.Default.SystemUpdate, AmberRootBoost)
             )
             Row(
                 modifier = Modifier
@@ -789,7 +786,7 @@ fun SettingsScreen(
         // -------------------------------------------------------------
         // LANE: HOTSPOT & SSL (TRANSPORT POSTURE, HOTSPOT & HTTP/HTTPS PORTAL)
         // -------------------------------------------------------------
-        if (selectedLane == "HOTSPOT") {
+        if (selectedLane == "RADIOS" || selectedLane == "HOTSPOT") {
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1732,7 +1729,7 @@ fun SettingsScreen(
         // -------------------------------------------------------------
         // LANE: POWER & HARDWARE (2.2 EXPEDITION MODE + 75+ CHIPSET PROFILES)
         // -------------------------------------------------------------
-        if (selectedLane == "POWER") {
+        if (selectedLane == "RADIOS" || selectedLane == "POWER") {
         // Battery-Saver Duty-Cycle Mode ("Expedition Mode")
         ElevatedCard(
             shape = cardShape,
@@ -2315,8 +2312,8 @@ fun SettingsScreen(
         // LANE: SECURITY & DECOY (4.2 DECOY PIN + ECDH E2EE + LOCATION PRIVACY)
         // -------------------------------------------------------------
         if (selectedLane == "SECURITY" || selectedLane == "SAFETY") {
-        // Decoy / Panic Mode Profile (only shown in SECURITY lane)
-        if (selectedLane == "SECURITY") {
+        // Decoy / Panic Mode Profile (accessible inside Field Safety & Security)
+        if (selectedLane == "SECURITY" || selectedLane == "SAFETY") {
             ElevatedCard(
                 shape = cardShape,
                 colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -2924,7 +2921,7 @@ fun SettingsScreen(
         // -------------------------------------------------------------
         // LANE: MAPS & WEATHER (BAROMETRIC STORM ALERT + GPS)
         // -------------------------------------------------------------
-        if (selectedLane == "MAPS") {
+        if (selectedLane == "SAFETY" || selectedLane == "MAPS") {
         // Offline Weather & Barometric Storm Alert (ONLY for phones that support a barometer sensor)
         if (state.hasBarometerSensor) {
             ElevatedCard(
@@ -3079,7 +3076,7 @@ fun SettingsScreen(
         // -------------------------------------------------------------
         // LANE: FILES & EXPORT (1.1 OFFLINE FILE TRANSFER + 3.2 TRIP ARCHIVE)
         // -------------------------------------------------------------
-        if (selectedLane == "FILES") {
+        if (selectedLane == "RADIOS" || selectedLane == "FILES") {
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -3222,7 +3219,7 @@ fun SettingsScreen(
         // -----------------------------------------------------------------
         // PULSEMESH FIELD RELAY, AUDIO, MAPS & SECURITY CONTROLS
         // -----------------------------------------------------------------
-        if (selectedLane == "POWER" || selectedLane == "MAPS" || selectedLane == "SECURITY") {
+        if (selectedLane == "RADIOS" || selectedLane == "SAFETY" || selectedLane == "POWER" || selectedLane == "MAPS" || selectedLane == "SECURITY") {
         Card(
             colors = CardDefaults.cardColors(containerColor = p.card),
             shape = cardShape,
@@ -3839,7 +3836,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.4.6 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.4.7 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

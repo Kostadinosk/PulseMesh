@@ -975,11 +975,33 @@ class MainActivity : ComponentActivity() {
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Recent Trail Notes", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A2F))
-                                    Text("• Pine Ridge Loop - Clear trail, shade near mile 2.4.", color = Color(0xFF4A5B52), fontSize = 13.sp)
-                                    Text("• Creek Crossing - Water flowing well, refill bottles.", color = Color(0xFF4A5B52), fontSize = 13.sp)
-                                    Text("• Summit Overlook - Light breeze, great sunset view.", color = Color(0xFF4A5B52), fontSize = 13.sp)
+                                val decoyPrefs = remember { getSharedPreferences("pulsemesh_decoy_notes", android.content.Context.MODE_PRIVATE) }
+                                var personalTrailNote by remember { mutableStateOf(decoyPrefs.getString("user_note", "") ?: "") }
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "Personal Trail Notes", "Προσωπικές Σημειώσεις Διαδρομής"),
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E3A2F)
+                                    )
+                                    OutlinedTextField(
+                                        value = personalTrailNote,
+                                        onValueChange = {
+                                            personalTrailNote = it
+                                            decoyPrefs.edit().putString("user_note", it).apply()
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                com.example.util.AppStrings.tr(
+                                                    state.appLanguage,
+                                                    "Write your own hiking notes here (saved offline)...",
+                                                    "Γράψτε τις σημειώσεις πεζοπορίας σας εδώ..."
+                                                ),
+                                                fontSize = 12.sp
+                                            )
+                                        },
+                                        minLines = 3,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             }
                         }
