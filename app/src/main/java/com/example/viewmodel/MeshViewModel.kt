@@ -179,7 +179,7 @@ data class MeshUiState(
     val barometricPressureHpa: Float? = null,
     val barometricAltitudeMeters: Double? = null,
     val pendingDtnCount: Int = 0,
-    val wifiAwareEnabled: Boolean = false,
+    val wifiAwareEnabled: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
     val ultrasonicModemEnabled: Boolean = false,
     val activeL2capChannelsCount: Int = 0,
     val localL2capPsm: Int = 0,
@@ -253,6 +253,15 @@ data class MeshUiState(
     val perThreadBurnTtlMap: Map<String, Int> = emptyMap(),
     val hasDecoyPin: Boolean = false,
     val isDecoyModeActive: Boolean = false,
+
+    // PulseMesh v1.4.0 Smart Router & Startup Update Checker State
+    val availableUpdate: com.example.service.AppUpdateInfo? = null,
+    val isCheckingForUpdate: Boolean = false,
+    val updateCheckStatus: String = "",
+    val routerSummary: String = "Smart Link-Cost Router Active (Wi-Fi/NAN < L2CAP < GATT < Relay)",
+    val routerFailoverCount: Int = 0,
+    val binaryBytesSaved: Long = 0L,
+    val pmb2PeerCount: Int = 0,
 
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Sim, 4: Root)
     val selectedTabIndex: Int = 0
@@ -359,6 +368,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     // Tracks delivery ACKs for outgoing CHAT and E2EE_DM messages (packetId -> acked)
     val pendingChatAcks = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     private val lastDuplicateAckSentMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    val linkCostRouter = com.example.service.LinkCostRouter()
+    private val pendingAckFailoverJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val packetPrimaryTierMap = java.util.concurrent.ConcurrentHashMap<String, com.example.service.LinkCostRouter.TransportTier>()
+    @Volatile
+    private var updateBannerDismissedVersion: String = ""
 
     val audioService = TacticalAudioService(
         context = application,
@@ -715,6 +729,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         } else if (_uiState.value.isInternetEnabled) {
             refreshSignedUsernameClaimIfNeeded()
         }
+
+        // Automatic startup update check (strictly skipped when Off-Grid Mode is active)
+        checkForAppUpdateOnStartup()
 
         offGridBleEngine.onImmediatePeerRegistered = { nodeId, callsign, lat, lng, battery, rssi, isHost, transport ->
             registerOrUpdatePeerInstant(
@@ -1711,6 +1728,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         meshNetworkService.refreshInternetState()
         if (enableInternet) {
             pingMeshNow()
+            checkForAppUpdateOnStartup()
         }
         triggerHaptic(60)
     }
@@ -4152,19 +4170,197 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             isGateway = effectiveIsGateway
         )
 
-        // 1. Bidirectional BLE GATT (strictly filtered for non-heartbeat packets) + 12B 0xCAFE beacon
-        offGridBleEngine.broadcastPacketChunked(filteredPacket)
+        val plan = linkCostRouter.planRoute(
+            packet = filteredPacket,
+            hasLocalWifiOrNan = autoHotspotNegotiator.hasHighSpeedLink(),
+            hasBleL2cap = offGridBleEngine.hasActiveL2capChannel(),
+            hasBleGatt = true,
+            isInternetEnabled = state.isInternetEnabled
+        )
 
-        // 2. Hotspot TCP (45889) & UDP (45888) + IPv6 Link-Local + mDNS + Wi-Fi Aware + USB/Ethernet
-        autoHotspotNegotiator.sendPacket(json)
-
-        // 3. Hybrid Internet Relay + Simultaneous Cellular/eSIM Multi-Network Binding (strictly guarded by isInternetEnabled)
-        if (state.isInternetEnabled) {
-            meshNetworkService.broadcastPacket(filteredPacket)
+        if (plan.useCompactBinary) {
+            val compactSize = com.example.service.CompactMeshProtocol.encodeCompact(filteredPacket).size
+            linkCostRouter.recordBinarySavings(json.toByteArray(Charsets.UTF_8).size, compactSize)
         }
 
-        // 4. Wi-Fi Direct Embedded Web Portal SSE Push
+        if (plan.fanOutAll) {
+            // Emergency SOS, Live Call Signaling, or Mesh Broadcast: fan out across all active radios
+            offGridBleEngine.broadcastPacketChunked(filteredPacket, useCompactBinary = plan.useCompactBinary)
+            autoHotspotNegotiator.sendCompactPacket(filteredPacket, useCompactBinary = plan.useCompactBinary)
+            if (state.isInternetEnabled) {
+                meshNetworkService.broadcastPacket(filteredPacket)
+            }
+        } else {
+            // Directed DM / peer-specific packet: send on lowest-cost link first, escalate on ACK timeout
+            val primaryTier = plan.orderedTiers.first()
+            packetPrimaryTierMap[filteredPacket.packetId] = primaryTier
+            dispatchPacketOnTier(primaryTier, filteredPacket, plan.useCompactBinary, state.isInternetEnabled)
+
+            val needsAckFailover = filteredPacket.packetId.isNotBlank() &&
+                (filteredPacket.type == "CHAT" || filteredPacket.type == "E2EE_DM" || filteredPacket.type == "GROUP_CHAT") &&
+                plan.orderedTiers.size > 1
+            if (needsAckFailover) {
+                pendingAckFailoverJobs.remove(filteredPacket.packetId)?.cancel()
+                val backupTiers = plan.orderedTiers.drop(1)
+                pendingAckFailoverJobs[filteredPacket.packetId] = viewModelScope.launch(Dispatchers.IO) {
+                    var failedTier = primaryTier
+                    for (nextTier in backupTiers) {
+                        delay(2_200L)
+                        if (pendingChatAcks[filteredPacket.packetId] == true) break
+                        linkCostRouter.recordDeliveryTimeout(filteredPacket.dstNodeId, failedTier)
+                        packetPrimaryTierMap[filteredPacket.packetId] = nextTier
+                        dispatchPacketOnTier(
+                            nextTier,
+                            filteredPacket,
+                            useCompactBinary = plan.useCompactBinary,
+                            isInternetEnabled = _uiState.value.isInternetEnabled
+                        )
+                        refreshRouterTelemetry("Failover -> ${nextTier.label}")
+                        failedTier = nextTier
+                    }
+                    pendingAckFailoverJobs.remove(filteredPacket.packetId)
+                }
+            }
+        }
+
+        refreshRouterTelemetry(plan.reason)
+
+        // 4. Wi-Fi Direct Embedded Web Portal SSE + WebSocket Push
         pulseMeshWebServer.notifyStateChanged()
+    }
+
+    private fun dispatchPacketOnTier(
+        tier: com.example.service.LinkCostRouter.TransportTier,
+        packet: com.example.service.WireMeshPacket,
+        useCompactBinary: Boolean,
+        isInternetEnabled: Boolean
+    ) {
+        when (tier) {
+            com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB -> {
+                autoHotspotNegotiator.sendCompactPacket(packet, useCompactBinary = useCompactBinary)
+            }
+            com.example.service.LinkCostRouter.TransportTier.BLE_L2CAP -> {
+                if (!offGridBleEngine.sendOverL2cap(packet, useCompactBinary = useCompactBinary)) {
+                    offGridBleEngine.sendOverGatt(packet, useCompactBinary = useCompactBinary)
+                }
+            }
+            com.example.service.LinkCostRouter.TransportTier.BLE_GATT -> {
+                offGridBleEngine.sendOverGatt(packet, useCompactBinary = useCompactBinary)
+            }
+            com.example.service.LinkCostRouter.TransportTier.HYBRID_RELAY -> {
+                if (isInternetEnabled) {
+                    meshNetworkService.broadcastPacket(packet)
+                }
+            }
+        }
+    }
+
+    private fun mapTransportToTier(sourceTransport: String): com.example.service.LinkCostRouter.TransportTier {
+        val t = sourceTransport.uppercase()
+        return when {
+            t.contains("WIFI") || t.contains("WI-FI") || t.contains("HOTSPOT") || t.contains("NAN") ||
+                t.contains("TCP") || t.contains("UDP") || t.contains("USB") || t.contains("LAN") || t.contains("MDNS") ->
+                com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB
+            t.contains("L2CAP") ->
+                com.example.service.LinkCostRouter.TransportTier.BLE_L2CAP
+            t.contains("HYBRID") || t.contains("CELL") || t.contains("NTFY") || t.contains("INTERNET") ->
+                com.example.service.LinkCostRouter.TransportTier.HYBRID_RELAY
+            else ->
+                com.example.service.LinkCostRouter.TransportTier.BLE_GATT
+        }
+    }
+
+    private fun refreshRouterTelemetry(lastRouteReason: String? = null) {
+        val stats = linkCostRouter.getStats()
+        _uiState.update { cur ->
+            val summary = if (!lastRouteReason.isNullOrBlank()) {
+                "$lastRouteReason • ${stats.totalRoutedPackets} routed"
+            } else {
+                cur.routerSummary
+            }
+            if (cur.routerSummary == summary &&
+                cur.routerFailoverCount == stats.failoverEscalations &&
+                cur.binaryBytesSaved == stats.binaryBytesSaved &&
+                cur.pmb2PeerCount == stats.pmb2PeerCount
+            ) {
+                cur
+            } else {
+                cur.copy(
+                    routerSummary = summary,
+                    routerFailoverCount = stats.failoverEscalations,
+                    binaryBytesSaved = stats.binaryBytesSaved,
+                    pmb2PeerCount = stats.pmb2PeerCount
+                )
+            }
+        }
+    }
+
+    /**
+     * Runs once on app startup. Strictly skipped when Off-Grid Mode is active (`isInternetEnabled == false`)
+     * so PulseMesh makes zero outbound HTTP requests while off-grid.
+     */
+    fun checkForAppUpdateOnStartup() {
+        if (!_uiState.value.isInternetEnabled) {
+            _uiState.update { it.copy(updateCheckStatus = "Off-Grid Mode — Startup update check paused") }
+            return
+        }
+        checkForAppUpdateNow(userInitiated = false)
+    }
+
+    /**
+     * Checks GitHub Releases (`Kostadinosk/PulseMesh`) for a newer PulseMesh APK release.
+     * On manual tap, runs whenever OS internet is available or internet mode is enabled.
+     */
+    fun checkForAppUpdateNow(userInitiated: Boolean = true) {
+        if (!userInitiated && !_uiState.value.isInternetEnabled) return
+        if (_uiState.value.isCheckingForUpdate) return
+        val currentVersion = com.example.BuildConfig.VERSION_NAME
+        _uiState.update {
+            it.copy(
+                isCheckingForUpdate = true,
+                updateCheckStatus = if (userInitiated) "Checking GitHub Releases (current v$currentVersion)..." else it.updateCheckStatus
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = com.example.service.AppUpdateChecker.checkForUpdate(currentVersion)
+            result.onSuccess { info ->
+                if (info != null) {
+                    val showBanner = userInitiated || info.latestVersion != updateBannerDismissedVersion
+                    _uiState.update {
+                        it.copy(
+                            isCheckingForUpdate = false,
+                            availableUpdate = if (showBanner) info else it.availableUpdate,
+                            updateCheckStatus = "Update v${info.latestVersion} available! (current v$currentVersion)"
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isCheckingForUpdate = false,
+                            availableUpdate = null,
+                            updateCheckStatus = "Up to date (PulseMesh v$currentVersion)"
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isCheckingForUpdate = false,
+                        updateCheckStatus = if (userInitiated) {
+                            "Update check offline/unavailable (${err.message ?: "no network"})"
+                        } else {
+                            ""
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissAvailableUpdate() {
+        val ver = _uiState.value.availableUpdate?.latestVersion.orEmpty()
+        if (ver.isNotBlank()) updateBannerDismissedVersion = ver
+        _uiState.update { it.copy(availableUpdate = null) }
     }
 
     /**
@@ -4175,6 +4371,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         sourceTransportHint: String = "",
         realRssiHint: Int? = null
     ) {
+        if (com.example.service.CompactMeshProtocol.isCompactLine(rawJson)) {
+            val decoded = com.example.service.CompactMeshProtocol.decodeLineAuto(
+                rawJson,
+                sourceTransport = sourceTransportHint.ifBlank { "WI-FI PMB2" }
+            )
+            if (decoded != null) {
+                handleIncomingPacket(decoded.copy(rssiDbm = realRssiHint ?: decoded.rssiDbm))
+            }
+            return
+        }
         runCatching {
             val root = org.json.JSONObject(rawJson)
             val type = root.optString("type").ifBlank { root.optString("t") }
@@ -4396,6 +4602,14 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // Strictly ignore our own packets, blank node IDs, and blocked fake/server callsigns
         if (normSrc.isBlank() || normSrc == normSelf) return
         if (packet.srcCallsign.isNotBlank() && isBlockedFakeCallsign(packet.srcCallsign)) return
+
+        // Update Link-Cost Router peer health & PMB2 capability auto-negotiation
+        linkCostRouter.recordPeerObserved(
+            peerNodeId = packet.srcNodeId,
+            tier = mapTransportToTier(packet.sourceTransport),
+            supportsPmb2 = packet.sourceTransport.contains("PMB2", ignoreCase = true),
+            rssiDbm = packet.rssiDbm
+        )
 
         // Global 4000-ID deduplication across all radios to prevent multi-hop infinite loops
         if (packet.type != "HEARTBEAT" && packet.type != "GPS_BEACON") {
@@ -4674,6 +4888,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 val ackedId = packet.payload.trim()
                 if (ackedId.isNotBlank()) {
                     pendingChatAcks[ackedId] = true
+                    pendingAckFailoverJobs.remove(ackedId)?.cancel()
+                    val ackTier = packetPrimaryTierMap.remove(ackedId) ?: mapTransportToTier(packet.sourceTransport)
+                    linkCostRouter.recordAckSuccess(packet.srcNodeId, ackTier)
+                    refreshRouterTelemetry()
                     synchronized(pendingDtnPackets) {
                         val iter = pendingDtnPackets.iterator()
                         while (iter.hasNext()) {
@@ -6469,6 +6687,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             pingMeshNow()
             syncPendingUsernameHoldIfOnline()
             refreshSignedUsernameClaimIfNeeded()
+            checkForAppUpdateOnStartup()
         }
         triggerHaptic(30)
     }
@@ -7536,7 +7755,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.3.2")
+            put("version", "1.4.0")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7708,7 +7927,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.3.2")
+            put("version", "1.4.0")
             put("sslEnabled", state.webPortalStatus.sslEnabled)
             put("httpsSelfTestPassed", state.webPortalStatus.httpsSelfTestPassed)
             put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)

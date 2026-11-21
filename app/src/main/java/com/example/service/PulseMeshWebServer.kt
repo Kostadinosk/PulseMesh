@@ -51,6 +51,7 @@ data class WebPortalStatus(
     val allReachableUrls: List<String> = emptyList(),
     val labeledReachableUrls: List<Pair<String, String>> = emptyList(),
     val activeClientCount: Int = 0,
+    val wsClientCount: Int = 0,
     val selfTestPassed: Boolean = false,
     val lanSelfTestPassed: Boolean = false,
     val requestsServed: Int = 0,
@@ -108,10 +109,37 @@ class PulseMeshWebServer(
         private const val MAX_POST_BODY_BYTES = 512 * 1024 // 512 KB cap for JSON API
         private const val MAX_FILE_UPLOAD_BYTES = 5 * 1024 * 1024 // 5 MB cap for offline file transfer
         private const val CLIENT_STALE_MS = 90_000L
+        private const val WS_MAGIC_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         private val TILE_PATH_REGEX = Regex("^/api/tiles/(\\d{1,2})/(\\d+)/(\\d+)\\.png$")
         private val EXCLUDED_IFACE_PREFIXES = listOf(
             "rmnet", "r_rmnet", "ccmni", "tun", "tap", "ppp", "dummy", "lo", "epdg", "iwlan", "v4-rmnet", "clat"
         )
+
+        /** RFC 6455 Sec-WebSocket-Accept derivation (API 24+ and JVM safe). */
+        fun computeWebSocketAcceptKey(secWebSocketKey: String): String {
+            val sha1 = java.security.MessageDigest.getInstance("SHA-1")
+                .digest((secWebSocketKey.trim() + WS_MAGIC_GUID).toByteArray(Charsets.US_ASCII))
+            return encodeBase64Standard(sha1)
+        }
+
+        private fun encodeBase64Standard(data: ByteArray): String {
+            val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            val out = StringBuilder(((data.size + 2) / 3) * 4)
+            var i = 0
+            while (i < data.size) {
+                val b0 = data[i].toInt() and 0xFF
+                val has1 = i + 1 < data.size
+                val has2 = i + 2 < data.size
+                val b1 = if (has1) data[i + 1].toInt() and 0xFF else 0
+                val b2 = if (has2) data[i + 2].toInt() and 0xFF else 0
+                out.append(alphabet[b0 ushr 2])
+                out.append(alphabet[((b0 and 0x03) shl 4) or (b1 ushr 4)])
+                out.append(if (has1) alphabet[((b1 and 0x0F) shl 2) or (b2 ushr 6)] else '=')
+                out.append(if (has2) alphabet[b2 and 0x3F] else '=')
+                i += 3
+            }
+            return out.toString()
+        }
     }
 
     private val _status = MutableStateFlow(WebPortalStatus())
@@ -171,6 +199,7 @@ class PulseMeshWebServer(
 
     private val activeClients = ConcurrentHashMap<String, Long>()
     private val sseStreams = CopyOnWriteArrayList<SseConnection>()
+    private val wsConnections = CopyOnWriteArrayList<WsConnection>()
 
     private var nsdManager: NsdManager? = null
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
@@ -219,6 +248,12 @@ class PulseMeshWebServer(
         val socket: Socket,
         val output: OutputStream,
         val clientNodeId: String
+    )
+
+    private class WsConnection(
+        val socket: Socket,
+        val output: OutputStream,
+        @Volatile var clientNodeId: String
     )
 
     fun start(hostIpHint: String = "") {
@@ -384,6 +419,10 @@ class PulseMeshWebServer(
             runCatching { sse.socket.close() }
         }
         sseStreams.clear()
+        for (ws in wsConnections) {
+            runCatching { ws.socket.close() }
+        }
+        wsConnections.clear()
         activeClients.clear()
         recentCallSignals.clear()
         sslSanSignature = ""
@@ -399,13 +438,18 @@ class PulseMeshWebServer(
     fun isRunning(): Boolean = running.get() && serverSocket?.isClosed == false
 
     fun notifyStateChanged() {
-        if (!running.get() || sseStreams.isEmpty()) return
-        val frame = "data: {\"event\":\"refresh\"}\n\n".toByteArray(Charsets.UTF_8)
-        broadcastSseBytes(frame)
+        if (!running.get()) return
+        if (sseStreams.isNotEmpty()) {
+            val frame = "data: {\"event\":\"refresh\"}\n\n".toByteArray(Charsets.UTF_8)
+            broadcastSseBytes(frame)
+        }
+        if (wsConnections.isNotEmpty()) {
+            broadcastWsText("""{"event":"refresh"}""")
+        }
     }
 
     fun notifyVoiceFrame(srcNodeId: String, srcCallsign: String, payloadBase64: String, isCallAudio: Boolean = false) {
-        if (!running.get() || sseStreams.isEmpty() || payloadBase64.isBlank()) return
+        if (!running.get() || (sseStreams.isEmpty() && wsConnections.isEmpty()) || payloadBase64.isBlank()) return
         val json = JSONObject().apply {
             put("event", "voice")
             put("srcNodeId", srcNodeId)
@@ -413,7 +457,12 @@ class PulseMeshWebServer(
             put("payload", payloadBase64)
             put("isCallAudio", isCallAudio)
         }.toString()
-        broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+        if (sseStreams.isNotEmpty()) {
+            broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+        }
+        if (wsConnections.isNotEmpty()) {
+            broadcastWsText(json)
+        }
     }
 
     fun notifyCallSignal(type: String, srcNodeId: String, srcCallsign: String, dstNodeId: String, payload: String = "") {
@@ -434,7 +483,7 @@ class PulseMeshWebServer(
             runCatching { recentCallSignals.removeAt(0) }
         }
         if (!running.get()) return
-        if (sseStreams.isNotEmpty()) {
+        if (sseStreams.isNotEmpty() || wsConnections.isNotEmpty()) {
             val json = JSONObject().apply {
                 put("event", "call")
                 put("seq", seq)
@@ -445,7 +494,12 @@ class PulseMeshWebServer(
                 put("payload", payload)
                 put("timestamp", nowMs)
             }.toString()
-            broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+            if (sseStreams.isNotEmpty()) {
+                broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+            }
+            if (wsConnections.isNotEmpty()) {
+                broadcastWsText(json)
+            }
         }
         notifyStateChanged()
     }
@@ -714,6 +768,7 @@ class PulseMeshWebServer(
         val lanOk = lanSelfTestPassed.get()
         val hits = requestsServed.get()
         val filesCount = sharedFilesIndex.size
+        val wsCount = wsConnections.size
         if (cur.portalUrl != primaryUrl ||
             cur.httpsPortalUrl != httpsUrl ||
             cur.sslEnabled != sslActive ||
@@ -722,6 +777,7 @@ class PulseMeshWebServer(
             cur.allReachableUrls != allUrls ||
             cur.labeledReachableUrls != labeledUrls ||
             cur.activeClientCount != activeClients.size ||
+            cur.wsClientCount != wsCount ||
             cur.selfTestPassed != ok ||
             cur.lanSelfTestPassed != lanOk ||
             cur.requestsServed != hits ||
@@ -741,6 +797,7 @@ class PulseMeshWebServer(
                 allReachableUrls = allUrls,
                 labeledReachableUrls = labeledUrls,
                 activeClientCount = activeClients.size,
+                wsClientCount = wsCount,
                 selfTestPassed = ok,
                 lanSelfTestPassed = lanOk,
                 requestsServed = hits,
@@ -808,8 +865,294 @@ class PulseMeshWebServer(
     }
 
     private fun sendSseKeepAlive() {
-        if (sseStreams.isEmpty()) return
-        broadcastSseBytes(": keepalive\n\n".toByteArray(Charsets.UTF_8))
+        if (sseStreams.isNotEmpty()) {
+            broadcastSseBytes(": keepalive\n\n".toByteArray(Charsets.UTF_8))
+        }
+        if (wsConnections.isNotEmpty()) {
+            broadcastWsFrame(0x9, "pm".toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    private fun broadcastWsText(text: String) {
+        broadcastWsFrame(0x1, text.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun broadcastWsFrame(opcode: Int, payload: ByteArray) {
+        val frame = buildWsFrameBytes(opcode, payload)
+        val dead = mutableListOf<WsConnection>()
+        for (conn in wsConnections) {
+            try {
+                synchronized(conn.output) {
+                    conn.output.write(frame)
+                    conn.output.flush()
+                }
+            } catch (_: Exception) {
+                dead.add(conn)
+            }
+        }
+        for (d in dead) {
+            wsConnections.remove(d)
+            runCatching { d.socket.close() }
+        }
+        if (dead.isNotEmpty()) {
+            _status.value = _status.value.copy(wsClientCount = wsConnections.size)
+        }
+    }
+
+    private fun sendWsFrame(conn: WsConnection, opcode: Int, payload: ByteArray) {
+        val frame = buildWsFrameBytes(opcode, payload)
+        synchronized(conn.output) {
+            conn.output.write(frame)
+            conn.output.flush()
+        }
+    }
+
+    private fun buildWsFrameBytes(opcode: Int, payload: ByteArray): ByteArray {
+        val len = payload.size
+        val headerSize = when {
+            len <= 125 -> 2
+            len <= 65535 -> 4
+            else -> 10
+        }
+        val frame = ByteArray(headerSize + len)
+        frame[0] = (0x80 or (opcode and 0x0F)).toByte() // FIN=1, RSV=0, opcode
+        when {
+            len <= 125 -> {
+                frame[1] = len.toByte()
+            }
+            len <= 65535 -> {
+                frame[1] = 126.toByte()
+                frame[2] = ((len ushr 8) and 0xFF).toByte()
+                frame[3] = (len and 0xFF).toByte()
+            }
+            else -> {
+                frame[1] = 127.toByte()
+                val l64 = len.toLong()
+                for (i in 0..7) {
+                    frame[2 + i] = ((l64 ushr ((7 - i) * 8)) and 0xFFL).toByte()
+                }
+            }
+        }
+        if (len > 0) {
+            System.arraycopy(payload, 0, frame, headerSize, len)
+        }
+        return frame
+    }
+
+    private fun handleRegisterJson(obj: JSONObject): String {
+        val nodeId = obj.optString("nodeId").trim()
+        val callsign = obj.optString("callsign").trim().ifBlank { "WebNode" }
+        if (nodeId.isNotBlank()) {
+            activeClients[nodeId] = System.currentTimeMillis()
+            _status.value = _status.value.copy(activeClientCount = activeClients.size)
+            onClientRegistered(
+                WebClientRegistration(
+                    nodeId = nodeId,
+                    callsign = callsign,
+                    publicKeyBase64 = obj.optString("publicKeyBase64", ""),
+                    lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
+                    lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null
+                )
+            )
+            notifyStateChanged()
+        }
+        return nodeId
+    }
+
+    private fun handleSendJson(obj: JSONObject): WebSubmittedPacket {
+        val clientId = obj.optString("clientNodeId").trim()
+        if (clientId.isNotBlank()) {
+            activeClients[clientId] = System.currentTimeMillis()
+        }
+        val submitted = WebSubmittedPacket(
+            packetId = obj.optString("packetId").ifBlank { "web_${System.currentTimeMillis()}" },
+            clientNodeId = clientId.ifBlank { "0xWEB0" },
+            callsign = obj.optString("callsign").ifBlank { "WebNode" },
+            publicKeyBase64 = obj.optString("publicKeyBase64", ""),
+            threadId = obj.optString("threadId", "channel_primary"),
+            dstNodeId = obj.optString("dstNodeId", ""),
+            type = obj.optString("type", "CHAT").uppercase(),
+            text = obj.optString("text", ""),
+            payload = obj.optString("payload", ""),
+            lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
+            lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null,
+            waypointTitle = obj.optString("waypointTitle", ""),
+            waypointType = obj.optString("waypointType", "RALLY"),
+            waypointLat = if (obj.has("waypointLat") && !obj.isNull("waypointLat")) obj.optDouble("waypointLat") else null,
+            waypointLng = if (obj.has("waypointLng") && !obj.isNull("waypointLng")) obj.optDouble("waypointLng") else null
+        )
+        onWebPacketSubmitted(submitted)
+        when (submitted.type) {
+            "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
+                notifyVoiceFrame(
+                    submitted.clientNodeId,
+                    submitted.callsign,
+                    submitted.payload,
+                    isCallAudio = submitted.type == "CALL_AUDIO"
+                )
+            }
+            "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
+                notifyCallSignal(
+                    submitted.type,
+                    submitted.clientNodeId,
+                    submitted.callsign,
+                    submitted.dstNodeId.ifBlank { "ALL" },
+                    submitted.payload
+                )
+            }
+            else -> notifyStateChanged()
+        }
+        return submitted
+    }
+
+    private fun serveWebSocketLoop(conn: WsConnection, input: BufferedInputStream) {
+        val fragBuffer = ByteArrayOutputStream()
+        var fragOpcode = 0
+        try {
+            while (running.get() && !conn.socket.isClosed) {
+                val b0 = input.read()
+                if (b0 == -1) break
+                val b1 = input.read()
+                if (b1 == -1) break
+
+                val fin = (b0 and 0x80) != 0
+                val opcode = b0 and 0x0F
+                val masked = (b1 and 0x80) != 0
+                var payloadLen = (b1 and 0x7F).toLong()
+                if (payloadLen == 126L) {
+                    val hi = input.read()
+                    val lo = input.read()
+                    if (hi == -1 || lo == -1) break
+                    payloadLen = ((hi shl 8) or lo).toLong()
+                } else if (payloadLen == 127L) {
+                    var l64 = 0L
+                    var eof = false
+                    for (i in 0..7) {
+                        val b = input.read()
+                        if (b == -1) {
+                            eof = true
+                            break
+                        }
+                        l64 = (l64 shl 8) or b.toLong()
+                    }
+                    if (eof) break
+                    payloadLen = l64
+                }
+                if (payloadLen < 0 || payloadLen > MAX_POST_BODY_BYTES) {
+                    runCatching { sendWsFrame(conn, 0x8, byteArrayOf(0x03, 0xF1.toByte())) } // 1009 Too Big
+                    break
+                }
+                val maskKey = if (masked) {
+                    val m = readExactBytes(input, 4)
+                    if (m.size < 4) break
+                    m
+                } else null
+
+                val payload = if (payloadLen > 0L) {
+                    val raw = readExactBytes(input, payloadLen.toInt())
+                    if (raw.size < payloadLen.toInt()) break
+                    if (maskKey != null) {
+                        for (i in raw.indices) {
+                            raw[i] = (raw[i].toInt() xor maskKey[i and 3].toInt()).toByte()
+                        }
+                    }
+                    raw
+                } else {
+                    ByteArray(0)
+                }
+
+                when (opcode) {
+                    0x8 -> { // Close
+                        runCatching { sendWsFrame(conn, 0x8, ByteArray(0)) }
+                        break
+                    }
+                    0x9 -> { // Ping -> Pong
+                        if (conn.clientNodeId.isNotBlank()) {
+                            activeClients[conn.clientNodeId] = System.currentTimeMillis()
+                        }
+                        runCatching { sendWsFrame(conn, 0xA, payload) }
+                    }
+                    0xA -> { // Pong
+                        if (conn.clientNodeId.isNotBlank()) {
+                            activeClients[conn.clientNodeId] = System.currentTimeMillis()
+                        }
+                    }
+                    0x1, 0x2, 0x0 -> {
+                        if (opcode != 0x0) {
+                            fragBuffer.reset()
+                            fragOpcode = opcode
+                        }
+                        if (payload.isNotEmpty()) {
+                            if (fragBuffer.size() + payload.size <= MAX_POST_BODY_BYTES) {
+                                fragBuffer.write(payload)
+                            }
+                        }
+                        if (fin && fragOpcode == 0x1) {
+                            val text = fragBuffer.toString("UTF-8")
+                            fragBuffer.reset()
+                            handleWebSocketTextMessage(conn, text)
+                        } else if (fin) {
+                            fragBuffer.reset()
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Client closed socket or transport reset
+        } finally {
+            wsConnections.remove(conn)
+            _status.value = _status.value.copy(wsClientCount = wsConnections.size)
+            runCatching { conn.socket.close() }
+        }
+    }
+
+    private fun handleWebSocketTextMessage(conn: WsConnection, text: String) {
+        val obj = runCatching { JSONObject(text) }.getOrNull() ?: return
+        val action = obj.optString("action").ifBlank { obj.optString("cmd") }.lowercase()
+        when (action) {
+            "ping" -> {
+                val cid = obj.optString("clientNodeId", conn.clientNodeId).trim()
+                if (cid.isNotBlank()) {
+                    conn.clientNodeId = cid
+                    activeClients[cid] = System.currentTimeMillis()
+                }
+                val pong = JSONObject().put("event", "pong").put("ts", System.currentTimeMillis()).toString()
+                runCatching { sendWsFrame(conn, 0x1, pong.toByteArray(Charsets.UTF_8)) }
+            }
+            "register" -> {
+                val payloadObj = obj.optJSONObject("data") ?: obj
+                val registeredId = handleRegisterJson(payloadObj)
+                if (registeredId.isNotBlank()) {
+                    conn.clientNodeId = registeredId
+                }
+                val ack = JSONObject().put("event", "ack").put("action", "register").put("ok", true).toString()
+                runCatching { sendWsFrame(conn, 0x1, ack.toByteArray(Charsets.UTF_8)) }
+            }
+            "send" -> {
+                val payloadObj = obj.optJSONObject("data") ?: obj
+                val submitted = handleSendJson(payloadObj)
+                if (submitted.clientNodeId.isNotBlank()) {
+                    conn.clientNodeId = submitted.clientNodeId
+                }
+                val ack = JSONObject()
+                    .put("event", "ack")
+                    .put("action", "send")
+                    .put("packetId", submitted.packetId)
+                    .put("ok", true)
+                    .toString()
+                runCatching { sendWsFrame(conn, 0x1, ack.toByteArray(Charsets.UTF_8)) }
+            }
+            "state" -> {
+                val cid = obj.optString("clientNodeId", conn.clientNodeId).trim()
+                if (cid.isNotBlank()) {
+                    conn.clientNodeId = cid
+                    activeClients[cid] = System.currentTimeMillis()
+                }
+                val snap = buildStateJson(cid)
+                val envelope = JSONObject().put("event", "state").put("data", snap).toString()
+                runCatching { sendWsFrame(conn, 0x1, envelope.toByteArray(Charsets.UTF_8)) }
+            }
+        }
     }
 
     private fun broadcastSseBytes(bytes: ByteArray) {
@@ -935,6 +1278,9 @@ class PulseMeshWebServer(
                             put("sslEnabled", _status.value.sslEnabled)
                             put("caCertUrl", "/api/ca.crt")
                             put("iosProfileUrl", "/api/ca.mobileconfig")
+                            put("wsSupported", true)
+                            put("wsPath", "/ws")
+                            put("wsClients", wsConnections.size)
                         }
                         writeJson(output, 200, info.toString(), headOnly = isHead, keepAlive = keepAlive)
                     }
@@ -1014,6 +1360,40 @@ class PulseMeshWebServer(
                         writeJson(output, 200, snap.toString(), keepAlive = keepAlive)
                     }
 
+                    method == "GET" && (path == "/ws" || path == "/api/ws") -> {
+                        val wsKey = headers["sec-websocket-key"].orEmpty().trim()
+                        if (wsKey.isBlank()) {
+                            writeResponse(output, 400, "Bad Request", "text/plain", "Missing Sec-WebSocket-Key".toByteArray(Charsets.UTF_8), keepAlive = false)
+                            break
+                        }
+                        val acceptKey = computeWebSocketAcceptKey(wsKey)
+                        val clientId = query["clientNodeId"].orEmpty().trim()
+                        if (clientId.isNotBlank()) {
+                            activeClients[clientId] = System.currentTimeMillis()
+                        }
+                        socket.soTimeout = 0
+                        val upgradeResp = buildString {
+                            append("HTTP/1.1 101 Switching Protocols\r\n")
+                            append("Upgrade: websocket\r\n")
+                            append("Connection: Upgrade\r\n")
+                            append("Sec-WebSocket-Accept: $acceptKey\r\n")
+                            append("Access-Control-Allow-Origin: *\r\n\r\n")
+                        }
+                        output.write(upgradeResp.toByteArray(Charsets.US_ASCII))
+                        output.flush()
+                        val wsConn = WsConnection(socket, output, clientId)
+                        wsConnections.add(wsConn)
+                        _status.value = _status.value.copy(
+                            activeClientCount = activeClients.size,
+                            wsClientCount = wsConnections.size
+                        )
+                        runCatching {
+                            sendWsFrame(wsConn, 0x1, """{"event":"connected","ws":true}""".toByteArray(Charsets.UTF_8))
+                        }
+                        serveWebSocketLoop(wsConn, input)
+                        break
+                    }
+
                     method == "GET" && path == "/api/events" -> {
                         val clientId = query["clientNodeId"].orEmpty()
                         if (clientId.isNotBlank()) {
@@ -1042,22 +1422,7 @@ class PulseMeshWebServer(
                             writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""", keepAlive = keepAlive)
                             if (!keepAlive) break else continue
                         }
-                        val nodeId = obj.optString("nodeId").trim()
-                        val callsign = obj.optString("callsign").trim().ifBlank { "WebNode" }
-                        if (nodeId.isNotBlank()) {
-                            activeClients[nodeId] = System.currentTimeMillis()
-                            _status.value = _status.value.copy(activeClientCount = activeClients.size)
-                            onClientRegistered(
-                                WebClientRegistration(
-                                    nodeId = nodeId,
-                                    callsign = callsign,
-                                    publicKeyBase64 = obj.optString("publicKeyBase64", ""),
-                                    lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
-                                    lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null
-                                )
-                            )
-                            notifyStateChanged()
-                        }
+                        handleRegisterJson(obj)
                         writeJson(output, 200, """{"ok":true}""", keepAlive = keepAlive)
                     }
 
@@ -1067,48 +1432,7 @@ class PulseMeshWebServer(
                             writeJson(output, 400, """{"ok":false,"error":"invalid_json"}""", keepAlive = keepAlive)
                             if (!keepAlive) break else continue
                         }
-                        val clientId = obj.optString("clientNodeId").trim()
-                        if (clientId.isNotBlank()) {
-                            activeClients[clientId] = System.currentTimeMillis()
-                        }
-                        val submitted = WebSubmittedPacket(
-                            packetId = obj.optString("packetId").ifBlank { "web_${System.currentTimeMillis()}" },
-                            clientNodeId = clientId.ifBlank { "0xWEB0" },
-                            callsign = obj.optString("callsign").ifBlank { "WebNode" },
-                            publicKeyBase64 = obj.optString("publicKeyBase64", ""),
-                            threadId = obj.optString("threadId", "channel_primary"),
-                            dstNodeId = obj.optString("dstNodeId", ""),
-                            type = obj.optString("type", "CHAT").uppercase(),
-                            text = obj.optString("text", ""),
-                            payload = obj.optString("payload", ""),
-                            lat = if (obj.has("lat") && !obj.isNull("lat")) obj.optDouble("lat") else null,
-                            lng = if (obj.has("lng") && !obj.isNull("lng")) obj.optDouble("lng") else null,
-                            waypointTitle = obj.optString("waypointTitle", ""),
-                            waypointType = obj.optString("waypointType", "RALLY"),
-                            waypointLat = if (obj.has("waypointLat") && !obj.isNull("waypointLat")) obj.optDouble("waypointLat") else null,
-                            waypointLng = if (obj.has("waypointLng") && !obj.isNull("waypointLng")) obj.optDouble("waypointLng") else null
-                        )
-                        onWebPacketSubmitted(submitted)
-                        when (submitted.type) {
-                            "VOICE_PTT", "VOICE", "CALL_AUDIO" -> {
-                                notifyVoiceFrame(
-                                    submitted.clientNodeId,
-                                    submitted.callsign,
-                                    submitted.payload,
-                                    isCallAudio = submitted.type == "CALL_AUDIO"
-                                )
-                            }
-                            "CALL_RING", "CALL_ACCEPT", "CALL_DECLINE", "CALL_END" -> {
-                                notifyCallSignal(
-                                    submitted.type,
-                                    submitted.clientNodeId,
-                                    submitted.callsign,
-                                    submitted.dstNodeId.ifBlank { "ALL" },
-                                    submitted.payload
-                                )
-                            }
-                            else -> notifyStateChanged()
-                        }
+                        handleSendJson(obj)
                         writeJson(output, 200, """{"ok":true}""", keepAlive = keepAlive)
                     }
 

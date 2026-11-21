@@ -114,7 +114,9 @@ class BleL2capTransport(
                 while (isActive && socket.isConnected) {
                     val line = reader.readLine() ?: break
                     val trimmed = line.trim()
-                    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+                        CompactMeshProtocol.isCompactLine(trimmed)
+                    ) {
                         onJsonLineReceived(trimmed, socket.remoteDevice)
                     }
                 }
@@ -126,6 +128,18 @@ class BleL2capTransport(
                 onActiveChannelsChanged(connectedDeviceCount, localPsm)
             }
         }
+    }
+
+    /**
+     * Broadcasts a compact `PMB2:` frame (or JSON fallback) across all connected BLE L2CAP CoC sockets.
+     */
+    fun sendCompactOrJson(packet: WireMeshPacket, useCompactBinary: Boolean): Boolean {
+        val line = if (useCompactBinary) {
+            CompactMeshProtocol.encodeCompactLine(packet)
+        } else {
+            CompactMeshProtocol.toCanonicalJson(packet)
+        }
+        return sendJsonLine(line)
     }
 
     /**

@@ -1047,12 +1047,34 @@ class OffGridBleMeshEngine(
         }
     }
 
+    @SuppressLint("MissingPermission")
+    fun sendOverL2cap(packet: WireMeshPacket, useCompactBinary: Boolean = true): Boolean {
+        if (!l2capTransport.hasActiveChannel()) return false
+        return l2capTransport.sendCompactOrJson(packet, useCompactBinary = useCompactBinary)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendOverGatt(packet: WireMeshPacket, useCompactBinary: Boolean = false) {
+        scope.launch(Dispatchers.IO) {
+            if (!isEligibleForBleGattPipe(packet.type)) {
+                startIdleCafeAdvertising(packet)
+                return@launch
+            }
+            val wireLine = if (useCompactBinary) {
+                CompactMeshProtocol.encodeCompactLine(packet)
+            } else {
+                packetToJson(packet)
+            }
+            sendGattFrameChunked(wireLine, packet.type)
+        }
+    }
+
     /**
-     * Broadcasts a unified JSON MeshPacket across bidirectional BLE GATT (`0000CAFF`).
-     * NEVER sends `HEARTBEAT` or `GPS_BEACON` over BLE GATT (`0000CAFF`)!
+     * Broadcasts a unified MeshPacket across BLE L2CAP CoC (auto-upgraded for bulk/voice payloads when active)
+     * and bidirectional BLE GATT (`0000CAFF`). NEVER sends `HEARTBEAT` or `GPS_BEACON` over BLE GATT!
      */
     @SuppressLint("MissingPermission")
-    fun broadcastPacketChunked(packet: WireMeshPacket) {
+    fun broadcastPacketChunked(packet: WireMeshPacket, useCompactBinary: Boolean = false) {
         scope.launch(Dispatchers.IO) {
             if (packet.type == "CALL_RING" ||
                 packet.type == "CALL_ACCEPT" ||
@@ -1063,8 +1085,21 @@ class OffGridBleMeshEngine(
                 clearPendingBleVoiceQueue()
             }
             if (isEligibleForBleGattPipe(packet.type)) {
-                val pktJson = packetToJson(packet)
-                sendGattPacketChunked(pktJson)
+                val isBulkOrVoice = packet.payload.length > 260 ||
+                    packet.payload.startsWith("[[PM_IMAGE]]:") ||
+                    packet.payload.startsWith("[[PM_VOICE]]:") ||
+                    packet.type == "VOICE_PTT" ||
+                    packet.type == "CALL_AUDIO"
+                if (isBulkOrVoice && l2capTransport.hasActiveChannel()) {
+                    val sentViaL2cap = l2capTransport.sendCompactOrJson(packet, useCompactBinary = useCompactBinary)
+                    if (sentViaL2cap) return@launch
+                }
+                val wireLine = if (useCompactBinary) {
+                    CompactMeshProtocol.encodeCompactLine(packet)
+                } else {
+                    packetToJson(packet)
+                }
+                sendGattFrameChunked(wireLine, packet.type)
             } else {
                 startIdleCafeAdvertising(packet)
             }
@@ -1802,11 +1837,16 @@ class OffGridBleMeshEngine(
             while (newlineIdx >= 0) {
                 val rawLine = sb.substring(0, newlineIdx).trim()
                 sb.delete(0, newlineIdx + 1)
-                val line = if (rawLine.startsWith("{")) {
-                    rawLine
-                } else {
-                    val braceIdx = rawLine.indexOf('{')
-                    if (braceIdx >= 0) rawLine.substring(braceIdx) else ""
+                val decodedCompact = if (CompactMeshProtocol.isCompactLine(rawLine)) {
+                    CompactMeshProtocol.decodeLineAuto(rawLine, "BLE GATT")
+                } else null
+                val line = when {
+                    decodedCompact != null -> CompactMeshProtocol.toCanonicalJson(decodedCompact)
+                    rawLine.startsWith("{") -> rawLine
+                    else -> {
+                        val braceIdx = rawLine.indexOf('{')
+                        if (braceIdx >= 0) rawLine.substring(braceIdx) else ""
+                    }
                 }
                 if (line.startsWith("{") && line.endsWith("}")) {
                     runCatching {
@@ -1835,7 +1875,7 @@ class OffGridBleMeshEngine(
                                 if (obj.has("bat") && !obj.isNull("bat")) obj.getInt("bat") else null,
                                 realRssi ?: -55,
                                 false,
-                                "BLE GATT"
+                                if (decodedCompact != null) "BLE GATT (PMB2)" else "BLE GATT"
                             )
                             val remotePsm = obj.optInt("l2psm", 0)
                             if (remotePsm > 0 && device != null) {
@@ -1843,7 +1883,7 @@ class OffGridBleMeshEngine(
                             }
                         }
                         onRawJsonPacketReceived?.invoke(line)
-                        parseAndEmitOffGridJson(line, realRssi, "BLE GATT")
+                        parseAndEmitOffGridJson(line, realRssi, if (decodedCompact != null) "BLE GATT (PMB2)" else "BLE GATT")
                     }
                 }
                 newlineIdx = sb.indexOf("\n")
@@ -1854,8 +1894,16 @@ class OffGridBleMeshEngine(
         }
     }
 
-    private fun handleIncomingL2capLine(line: String, device: BluetoothDevice?) {
+    private fun handleIncomingL2capLine(rawLine: String, device: BluetoothDevice?) {
         runCatching {
+            val decodedCompact = if (CompactMeshProtocol.isCompactLine(rawLine.trim())) {
+                CompactMeshProtocol.decodeLineAuto(rawLine.trim(), "BLE L2CAP")
+            } else null
+            val line = if (decodedCompact != null) {
+                CompactMeshProtocol.toCanonicalJson(decodedCompact)
+            } else {
+                rawLine.trim()
+            }
             val obj = JSONObject(line)
             val srcId = obj.optString("srcId").ifBlank { obj.optString("src") }
             val srcName = obj.optString("srcName").ifBlank { obj.optString("cs", "Node-$srcId") }
@@ -1865,6 +1913,7 @@ class OffGridBleMeshEngine(
                 ?: peerLastRssi[srcId]
                 ?: device?.address?.let { peerLastRssiByMac[it] }
                 ?: _telemetry.value.lastRssiDbm.takeIf { it != 0 }
+            val label = if (decodedCompact != null) "BLE L2CAP (PMB2)" else "BLE L2CAP"
             if (srcId.isNotBlank() && normSrc != normalizeId(localNodeId())) {
                 if (device?.address != null) {
                     peerNodeIdByMac[device.address] = normSrc
@@ -1878,11 +1927,34 @@ class OffGridBleMeshEngine(
                     if (obj.has("bat") && !obj.isNull("bat")) obj.getInt("bat") else null,
                     realRssi ?: -55,
                     false,
-                    "BLE L2CAP"
+                    label
                 )
             }
             onRawJsonPacketReceived?.invoke(line)
-            parseAndEmitOffGridJson(line, realRssi, "BLE L2CAP")
+            parseAndEmitOffGridJson(line, realRssi, label)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendGattFrameChunked(wireFrame: String, pktType: String) {
+        val trimmed = wireFrame.trim()
+        if (trimmed.isEmpty() || !isEligibleForBleGattPipe(pktType)) return
+        if (pktType == "CALL_RING" ||
+            pktType == "CALL_ACCEPT" ||
+            pktType == "CALL_ACCEPT_ACK" ||
+            pktType == "CALL_END" ||
+            pktType == "CALL_DECLINE" ||
+            pktType == "CHAT" ||
+            pktType == "E2EE_DM" ||
+            pktType == "GROUP_CHAT"
+        ) {
+            clearPendingBleVoiceQueue()
+        }
+        startGattTxChannelConsumer()
+        if (pktType == "VOICE" || pktType == "VOICE_STREAM" || pktType == "VOICE_PTT") {
+            bleVoiceTxChannel.trySend(trimmed)
+        } else {
+            gattTxChannel.trySend(trimmed)
         }
     }
 
@@ -1898,26 +1970,7 @@ class OffGridBleMeshEngine(
             val obj = JSONObject(trimmed)
             obj.optString("type").ifBlank { obj.optString("t", "") }
         }.getOrDefault("")
-        if (!isEligibleForBleGattPipe(pktType)) return
-
-        if (pktType == "CALL_RING" ||
-            pktType == "CALL_ACCEPT" ||
-            pktType == "CALL_ACCEPT_ACK" ||
-            pktType == "CALL_END" ||
-            pktType == "CALL_DECLINE" ||
-            pktType == "CHAT" ||
-            pktType == "E2EE_DM" ||
-            pktType == "GROUP_CHAT"
-        ) {
-            clearPendingBleVoiceQueue()
-        }
-
-        startGattTxChannelConsumer()
-        if (pktType == "VOICE" || pktType == "VOICE_STREAM" || pktType == "VOICE_PTT") {
-            bleVoiceTxChannel.trySend(trimmed)
-        } else {
-            gattTxChannel.trySend(trimmed)
-        }
+        sendGattFrameChunked(trimmed, pktType)
     }
 
     private fun parseAndEmitOffGridJson(rawJson: String, rssi: Int?, sourceTransport: String = "BLE GATT") {

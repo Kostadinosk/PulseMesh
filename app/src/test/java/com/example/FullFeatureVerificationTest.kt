@@ -768,4 +768,253 @@ class FullFeatureVerificationTest {
         assertTrue(mobileConfigXml.contains("com.apple.security.root"))
         assertTrue(mobileConfigXml.contains("PulseMesh Local Root CA"))
     }
+
+    @Test
+    fun `verify v1_4_0 CompactMeshProtocol PMB2 binary round-trip and dual-protocol compatibility`() {
+        val original = WireMeshPacket(
+            packetId = "pkt_140_test",
+            srcNodeId = "0x4F2A",
+            srcCallsign = "AlphaOne",
+            dstNodeId = "0x9C11",
+            type = "E2EE_DM",
+            payload = "Tactical check-in from Ridge 4",
+            ttl = 7,
+            hops = 1,
+            lat = 37.9838,
+            lng = 23.7275,
+            battery = 88,
+            altitude = 124.5,
+            accuracy = 6.2f,
+            srcUsername = "alpha",
+            dstUsername = "bravo",
+            isGateway = true,
+            timestamp = 1795256000000L
+        )
+        val binary = com.example.service.CompactMeshProtocol.encodeCompact(original)
+        assertTrue("Encoded bytes must start with PMB2 magic", com.example.service.CompactMeshProtocol.isCompactBinary(binary))
+        val legacyJson = com.example.service.CompactMeshProtocol.toCanonicalJson(original)
+        assertTrue(
+            "PMB2 binary (${binary.size}B) must be significantly smaller than JSON (${legacyJson.length}B)",
+            binary.size < legacyJson.toByteArray(Charsets.UTF_8).size
+        )
+
+        val decodedBin = com.example.service.CompactMeshProtocol.decodeCompact(binary, "WI-FI PMB2")
+        assertNotNull("Decoded PMB2 binary packet must not be null", decodedBin)
+        assertEquals(original.packetId, decodedBin!!.packetId)
+        assertEquals(original.srcNodeId, decodedBin.srcNodeId)
+        assertEquals(original.srcCallsign, decodedBin.srcCallsign)
+        assertEquals(original.dstNodeId, decodedBin.dstNodeId)
+        assertEquals(original.type, decodedBin.type)
+        assertEquals(original.payload, decodedBin.payload)
+        assertEquals(original.battery, decodedBin.battery)
+        assertEquals(original.srcUsername, decodedBin.srcUsername)
+        assertEquals(original.dstUsername, decodedBin.dstUsername)
+        assertEquals(true, decodedBin.isGateway)
+        assertEquals(original.lat!!, decodedBin.lat!!, 0.0001)
+        assertEquals(original.lng!!, decodedBin.lng!!, 0.0001)
+
+        // Verify ASCII line PMB2: and legacy JSON auto-decoding
+        val compactLine = com.example.service.CompactMeshProtocol.encodeCompactLine(original)
+        assertTrue(com.example.service.CompactMeshProtocol.isCompactLine(compactLine))
+        val decodedLine = com.example.service.CompactMeshProtocol.decodeLineAuto(compactLine, "BLE L2CAP PMB2")
+        assertNotNull(decodedLine)
+        assertEquals(original.payload, decodedLine!!.payload)
+
+        val decodedLegacy = com.example.service.CompactMeshProtocol.decodeLineAuto(legacyJson, "BLE GATT")
+        assertNotNull("Legacy JSON must still auto-decode cleanly", decodedLegacy)
+        assertEquals(original.packetId, decodedLegacy!!.packetId)
+        assertEquals(original.payload, decodedLegacy.payload)
+    }
+
+    @Test
+    fun `verify v1_4_0 LinkCostRouter scoring, failover penalties, and critical SOS fan-out`() {
+        val router = com.example.service.LinkCostRouter()
+        val dm = WireMeshPacket(
+            packetId = "dm_140",
+            srcNodeId = "0x1111",
+            srcCallsign = "Alpha",
+            dstNodeId = "0x2222",
+            type = "E2EE_DM",
+            payload = "hello"
+        )
+        router.recordPeerObserved("0x2222", com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB, supportsPmb2 = true)
+        router.recordPeerObserved("0x2222", com.example.service.LinkCostRouter.TransportTier.BLE_L2CAP, supportsPmb2 = true)
+
+        val initialPlan = router.planRoute(
+            packet = dm,
+            hasLocalWifiOrNan = true,
+            hasBleL2cap = true,
+            hasBleGatt = true,
+            isInternetEnabled = true
+        )
+        assertFalse("Directed DM must not fan out to all radios immediately", initialPlan.fanOutAll)
+        assertTrue("PMB2-capable peer must auto-negotiate compact binary", initialPlan.useCompactBinary)
+        assertEquals(
+            com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB,
+            initialPlan.orderedTiers.first()
+        )
+
+        // Simulate two timeouts on WIFI_NAN_USB -> router should automatically prefer BLE_L2CAP next
+        router.recordDeliveryTimeout("0x2222", com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB)
+        router.recordDeliveryTimeout("0x2222", com.example.service.LinkCostRouter.TransportTier.WIFI_NAN_USB)
+        val failoverPlan = router.planRoute(
+            packet = dm,
+            hasLocalWifiOrNan = true,
+            hasBleL2cap = true,
+            hasBleGatt = true,
+            isInternetEnabled = true
+        )
+        assertEquals(
+            com.example.service.LinkCostRouter.TransportTier.BLE_L2CAP,
+            failoverPlan.orderedTiers.first()
+        )
+        assertEquals(2, router.getStats().failoverEscalations)
+
+        // Critical SOS must ALWAYS fan out across all active radios
+        val sos = dm.copy(packetId = "sos_140", dstNodeId = "ALL", type = "SOS", payload = "EMERGENCY")
+        val sosPlan = router.planRoute(
+            packet = sos,
+            hasLocalWifiOrNan = true,
+            hasBleL2cap = true,
+            hasBleGatt = true,
+            isInternetEnabled = true
+        )
+        assertTrue("SOS must always fan out across all radios", sosPlan.fanOutAll)
+        assertEquals(4, sosPlan.orderedTiers.size)
+    }
+
+    @Test
+    fun `verify v1_4_0 AppUpdateChecker semantic version comparison and release JSON parsing`() {
+        assertTrue(com.example.service.AppUpdateChecker.isNewerVersion("v1.4.1", "1.4.0"))
+        assertTrue(com.example.service.AppUpdateChecker.isNewerVersion("2.0.0", "1.9.9"))
+        assertFalse(com.example.service.AppUpdateChecker.isNewerVersion("v1.4.0", "1.4.0"))
+        assertFalse(com.example.service.AppUpdateChecker.isNewerVersion("v1.3.2", "1.4.0"))
+
+        val mockReleaseJson = """
+            {
+              "tag_name": "v1.4.1",
+              "name": "PulseMesh v1.4.1",
+              "html_url": "https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.4.1",
+              "body": "# Highlights\n- WebRTC P2P Voice\n- Acoustic Browser Modem",
+              "assets": [
+                {"name": "app-debug.apk", "browser_download_url": "https://example.com/app-debug.apk"},
+                {"name": "app-release.apk", "browser_download_url": "https://example.com/app-release.apk"}
+              ]
+            }
+        """.trimIndent()
+        val parsed = com.example.service.AppUpdateChecker.parseReleaseJson(mockReleaseJson, "1.4.0")
+        assertNotNull("Newer release JSON must parse into AppUpdateInfo", parsed)
+        assertEquals("1.4.1", parsed!!.latestVersion)
+        assertEquals("https://example.com/app-release.apk", parsed.apkDownloadUrl)
+        assertNull("Same version must return null", com.example.service.AppUpdateChecker.parseReleaseJson(mockReleaseJson, "1.4.1"))
+    }
+
+    @Test
+    fun `verify v1_4_0 PulseMeshWebServer RFC 6455 WebSocket handshake and send`() {
+        // RFC 6455 section 1.3 official test vector
+        assertEquals(
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+            PulseMeshWebServer.computeWebSocketAcceptKey("dGhlIHNhbXBsZSBub25jZQ==")
+        )
+
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val submittedList = CopyOnWriteArrayList<WebSubmittedPacket>()
+        val server = PulseMeshWebServer(
+            context = app,
+            scope = scope,
+            buildInfoJson = { url, cnt ->
+                JSONObject().apply {
+                    put("pulsemeshHost", true)
+                    put("version", "1.4.0")
+                    put("portalUrl", url)
+                    put("webClientCount", cnt)
+                }
+            },
+            buildStateJson = { JSONObject().apply { put("ok", true) } },
+            onClientRegistered = {},
+            onWebPacketSubmitted = { submittedList.add(it) }
+        )
+        server.start("127.0.0.1")
+        val deadline = System.currentTimeMillis() + 4000L
+        while ((!server.isRunning() || !server.status.value.selfTestPassed) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50L)
+        }
+        try {
+            val port = server.status.value.port
+            java.net.Socket("127.0.0.1", port).use { sock ->
+                sock.soTimeout = 3000
+                val out = sock.getOutputStream()
+                val inp = java.io.BufferedInputStream(sock.getInputStream())
+                val handshake = buildString {
+                    append("GET /ws?clientNodeId=0xWS01 HTTP/1.1\r\n")
+                    append("Host: 127.0.0.1:$port\r\n")
+                    append("Upgrade: websocket\r\n")
+                    append("Connection: Upgrade\r\n")
+                    append("Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n")
+                    append("Sec-WebSocket-Version: 13\r\n\r\n")
+                }
+                out.write(handshake.toByteArray(Charsets.US_ASCII))
+                out.flush()
+
+                // Read HTTP 101 response headers
+                val hdrSb = StringBuilder()
+                while (true) {
+                    val b = inp.read()
+                    if (b == -1) break
+                    hdrSb.append(b.toChar())
+                    if (hdrSb.endsWith("\r\n\r\n")) break
+                }
+                val hdrStr = hdrSb.toString()
+                assertTrue("Must upgrade with 101 Switching Protocols: $hdrStr", hdrStr.contains("101 Switching Protocols"))
+                assertTrue("Must include RFC 6455 Sec-WebSocket-Accept", hdrStr.contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="))
+
+                // Read initial server connected text frame
+                val b0 = inp.read()
+                val b1 = inp.read()
+                assertEquals(0x81, b0)
+                val initLen = b1 and 0x7F
+                val initPayload = ByteArray(initLen)
+                var readOff = 0
+                while (readOff < initLen) {
+                    val n = inp.read(initPayload, readOff, initLen - readOff)
+                    if (n <= 0) break
+                    readOff += n
+                }
+                val initText = String(initPayload, Charsets.UTF_8)
+                assertTrue("Initial WS message must confirm connected", initText.contains("\"connected\""))
+
+                // Send a masked client text frame with action=send
+                val msgBytes = """{"action":"send","data":{"packetId":"ws_pkt_1","clientNodeId":"0xWS01","callsign":"WsUser","dstNodeId":"ALL","type":"CHAT","text":"Hello over WS","payload":"Hello over WS"}}""".toByteArray(Charsets.UTF_8)
+                val mask = byteArrayOf(0x12, 0x34, 0x56, 0x78)
+                val frameOut = java.io.ByteArrayOutputStream()
+                frameOut.write(0x81) // FIN + text
+                if (msgBytes.size <= 125) {
+                    frameOut.write(0x80 or msgBytes.size)
+                } else {
+                    frameOut.write(0x80 or 126)
+                    frameOut.write((msgBytes.size ushr 8) and 0xFF)
+                    frameOut.write(msgBytes.size and 0xFF)
+                }
+                frameOut.write(mask)
+                for (i in msgBytes.indices) {
+                    frameOut.write(msgBytes[i].toInt() xor mask[i and 3].toInt())
+                }
+                out.write(frameOut.toByteArray())
+                out.flush()
+
+                // Wait briefly for server to process and verify packet submission
+                val waitEnd = System.currentTimeMillis() + 2000L
+                while (submittedList.isEmpty() && System.currentTimeMillis() < waitEnd) {
+                    Thread.sleep(30L)
+                }
+                assertEquals(1, submittedList.size)
+                assertEquals("ws_pkt_1", submittedList[0].packetId)
+                assertEquals("Hello over WS", submittedList[0].text)
+            }
+        } finally {
+            server.stop()
+            scope.cancel()
+        }
+    }
 }

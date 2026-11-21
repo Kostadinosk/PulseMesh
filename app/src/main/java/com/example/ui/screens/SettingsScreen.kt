@@ -108,6 +108,7 @@ fun SettingsScreen(
     onImportInstantJoinQr: (String) -> Pair<Boolean, String> = { Pair(false, "") },
     onSetDecoyPin: (String) -> Boolean = { false },
     onTriggerDecoyMode: (String) -> Boolean = { false },
+    onCheckForUpdateNow: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -3683,9 +3684,97 @@ fun SettingsScreen(
             )
         }
 
+        // Smart Link-Cost Router Telemetry & Startup App Update Checker Card
+        Surface(
+            color = p.card,
+            shape = cardShape,
+            border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp)
+                .testTag("smart_router_updates_card")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "SMART TRANSPORT ROUTER & APP UPDATES",
+                    color = p.cyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = state.routerSummary,
+                    color = p.textPrimary,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = "PMB2 Compact Savings: ${state.binaryBytesSaved} B • PMB2 Peers: ${state.pmb2PeerCount} • ACK Failovers: ${state.routerFailoverCount} • WebSocket Clients: ${state.webPortalStatus.wsClientCount}",
+                    color = p.textSecondary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = onCheckForUpdateNow,
+                        enabled = !state.isCheckingForUpdate,
+                        shape = btnShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = p.cyan,
+                            contentColor = Color.Black
+                        ),
+                        modifier = Modifier.testTag("check_for_updates_btn")
+                    ) {
+                        Text(
+                            text = if (state.isCheckingForUpdate) "CHECKING..." else "CHECK FOR UPDATES",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    state.availableUpdate?.let { upd ->
+                        Button(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(upd.apkDownloadUrl)
+                                        )
+                                    )
+                                }
+                            },
+                            shape = btnShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = p.emerald,
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text("GET v${upd.latestVersion}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                if (state.updateCheckStatus.isNotBlank()) {
+                    Text(
+                        text = state.updateCheckStatus,
+                        color = if (state.availableUpdate != null) p.emerald else p.textMuted,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.3.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.4.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

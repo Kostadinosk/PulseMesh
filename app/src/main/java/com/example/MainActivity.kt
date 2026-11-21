@@ -228,6 +228,67 @@ class MainActivity : ComponentActivity() {
                                 onDismissIncomingSos = { viewModel.dismissIncomingSosAlert() },
                                 onAutoConnectHotspot = { viewModel.toggleOrConnectHotspot() },
                             )
+                            state.availableUpdate?.let { upd ->
+                                Surface(
+                                    color = p.emerald.copy(alpha = 0.16f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("app_update_banner")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "PulseMesh v${upd.latestVersion} available",
+                                                color = p.emerald,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                            if (upd.releaseNotesSnippet.isNotBlank()) {
+                                                Text(
+                                                    text = upd.releaseNotesSnippet,
+                                                    color = p.textSecondary,
+                                                    fontSize = 10.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Button(
+                                            onClick = {
+                                                runCatching {
+                                                    startActivity(
+                                                        android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            android.net.Uri.parse(upd.apkDownloadUrl)
+                                                        )
+                                                    )
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = p.emerald,
+                                                contentColor = Color.Black
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("UPDATE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.dismissAvailableUpdate() },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Text("✕", color = p.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
                             PersistentMiniCallBar(
                                 state = state,
                                 duplexCallState = state.duplexCallState,
@@ -559,6 +620,7 @@ class MainActivity : ComponentActivity() {
                                         onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
                                         onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
                                         onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
+                                        onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
                                     )
                                 } else {
                                     Column(
@@ -742,6 +804,7 @@ class MainActivity : ComponentActivity() {
                                                 onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
                                                 onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
                                                 onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
+                                                onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
                                             )
                                         } else {
                                             RootBoosterScreen(

@@ -402,20 +402,47 @@ class AutoHotspotNegotiator(
     var onLocalHotspotCredentialsUpdated: ((ssid: String, passphrase: String) -> Unit)? = null
     private var p2pDnsSdDiscoveryJob: Job? = null
 
+    private val nanDataPathNetworks = CopyOnWriteArrayList<Network>()
+    private val nanNetworkCallbacks = CopyOnWriteArrayList<ConnectivityManager.NetworkCallback>()
+    private val nanRequestedPeers = ConcurrentHashMap.newKeySet<Int>()
+    @Volatile
+    private var nanPausedForHotspot: Boolean = false
+
     init {
         startPassiveSubnetSockets()
         startGatewayDiscoveryLoop()
         startNsdMeshService()
         startWifiP2pDnsSdAutoDiscovery()
-        // Keep WifiAwareManager OFF by default so it never resets Wi-Fi Direct or Personal Hotspot interfaces
+        // v1.4.0 Hotspot-Guarded Wi-Fi Aware (NAN): auto-enable on Android 10+ when Hotspot/P2P GO is idle
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            runCatching { context.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE) }.getOrDefault(false)
+        ) {
+            isWifiAwareEnabled = true
+            startWifiAwareNanSession()
+        }
     }
 
     fun setWifiAwareEnabled(enabled: Boolean) {
         isWifiAwareEnabled = enabled
-        if (enabled) {
+        nanPausedForHotspot = false
+        if (enabled && !isCurrentlyHotspotHost()) {
             startWifiAwareNanSession()
         } else {
             stopWifiAwareNanSession()
+        }
+    }
+
+    fun pauseWifiAwareForHotspot() {
+        if (isWifiAwareEnabled) {
+            nanPausedForHotspot = true
+            stopWifiAwareNanSession()
+        }
+    }
+
+    fun resumeWifiAwareIfSafe() {
+        if (isWifiAwareEnabled && nanPausedForHotspot && !isCurrentlyHotspotHost()) {
+            nanPausedForHotspot = false
+            startWifiAwareNanSession()
         }
     }
 
@@ -425,6 +452,15 @@ class AutoHotspotNegotiator(
             runCatching { wifiAwareSubscribeSession?.close() }
             runCatching { wifiAwareSession?.close() }
         }
+        val cm = runCatching {
+            context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        }.getOrNull()
+        for (cb in nanNetworkCallbacks) {
+            runCatching { cm?.unregisterNetworkCallback(cb) }
+        }
+        nanNetworkCallbacks.clear()
+        nanDataPathNetworks.clear()
+        nanRequestedPeers.clear()
         wifiAwarePublishSession = null
         wifiAwareSubscribeSession = null
         wifiAwareSession = null
@@ -432,7 +468,10 @@ class AutoHotspotNegotiator(
     }
 
     fun hasHighSpeedLink(): Boolean {
-        return activeTcpSockets.any { it.isConnected && !it.isClosed } || verifiedReachablePeerIps.isNotEmpty()
+        return activeTcpSockets.any { it.isConnected && !it.isClosed } ||
+            verifiedReachablePeerIps.isNotEmpty() ||
+            nanDataPathNetworks.isNotEmpty() ||
+            wifiAwarePeers.isNotEmpty()
     }
 
     fun hasActiveUdpTraffic(withinMs: Long = 8_000L): Boolean {
@@ -533,6 +572,7 @@ class AutoHotspotNegotiator(
      */
     @SuppressLint("MissingPermission")
     fun hostHotspotExplicitly(onFallbackToLocalHotspot: () -> Unit = {}): String {
+        pauseWifiAwareForHotspot()
         updateButtonState("HOTSPOT: STARTING...")
         startHostP2pGroup(manualTrigger = true, onFallbackToLocalHotspot = onFallbackToLocalHotspot)
         return _status.value.buttonStateText
@@ -582,6 +622,7 @@ class AutoHotspotNegotiator(
     fun stopHotspotExplicitly(onStopLocalHotspot: () -> Unit = {}): String {
         onStopLocalHotspot()
         stopHotspotGroup()
+        resumeWifiAwareIfSafe()
         return "HOTSPOT: OFF"
     }
 
@@ -1421,16 +1462,24 @@ class AutoHotspotNegotiator(
                                 onTcpOrIpPeerReady?.invoke("", senderIp)
                             }
                             markPeerIpVerifiedReachable(senderIp)
-                            if (data.size > 8 && data[0] == 0x50.toByte() &&
+                            if (CompactMeshProtocol.isCompactBinary(data)) {
+                                CompactMeshProtocol.decodeCompact(data, "HOTSPOT WIFI (PMB2)")?.let { pkt ->
+                                    handleIncomingJsonLine(CompactMeshProtocol.toCanonicalJson(pkt), senderIp, "HOTSPOT WIFI (PMB2)")
+                                }
+                            } else if (data.size > 8 && data[0] == 0x50.toByte() &&
                                 (data[1] == 0x56.toByte() || data[1] == 0x41.toByte())
                             ) {
                                 // Raw binary "PV" (mu-law) or "PA" (IMA-ADPCM) voice frame
                                 onAudioFrameReceived?.invoke(data)
-                            } else if (data[0] == '{'.code.toByte()) {
+                            } else if (data[0] == '{'.code.toByte() || data.size > 5 && data[0] == 'P'.code.toByte() && data[1] == 'M'.code.toByte() && data[2] == 'B'.code.toByte()) {
                                 val text = String(data, Charsets.UTF_8).trim()
                                 for (line in text.split('\n')) {
                                     val trimmed = line.trim()
-                                    if (trimmed.startsWith("{")) {
+                                    if (CompactMeshProtocol.isCompactLine(trimmed)) {
+                                        CompactMeshProtocol.decodeLineAuto(trimmed, "HOTSPOT WIFI (PMB2)")?.let { pkt ->
+                                            handleIncomingJsonLine(CompactMeshProtocol.toCanonicalJson(pkt), senderIp, "HOTSPOT WIFI (PMB2)")
+                                        }
+                                    } else if (trimmed.startsWith("{")) {
                                         handleIncomingJsonLine(trimmed, senderIp, "HOTSPOT WIFI")
                                     }
                                 }
@@ -1627,10 +1676,8 @@ class AutoHotspotNegotiator(
                         }
                         override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
                             if (!wifiAwarePeers.contains(peerHandle)) wifiAwarePeers.add(peerHandle)
-                            val str = String(message, Charsets.UTF_8).trim()
-                            if (str.startsWith("{")) {
-                                handleIncomingJsonLine(str, "", "NAN")
-                            }
+                            ingestNanMessage(message)
+                            wifiAwarePublishSession?.let { requestNanDataPathIfSupported(it, peerHandle, isServer = true) }
                         }
                     }, null)
 
@@ -1648,10 +1695,7 @@ class AutoHotspotNegotiator(
                         ) {
                             if (!wifiAwarePeers.contains(peerHandle)) wifiAwarePeers.add(peerHandle)
                             if (serviceSpecificInfo != null && serviceSpecificInfo.isNotEmpty()) {
-                                val str = String(serviceSpecificInfo, Charsets.UTF_8).trim()
-                                if (str.startsWith("{")) {
-                                    handleIncomingJsonLine(str, "", "NAN")
-                                }
+                                ingestNanMessage(serviceSpecificInfo)
                             }
                             runCatching {
                                 wifiAwareSubscribeSession?.sendMessage(
@@ -1660,17 +1704,97 @@ class AutoHotspotNegotiator(
                                     buildSubnetHeartbeatJson().take(240).toByteArray(Charsets.UTF_8)
                                 )
                             }
+                            wifiAwareSubscribeSession?.let { requestNanDataPathIfSupported(it, peerHandle, isServer = false) }
                         }
                         override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
                             if (!wifiAwarePeers.contains(peerHandle)) wifiAwarePeers.add(peerHandle)
-                            val str = String(message, Charsets.UTF_8).trim()
-                            if (str.startsWith("{")) {
-                                handleIncomingJsonLine(str, "", "NAN")
-                            }
+                            ingestNanMessage(message)
                         }
                     }, null)
                 }
             }, null)
+        }
+    }
+
+    private fun ingestNanMessage(message: ByteArray) {
+        if (CompactMeshProtocol.isCompactBinary(message)) {
+            CompactMeshProtocol.decodeCompact(message, "NAN (PMB2)")?.let { pkt ->
+                handleIncomingJsonLine(CompactMeshProtocol.toCanonicalJson(pkt), "", "NAN (PMB2)")
+            }
+            return
+        }
+        val str = String(message, Charsets.UTF_8).trim()
+        if (CompactMeshProtocol.isCompactLine(str)) {
+            CompactMeshProtocol.decodeLineAuto(str, "NAN (PMB2)")?.let { pkt ->
+                handleIncomingJsonLine(CompactMeshProtocol.toCanonicalJson(pkt), "", "NAN (PMB2)")
+            }
+        } else if (str.startsWith("{")) {
+            handleIncomingJsonLine(str, "", "NAN")
+        }
+    }
+
+    /**
+     * Android 10+ (API 29+) Wi-Fi Aware IPv6 Data-Path:
+     * Establishes a direct high-speed peer-to-peer Wi-Fi link without disconnecting the user's
+     * regular Wi-Fi router or enabling Personal Hotspot.
+     */
+    @SuppressLint("MissingPermission")
+    private fun requestNanDataPathIfSupported(
+        discoverySession: android.net.wifi.aware.DiscoverySession,
+        peerHandle: PeerHandle,
+        isServer: Boolean
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (nanPausedForHotspot || isCurrentlyHotspotHost()) return
+        if (!nanRequestedPeers.add(peerHandle.hashCode())) return
+
+        runCatching {
+            val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return@runCatching
+            val specBuilder = android.net.wifi.aware.WifiAwareNetworkSpecifier.Builder(discoverySession, peerHandle)
+                .setPskPassphrase("pulsemesh-nan-v14")
+            if (isServer) {
+                specBuilder.setPort(P2P_TCP_PORT)
+            }
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI_AWARE)
+                .setNetworkSpecifier(specBuilder.build())
+                .build()
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    if (!nanDataPathNetworks.contains(network)) {
+                        nanDataPathNetworks.add(network)
+                    }
+                }
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    val peerInfo = networkCapabilities.transportInfo as? android.net.wifi.aware.WifiAwareNetworkInfo
+                    val peerIpv6 = peerInfo?.peerIpv6Addr ?: return
+                    val peerPort = peerInfo.port.takeIf { it > 0 } ?: P2P_TCP_PORT
+                    val hostAddr = peerIpv6.hostAddress ?: return
+                    val alreadyOpen = activeTcpSockets.any {
+                        it.inetAddress?.hostAddress == hostAddr && it.isConnected && !it.isClosed
+                    }
+                    if (!alreadyOpen && !isServer) {
+                        scope.launch(Dispatchers.IO) {
+                            runCatching {
+                                val sock = network.socketFactory.createSocket()
+                                sock.tcpNoDelay = true
+                                sock.connect(InetSocketAddress(peerIpv6, peerPort), 2000)
+                                if (sock.isConnected) {
+                                    registerTcpSocket(sock, hostAddr)
+                                } else {
+                                    sock.close()
+                                }
+                            }
+                        }
+                    }
+                }
+                override fun onLost(network: Network) {
+                    nanDataPathNetworks.remove(network)
+                }
+            }
+            nanNetworkCallbacks.add(cb)
+            cm.requestNetwork(request, cb, 15_000)
         }
     }
 
@@ -2093,13 +2217,62 @@ class AutoHotspotNegotiator(
                 while (isActive && socket.isConnected && !socket.isClosed) {
                     val line = reader.readLine() ?: break
                     val trimmed = line.trim()
-                    if (trimmed.startsWith("{")) {
+                    if (CompactMeshProtocol.isCompactLine(trimmed)) {
+                        CompactMeshProtocol.decodeLineAuto(trimmed, "HOTSPOT WIFI (PMB2)")?.let { pkt ->
+                            handleIncomingJsonLine(CompactMeshProtocol.toCanonicalJson(pkt), peerIp, "HOTSPOT WIFI (PMB2)")
+                        }
+                    } else if (trimmed.startsWith("{")) {
                         handleIncomingJsonLine(trimmed, peerIp, "HOTSPOT WIFI")
                     }
                 }
             }
             activeTcpSockets.remove(socket)
             runCatching { socket.close() }
+        }
+    }
+
+    /**
+     * v1.4.0 Dual-Protocol Sender: sends compact binary `PMB2` frames on UDP/NAN and `PMB2:` lines
+     * on TCP when targeting v1.4+ peers, or standard JSON for v1.3.x / broadcast compatibility.
+     */
+    fun sendCompactPacket(packet: WireMeshPacket, useCompactBinary: Boolean) {
+        if (!useCompactBinary) {
+            sendPacket(CompactMeshProtocol.toCanonicalJson(packet))
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val binaryBytes = CompactMeshProtocol.encodeCompact(packet)
+            val lineBytes = (CompactMeshProtocol.encodeCompactLine(packet) + "\n").toByteArray(Charsets.UTF_8)
+
+            for (sock in activeTcpSockets) {
+                runCatching {
+                    val out: OutputStream = sock.getOutputStream()
+                    synchronized(out) {
+                        out.write(lineBytes)
+                        out.flush()
+                    }
+                }
+            }
+
+            val udp = udpSocket
+            if (udp != null && !udp.isClosed) {
+                val targets = collectTargetBroadcastAndGatewayIps()
+                for (ip in targets) {
+                    runCatching {
+                        val dgram = DatagramPacket(binaryBytes, binaryBytes.size, InetAddress.getByName(ip), P2P_UDP_PORT)
+                        udp.send(dgram)
+                    }
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && binaryBytes.size <= 250 && wifiAwarePeers.isNotEmpty()) {
+                for (nanPeer in wifiAwarePeers) {
+                    runCatching {
+                        wifiAwareSubscribeSession?.sendMessage(nanPeer, 2, binaryBytes)
+                        wifiAwarePublishSession?.sendMessage(nanPeer, 2, binaryBytes)
+                    }
+                }
+            }
         }
     }
 

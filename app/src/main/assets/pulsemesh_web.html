@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.3.2)</title>
-  <meta name="description" content="Official PulseMesh v1.3.2 Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals, 2-Tier Root CA SSL, and encrypted E2EE hybrid mesh channels." />
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.4.0)</title>
+  <meta name="description" content="Official PulseMesh v1.4.0 Web &amp; iPhone PWA client for Wi-Fi Direct Local WebSockets, 2-Tier Root CA SSL, and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -895,9 +895,10 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.3.2</span>
+      <span class="version-tag">v1.4.0</span>
     </div>
     <div class="topbar-right">
+      <a class="pill emerald" id="webUpdatePill" href="https://github.com/Kostadinosk/PulseMesh/releases/latest" target="_blank" rel="noopener" style="display:none;text-decoration:none;font-weight:800;">⬆ Update</a>
       <span class="pill cyan" id="modePill">DETECTING...</span>
       <span class="pill emerald" id="peerCountPill">PEERS: 0</span>
       <button type="button" class="icon-btn" id="topQrShareBtn" title="My QR Code &amp; Native Mobile Share">🔳 QR</button>
@@ -1113,8 +1114,8 @@
         <div class="card lane-panel" data-lane-panel="portal" style="display:none;">
           <h3>HOTSPOT PORTAL &amp; ZERO-WARNING 2-TIER ROOT CA SSL</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
-            <strong>Option A (Zero Setup, Zero SSL Warning):</strong> Use <code>http://192.168.43.1:8080</code> directly. In v1.3.2, 2-way voice calling and PTT work on plain HTTP <code>:8080</code> via the <strong>📱 Speak Clip (Native Mobile Mic)</strong> and <strong>🗣 Live In-Call Voice TTS</strong> buttons.<br/><br/>
-            <strong>Option B (Trusted Green-Padlock HTTPS <code>:8443</code>):</strong> PulseMesh v1.3.2 runs a 2-tier Local Root Certificate Authority (<code>BasicConstraints: CA=TRUE</code>). Install the Root CA once below so Safari/Chrome trusts <code>https://192.168.43.1:8443</code> with zero browser warning:
+            <strong>Option A (Zero Setup, Zero SSL Warning):</strong> Use <code>http://192.168.43.1:8080</code> directly. In v1.4.0, real-time bidirectional WebSockets (<code>/ws</code>), 2-way voice calling, and PTT work on plain HTTP <code>:8080</code> via the <strong>📱 Speak Clip (Native Mobile Mic)</strong> and <strong>🗣 Live In-Call Voice TTS</strong> buttons.<br/><br/>
+            <strong>Option B (Trusted Green-Padlock HTTPS <code>:8443</code>):</strong> PulseMesh v1.4.0 runs a 2-tier Local Root Certificate Authority (<code>BasicConstraints: CA=TRUE</code>) with native <code>wss://</code> WebSocket support. Install the Root CA once below so Safari/Chrome trusts <code>https://192.168.43.1:8443</code> with zero browser warning:
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
             <a class="btn btn-emerald" href="/api/ca.mobileconfig" download="PulseMesh-Root-CA.mobileconfig"> 1-Tap iPhone / iPad Root CA (.mobileconfig)</a>
@@ -1209,10 +1210,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.3.2)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.4.0)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
-            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>2-Tier Local Root CA SSL (:8443) + Zero-Warning HTTP (:8080) Native Mobile Voice Calling</strong>, <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong>.<br /><br />
-            <strong>PulseMesh v1.3.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>RFC 6455 Local WebSockets (<code>/ws</code>)</strong>, <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>2-Tier Local Root CA SSL (:8443) + Zero-Warning HTTP (:8080) Native Mobile Voice Calling</strong>, <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong>.<br /><br />
+            <strong>PulseMesh v1.4.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1234,7 +1235,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.3.2 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.4.0 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -2510,22 +2511,32 @@
       spikeWaveRibbon();
 
       if (state.mode === "LOCAL_DIRECT") {
-        const res = await fetch("/api/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            packetId: pktId, clientNodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64,
-            threadId: threadId || "channel_primary", dstNodeId: dstNodeId || "", type, text, payload: payload || text, lat: loc.lat, lng: loc.lng,
-            waypointTitle: wp ? wp.title : "", waypointType: wp ? wp.type : "",
-            waypointLat: wp ? wp.latitude : null, waypointLng: wp ? wp.longitude : null
-          })
-        });
-        if (!res.ok) throw new Error("Local host returned " + res.status);
+        const sendPayload = {
+          packetId: pktId, clientNodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64,
+          threadId: threadId || "channel_primary", dstNodeId: dstNodeId || "", type, text, payload: payload || text, lat: loc.lat, lng: loc.lng,
+          waypointTitle: wp ? wp.title : "", waypointType: wp ? wp.type : "",
+          waypointLat: wp ? wp.latitude : null, waypointLng: wp ? wp.longitude : null
+        };
+        let sentViaWs = false;
+        if (state.wsSocket && state.wsSocket.readyState === 1) {
+          try {
+            state.wsSocket.send(JSON.stringify({ action: "send", data: sendPayload }));
+            sentViaWs = true;
+          } catch (_) {}
+        }
+        if (!sentViaWs) {
+          const res = await fetch("/api/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sendPayload)
+          });
+          if (!res.ok) throw new Error("Local host returned " + res.status);
+        }
         if (type === "CHAT" || type === "E2EE_DM" || type === "GROUP_CHAT") {
           addChatMessage({
             id: pktId, threadId: threadId || "channel_primary", sender: state.callsign + " (You)",
             srcNodeId: state.nodeId, text: text || payload, kind: "text", isSelf: true,
-            transport: "WI-FI DIRECT HOST", hops: 0, timestamp: Date.now()
+            transport: sentViaWs ? "WI-FI DIRECT WS" : "WI-FI DIRECT HOST", hops: 0, timestamp: Date.now()
           });
         } else if (type === "WAYPOINT" && wp) {
           state.waypoints.set(wp.id, wp); drawMap();
@@ -2583,9 +2594,16 @@
     async function sendPresencePing() {
       const loc = getEffectiveLocation();
       if (state.mode === "LOCAL_DIRECT") {
+        const regBody = { nodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64, lat: loc.lat, lng: loc.lng, locationMode: state.locationMode };
+        if (state.wsSocket && state.wsSocket.readyState === 1) {
+          try {
+            state.wsSocket.send(JSON.stringify({ action: "register", data: regBody }));
+            return;
+          } catch (_) {}
+        }
         await fetch("/api/register", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nodeId: state.nodeId, callsign: state.callsign, publicKeyBase64: state.pubKeyB64, lat: loc.lat, lng: loc.lng, locationMode: state.locationMode })
+          body: JSON.stringify(regBody)
         }).catch(() => {});
         return;
       }
@@ -2594,7 +2612,7 @@
         packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
         srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: "BROADCAST",
         type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
-        payload: "PulseMesh Web/iPhone Node v1.3.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
+        payload: "PulseMesh Web/iPhone Node v1.4.0", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
       if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
@@ -2714,23 +2732,72 @@
       await sendPresencePing();
       await pullLocalState();
 
-      try {
-        if (state.sseSource) state.sseSource.close();
-        const es = new EventSource(`/api/events?clientNodeId=${encodeURIComponent(state.nodeId)}`);
-        es.onmessage = (ev) => {
+      const handleLocalPushEvent = (msg) => {
+        if (!msg) return;
+        if (msg.event === "voice" && msg.payload && normId(msg.srcNodeId) !== normId(state.nodeId)) {
+          spikeWaveRibbon();
+          playMuLawBase64(msg.payload);
+          document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
+        } else if (msg.event === "call" && normId(msg.srcNodeId) !== normId(state.nodeId)) {
+          handleIncomingCallSignal(msg.type, msg.srcNodeId, msg.srcCallsign || msg.srcNodeId, msg.dstNodeId || "ALL");
+        } else if (msg.event === "state" && msg.data) {
+          applyLocalSnapshot(msg.data);
+          document.getElementById("connDot").className = "brand-dot";
+        } else if (msg.event === "refresh") {
+          pullLocalState();
+        }
+      };
+
+      const startSseFallback = () => {
+        if (state.sseSource) return;
+        try {
+          const es = new EventSource(`/api/events?clientNodeId=${encodeURIComponent(state.nodeId)}`);
+          es.onmessage = (ev) => {
+            try { handleLocalPushEvent(JSON.parse(ev.data)); } catch (_) {}
+          };
+          state.sseSource = es;
+        } catch (_) {}
+      };
+
+      if (info.wsSupported && typeof WebSocket !== "undefined") {
+        const connectLocalWs = () => {
           try {
-            const msg = JSON.parse(ev.data);
-            if (msg.event === "voice" && msg.payload && normId(msg.srcNodeId) !== normId(state.nodeId)) {
-              spikeWaveRibbon();
-              playMuLawBase64(msg.payload);
-              document.getElementById("voiceStatusBox").textContent = `🔊 SPEAKING: ${msg.srcCallsign || msg.srcNodeId}`;
-            } else if (msg.event === "call" && normId(msg.srcNodeId) !== normId(state.nodeId)) {
-              handleIncomingCallSignal(msg.type, msg.srcNodeId, msg.srcCallsign || msg.srcNodeId, msg.dstNodeId || "ALL");
-            } else if (msg.event === "refresh") pullLocalState();
-          } catch (_) {}
+            if (state.wsSocket) { try { state.wsSocket.close(); } catch (_) {} }
+            const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+            const wsPath = info.wsPath || "/ws";
+            const ws = new WebSocket(`${wsProto}//${location.host}${wsPath}?clientNodeId=${encodeURIComponent(state.nodeId)}`);
+            state.wsSocket = ws;
+            ws.onopen = () => {
+              document.getElementById("connDot").className = "brand-dot";
+              pill.textContent = "WI-FI DIRECT WS";
+              pill.className = "pill emerald";
+              if (state.sseSource) { try { state.sseSource.close(); } catch (_) {} state.sseSource = null; }
+              logLine("LOCAL", `Bidirectional WebSocket (${wsProto}//${location.host}${wsPath}) connected`);
+              sendPresencePing();
+              try { ws.send(JSON.stringify({ action: "state", clientNodeId: state.nodeId })); } catch (_) {}
+            };
+            ws.onmessage = (ev) => {
+              try { handleLocalPushEvent(JSON.parse(ev.data)); } catch (_) {}
+            };
+            ws.onerror = () => { startSseFallback(); };
+            ws.onclose = () => {
+              if (state.wsSocket === ws) state.wsSocket = null;
+              pill.textContent = "WI-FI DIRECT LOCAL";
+              startSseFallback();
+              if (state.mode === "LOCAL_DIRECT") {
+                setTimeout(() => {
+                  if (state.mode === "LOCAL_DIRECT" && !state.wsSocket) connectLocalWs();
+                }, 4000);
+              }
+            };
+          } catch (_) {
+            startSseFallback();
+          }
         };
-        state.sseSource = es;
-      } catch (_) {}
+        connectLocalWs();
+      } else {
+        startSseFallback();
+      }
 
       if (state.localPollTimer) clearInterval(state.localPollTimer);
       state.localPollTimer = setInterval(pullLocalState, 2200);
@@ -2739,6 +2806,12 @@
     }
 
     async function pullLocalState() {
+      if (state.wsSocket && state.wsSocket.readyState === 1) {
+        try {
+          state.wsSocket.send(JSON.stringify({ action: "state", clientNodeId: state.nodeId }));
+          return;
+        } catch (_) {}
+      }
       try {
         const res = await fetch(`/api/state?clientNodeId=${encodeURIComponent(state.nodeId)}`, { cache: "no-store" });
         if (res.ok) {
@@ -3819,7 +3892,7 @@
     // Trip Log JSON & GPX Trail Export
     document.getElementById("exportTripJsonBtn")?.addEventListener("click", () => {
       const payload = JSON.stringify({
-        exportedAt: Date.now(), version: "1.3.2", nodeId: state.nodeId, callsign: state.callsign,
+        exportedAt: Date.now(), version: "1.4.0", nodeId: state.nodeId, callsign: state.callsign,
         breadcrumbs: state.breadcrumbs || [],
         waypoints: Array.from(state.waypoints.values()), packets: state.packets
       }, null, 2);
@@ -3835,7 +3908,7 @@
         ? state.breadcrumbs
         : (state.lat != null && state.lng != null ? [{ lat: state.lat, lng: state.lng, ts: Date.now() }] : []);
       const trkpts = pts.map((p) => `      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><time>${new Date(p.ts || Date.now()).toISOString()}</time></trkpt>`).join("\n");
-      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.3.2">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.4.0">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
       const blob = new Blob([gpx], { type: "application/gpx+xml" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -4267,7 +4340,40 @@
       }
 
       if (localInfo) await startLocalDirectMode(localInfo);
-      else await startHybridNtfyMode();
+      else {
+        await startHybridNtfyMode();
+        checkWebUpdateOnline("1.4.0");
+      }
+    }
+
+    function compareSemverStr(a, b) {
+      const pa = String(a || "").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+      const pb = String(b || "").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const diff = (pa[i] || 0) - (pb[i] || 0);
+        if (diff !== 0) return diff;
+      }
+      return 0;
+    }
+
+    async function checkWebUpdateOnline(currentVersion) {
+      if (!navigator.onLine) return;
+      try {
+        const res = await fetch("https://api.github.com/repos/Kostadinosk/PulseMesh/releases/latest", {
+          headers: { "Accept": "application/vnd.github+json" }
+        });
+        if (!res.ok) return;
+        const j = await res.json();
+        const tag = String(j.tag_name || "").trim();
+        if (tag && compareSemverStr(tag, currentVersion) > 0) {
+          const pill = document.getElementById("webUpdatePill");
+          if (pill) {
+            pill.textContent = `⬆ ${tag}`;
+            pill.href = j.html_url || "https://github.com/Kostadinosk/PulseMesh/releases/latest";
+            pill.style.display = "inline-flex";
+          }
+        }
+      } catch (_) {}
     }
 
     boot();
