@@ -1106,7 +1106,10 @@ class TacticalAudioService(
         if (useLiveMicrophone) {
             startMicrophoneRecording()
         } else {
-            startSimulatedRfChatter()
+            _isRecording.value = false
+            _waveformLevels.value = List(24) { 0f }
+            _micLevelPeak.value = 0f
+            _micLevelDb.value = -90
         }
     }
 
@@ -1546,7 +1549,10 @@ class TacticalAudioService(
             android.Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasMic) {
-            if (isCapturePermitted()) startSimulatedRfChatter()
+            _isRecording.value = false
+            _waveformLevels.value = List(24) { 0f }
+            _micLevelPeak.value = 0f
+            _micLevelDb.value = -90
             return
         }
 
@@ -1640,31 +1646,19 @@ class TacticalAudioService(
                         runCatching { attachedNs?.release() }
                         runCatching { attachedAgc?.release() }
                     }
-                } else if (isCapturePermitted()) {
-                    startSimulatedRfChatter()
+                } else {
+                    _isRecording.value = false
+                    _waveformLevels.value = List(24) { 0f }
+                    _micLevelPeak.value = 0f
+                    _micLevelDb.value = -90
                 }
             }.onFailure {
-                if (isCapturePermitted()) startSimulatedRfChatter()
+                _isRecording.value = false
+                _waveformLevels.value = List(24) { 0f }
+                _micLevelPeak.value = 0f
+                _micLevelDb.value = -90
             }
             cleanUpAudioRecord()
-        }
-    }
-
-    private fun startSimulatedRfChatter() {
-        simulationJob?.cancel()
-        simulationJob = scope.launch(Dispatchers.Default) {
-            while (isActive && _isRecording.value) {
-                val current = _waveformLevels.value.toMutableList()
-                current.removeAt(0)
-                val base = 0.35f + 0.5f * sin(System.currentTimeMillis() / 90.0).toFloat()
-                val jitter = (Random.nextFloat() - 0.5f) * 0.25f
-                val barVal = (base + jitter).coerceIn(0.08f, 0.95f)
-                current.add(barVal)
-                _waveformLevels.value = current
-                _micLevelPeak.value = barVal
-                _micLevelDb.value = -18
-                delay(45)
-            }
         }
     }
 

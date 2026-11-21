@@ -111,6 +111,7 @@ fun SettingsScreen(
     onCheckForUpdateNow: () -> Unit = {},
     onToggleBell202Modem: () -> Unit = {},
     onTransmitBell202Chirp: () -> Unit = {},
+    onPurgePhantomPeers: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -3419,7 +3420,7 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Ultrasonic Verify Key", fontSize = 11.sp, maxLines = 1)
+                        Text("Bell 202 Key Chirp", fontSize = 11.sp, maxLines = 1)
                     }
                 }
 
@@ -3798,6 +3799,33 @@ fun SettingsScreen(
                         )
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onPurgePhantomPeers,
+                        shape = btnShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.amber),
+                        modifier = Modifier.testTag("purge_phantom_peers_btn")
+                    ) {
+                        Text(
+                            text = "PURGE CACHED / PHANTOM PEERS",
+                            color = p.amber,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (state.lastPurgeStatus.isNotBlank()) {
+                    Text(
+                        text = state.lastPurgeStatus,
+                        color = p.emerald,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    )
+                }
                 if (state.updateCheckStatus.isNotBlank()) {
                     Text(
                         text = state.updateCheckStatus,
@@ -3811,7 +3839,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.4.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.4.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

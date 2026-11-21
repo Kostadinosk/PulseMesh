@@ -30,14 +30,7 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify tactical root detector probe`() {
-    val probe = RootDetector.executeProbe(forceSimulateOnePlus15Root = true)
-    assertTrue(probe.isRooted)
-    assertTrue(probe.hasSusFs)
-    assertEquals("OnePlus 15 CN (Rooted / KernelSU Next + SusFS)", probe.rootType)
-    assertTrue(probe.probeLogs.isNotEmpty())
-
-    // Verify real checkRootAccess executes and records valid probe logs & raw id output
-    val realProbe = RootDetector.checkRootAccess()
+    val realProbe = RootDetector.executeProbe()
     assertTrue(realProbe.probeLogs.isNotEmpty())
     if (realProbe.isRooted) {
       assertTrue(realProbe.rawIdOutput?.contains("uid=0(root)") == true)

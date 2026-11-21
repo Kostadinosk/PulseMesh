@@ -565,6 +565,45 @@ class DevicePreferences(context: Context) {
         }
     }
 
+    /**
+     * Automatic migration & on-demand purge removing any legacy bot username claims,
+     * bot peer public keys, and bot-named mesh groups left over from earlier builds
+     * without touching real user chats or account data.
+     */
+    fun purgeLegacyBotRecords(): Int {
+        var removed = 0
+        val allClaims = getAllKnownUsernameClaims()
+        val cleanClaims = allClaims.filterNot { claim ->
+            com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(claim.username) ||
+                com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(claim.displayName)
+        }
+        if (cleanClaims.size < allClaims.size) {
+            val removedIds = allClaims.filter { it !in cleanClaims }.map { it.nodeId }
+            removed += (allClaims.size - cleanClaims.size)
+            val arr = org.json.JSONArray()
+            cleanClaims.forEach { arr.put(it.toJson()) }
+            val editor = prefs.edit().putString("known_username_claims_json", arr.toString())
+            for (rid in removedIds) {
+                val norm = rid.trim().uppercase().removePrefix("0X")
+                if (norm.isNotBlank()) {
+                    editor.remove("peer_pubkey_$norm")
+                    editor.remove("peer_pubkey_pending_$norm")
+                }
+            }
+            editor.apply()
+        }
+
+        val allGroups = loadMeshGroups()
+        val cleanGroups = allGroups.filterNot { grp ->
+            com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(grp.groupName)
+        }
+        if (cleanGroups.size < allGroups.size) {
+            removed += (allGroups.size - cleanGroups.size)
+            saveMeshGroups(cleanGroups)
+        }
+        return removed
+    }
+
     // =========================================================================
     // PULSEMESH v1.1 TACTICAL UPGRADES PERSISTENCE
     // =========================================================================

@@ -1108,4 +1108,74 @@ class FullFeatureVerificationTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun `verify v1_4_2 zero-bot filter and legacy bot storage purge preserves real users`() {
+        for (bot in listOf("Bravo Relay", "Alpha Relay", "Charlie Relay", "Delta Relay", "Mesh Relay", "bravo_far", "Squad Alpha", "Alpha-1", "Bot-42", "Fake Node")) {
+            assertTrue("$bot must be blocked", com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(bot))
+        }
+        assertFalse("Real human callsign must not be blocked", com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign("Kostas"))
+        assertFalse("Real human callsign must not be blocked", com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign("Nikos-Phone"))
+
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val chatMgr = PersistentChatManager(app)
+        chatMgr.savePacket(
+            "dm_0xB001",
+            MeshPacket(
+                id = "bot_msg_1",
+                sourceId = "0xB001",
+                destId = "0x1111",
+                sourceCallsign = "Bravo Relay",
+                type = PacketType.TEXT,
+                content = "Legacy bot ping",
+                hops = 0,
+                rawHexBadge = "",
+                isIncoming = true
+            )
+        )
+        chatMgr.savePacket(
+            "dm_0x9999",
+            MeshPacket(
+                id = "real_msg_1",
+                sourceId = "0x9999",
+                destId = "0x1111",
+                sourceCallsign = "Kostas",
+                type = PacketType.TEXT,
+                content = "Real message from friend",
+                hops = 0,
+                rawHexBadge = "",
+                isIncoming = true
+            )
+        )
+        val purgedChat = chatMgr.purgeCachedFakeThreads()
+        assertTrue("Bravo Relay bot thread must be purged", purgedChat >= 1)
+        assertTrue("Bravo Relay DM thread must be gone", chatMgr.getPacketsForThread("dm_0xB001").isEmpty())
+        assertEquals(1, chatMgr.getPacketsForThread("dm_0x9999").size)
+
+        val prefs = DevicePreferences(app)
+        prefs.saveUsernameClaim(
+            com.example.crypto.UsernameClaimRecord(
+                username = "bravo_far",
+                displayName = "Bravo Relay",
+                nodeId = "0xB001",
+                publicKeyBase64 = "",
+                saltHex = "00112233",
+                claimedAt = System.currentTimeMillis()
+            )
+        )
+        prefs.saveUsernameClaim(
+            com.example.crypto.UsernameClaimRecord(
+                username = "kostas_real",
+                displayName = "Kostas",
+                nodeId = "0x9999",
+                publicKeyBase64 = "",
+                saltHex = "44556677",
+                claimedAt = System.currentTimeMillis()
+            )
+        )
+        val purgedPrefs = prefs.purgeLegacyBotRecords()
+        assertTrue("Legacy bot claim must be purged", purgedPrefs >= 1)
+        assertNull(prefs.getAllKnownUsernameClaims().firstOrNull { it.username == "bravo_far" })
+        assertNotNull("Real user claim must remain untouched", prefs.getAllKnownUsernameClaims().firstOrNull { it.username == "kostas_real" })
+    }
 }

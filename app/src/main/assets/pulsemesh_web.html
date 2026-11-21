@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.4.1)</title>
-  <meta name="description" content="Official PulseMesh v1.4.1 Web &amp; iPhone PWA client with WebRTC P2P Opus + DataChannel, Bell 202 Acoustic AFSK Modem, Local WebSockets, and 2-Tier Root CA SSL." />
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.4.2)</title>
+  <meta name="description" content="Official PulseMesh v1.4.2 Web &amp; iPhone PWA client with WebRTC P2P Opus + DataChannel, Bell 202 Acoustic AFSK Modem, Local WebSockets, and 2-Tier Root CA SSL." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -895,7 +895,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.4.1</span>
+      <span class="version-tag">v1.4.2</span>
     </div>
     <div class="topbar-right">
       <a class="pill emerald" id="webUpdatePill" href="https://github.com/Kostadinosk/PulseMesh/releases/latest" target="_blank" rel="noopener" style="display:none;text-decoration:none;font-weight:800;">⬆ Update</a>
@@ -1244,10 +1244,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.4.1)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.4.2)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
             Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>WebRTC P2P Opus + DTLS DataChannels</strong>, <strong>Bell 202 Acoustic AFSK (1200/2200 Hz)</strong> air-gap modem, <strong>RFC 6455 Local WebSockets (<code>/ws</code>)</strong>, <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>2-Tier Local Root CA SSL (:8443) + Zero-Warning HTTP (:8080)</strong>, and <strong>AES-256-GCM</strong>.<br /><br />
-            <strong>PulseMesh v1.4.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            <strong>PulseMesh v1.4.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1269,7 +1269,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.4.1 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.4.2 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -1284,7 +1284,7 @@
       <div class="setup-pane active" id="spane-quick">
         <div class="field">
           <label for="wizCallsign">Operator Callsign</label>
-          <input type="text" id="wizCallsign" placeholder="e.g. Kostas-iPhone or Alpha-1" maxlength="24" />
+          <input type="text" id="wizCallsign" placeholder="e.g. Kostas-iPhone or Alex" maxlength="24" />
         </div>
         <div class="field">
           <label for="wizPassphrase">Mesh Channel Passphrase (must match team)</label>
@@ -1414,7 +1414,7 @@
       <h3 style="font-family:var(--mono);font-size:14px;color:var(--emerald);">DROP SHARED TACTICAL PIN</h3>
       <div class="field">
         <label for="wpTitle">Pin Title</label>
-        <input type="text" id="wpTitle" placeholder="e.g. Alpha Rally Point" maxlength="40" />
+        <input type="text" id="wpTitle" placeholder="e.g. Trailhead Camp" maxlength="40" />
       </div>
       <div class="field">
         <label for="wpType">Pin Category</label>
@@ -2174,8 +2174,24 @@
       }).catch(() => {});
     }
 
+    function isBlockedFakeCallsign(cs) {
+      const c = String(cs || "").trim();
+      if (!c) return false;
+      const lower = c.toLowerCase();
+      return lower === "bravo relay" || lower === "alpha relay" || lower === "charlie relay" ||
+        lower === "delta relay" || lower === "echo relay" || lower === "foxtrot relay" ||
+        lower === "mesh relay" || lower === "mesh peer" || lower === "relay node" || lower === "relay bot" ||
+        lower === "peer node" || lower === "remote operator" || lower === "security gateway" ||
+        lower === "bot" || lower === "demo" || lower === "fake" || lower === "simulator" ||
+        lower === "squad alpha" || lower === "alpha-1" || lower === "bravo_far" ||
+        lower === "basecamp" || lower === "overwatch" || lower === "ghost node" ||
+        lower.endsWith(" relay") || lower.startsWith("bot-") || lower.startsWith("relay-") ||
+        lower.startsWith("peer-") || lower.includes("fake") || lower.includes("dummy") || lower.includes("simulated");
+    }
+
     async function ingestWirePacket(pkt, sourceTransportLabel) {
       if (!pkt || !pkt.packetId || state.seenIds.has(pkt.packetId)) return;
+      if (pkt.srcCallsign && isBlockedFakeCallsign(pkt.srcCallsign)) return;
       state.seenIds.add(pkt.packetId);
       spikeWaveRibbon();
       if (state.seenIds.size > 2000) state.seenIds.delete(state.seenIds.values().next().value);
@@ -2664,7 +2680,7 @@
         packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
         srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: "BROADCAST",
         type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
-        payload: "PulseMesh Web/iPhone Node v1.4.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
+        payload: "PulseMesh Web/iPhone Node v1.4.2", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
       if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
@@ -4491,7 +4507,7 @@
     // Trip Log JSON & GPX Trail Export
     document.getElementById("exportTripJsonBtn")?.addEventListener("click", () => {
       const payload = JSON.stringify({
-        exportedAt: Date.now(), version: "1.4.1", nodeId: state.nodeId, callsign: state.callsign,
+        exportedAt: Date.now(), version: "1.4.2", nodeId: state.nodeId, callsign: state.callsign,
         breadcrumbs: state.breadcrumbs || [],
         waypoints: Array.from(state.waypoints.values()), packets: state.packets
       }, null, 2);
@@ -4507,7 +4523,7 @@
         ? state.breadcrumbs
         : (state.lat != null && state.lng != null ? [{ lat: state.lat, lng: state.lng, ts: Date.now() }] : []);
       const trkpts = pts.map((p) => `      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><time>${new Date(p.ts || Date.now()).toISOString()}</time></trkpt>`).join("\n");
-      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.4.1">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PulseMesh v1.4.2">\n  <trk>\n    <name>PulseMesh Trail (${escapeHtml(state.callsign)})</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
       const blob = new Blob([gpx], { type: "application/gpx+xml" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -4941,7 +4957,7 @@
       if (localInfo) await startLocalDirectMode(localInfo);
       else {
         await startHybridNtfyMode();
-        checkWebUpdateOnline("1.4.1");
+        checkWebUpdateOnline("1.4.2");
       }
     }
 

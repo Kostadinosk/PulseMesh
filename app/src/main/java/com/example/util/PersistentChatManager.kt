@@ -22,12 +22,52 @@ class PersistentChatManager(private val context: Context) {
     private val memoryCache = ConcurrentHashMap<String, MutableList<MeshPacket>>()
 
     init {
-        // Purge old chat_history.json if exists to remove legacy bots
+        // Purge all legacy chat_history files (v1..v6) so hardcoded bots from earlier installs can never resurface
         runCatching {
-            val oldFile = File(context.filesDir, "chat_history.json")
-            if (oldFile.exists()) oldFile.delete()
+            val legacyNames = listOf(
+                "chat_history.json",
+                "chat_history_v1.json",
+                "chat_history_v2.json",
+                "chat_history_v3.json",
+                "chat_history_v4.json",
+                "chat_history_v5.json",
+                "chat_history_v6.json"
+            )
+            for (name in legacyNames) {
+                val oldFile = File(context.filesDir, name)
+                if (oldFile.exists()) oldFile.delete()
+            }
         }
         loadFromDisk()
+    }
+
+    /**
+     * Immediately removes any persisted messages or DM threads belonging to blocked legacy bot callsigns.
+     * Preserves all real user conversations and channels.
+     */
+    @Synchronized
+    fun purgeCachedFakeThreads(): Int {
+        var removedCount = 0
+        val iter = memoryCache.entries.iterator()
+        while (iter.hasNext()) {
+            val entry = iter.next()
+            val tid = entry.key
+            val list = entry.value
+            val before = list.size
+            list.removeAll { pkt ->
+                com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(pkt.sourceCallsign) ||
+                    isBlockedSystemPayload(pkt.content)
+            }
+            removedCount += (before - list.size)
+            if (tid.startsWith("dm_") && list.isEmpty()) {
+                iter.remove()
+                removedCount++
+            }
+        }
+        if (removedCount > 0) {
+            persistToDisk()
+        }
+        return removedCount
     }
 
     @Synchronized
@@ -55,8 +95,11 @@ class PersistentChatManager(private val context: Context) {
                     val contentStr = item.optString("content", "")
                     val cs = item.optString("sourceCallsign", "Operator")
                     val isIncoming = item.optBoolean("isIncoming", false)
-                    if (isBlockedSystemPayload(contentStr)) continue
-                    if (isIncoming && com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(cs)) {
+                    if (isBlockedSystemPayload(contentStr)) {
+                        purgedLegacyFakeThreads = true
+                        continue
+                    }
+                    if (com.example.service.OffGridBleMeshEngine.isBlockedFakeCallsign(cs)) {
                         purgedLegacyFakeThreads = true
                         continue
                     }

@@ -168,6 +168,22 @@ class OffGridBleMeshEngine(
                 c.equals("Bot", ignoreCase = true) ||
                 c.equals("Mesh Peer", ignoreCase = true) ||
                 c.equals("Mesh Relay", ignoreCase = true) ||
+                c.equals("Bravo Relay", ignoreCase = true) ||
+                c.equals("Alpha Relay", ignoreCase = true) ||
+                c.equals("Charlie Relay", ignoreCase = true) ||
+                c.equals("Delta Relay", ignoreCase = true) ||
+                c.equals("Echo Relay", ignoreCase = true) ||
+                c.equals("Foxtrot Relay", ignoreCase = true) ||
+                c.equals("Relay Node", ignoreCase = true) ||
+                c.equals("Relay Bot", ignoreCase = true) ||
+                c.equals("Squad Alpha", ignoreCase = true) ||
+                c.equals("Alpha-1", ignoreCase = true) ||
+                c.equals("bravo_far", ignoreCase = true) ||
+                c.equals("Basecamp", ignoreCase = true) ||
+                c.equals("Overwatch", ignoreCase = true) ||
+                c.equals("Ghost Node", ignoreCase = true) ||
+                c.equals("Sentinel", ignoreCase = true) ||
+                c.equals("Valkyrie", ignoreCase = true) ||
                 c.equals("Security Gateway", ignoreCase = true) ||
                 c.equals("Discovered Mesh Peer", ignoreCase = true) ||
                 c.equals("N/A", ignoreCase = true) ||
@@ -182,12 +198,15 @@ class OffGridBleMeshEngine(
                 c.startsWith("Peer Node", ignoreCase = true) ||
                 c.startsWith("Peer-", ignoreCase = true) ||
                 c.startsWith("Peer ", ignoreCase = true) ||
+                c.startsWith("Relay-", ignoreCase = true) ||
+                c.startsWith("Ranger-", ignoreCase = true) ||
                 c.startsWith("Remote Operator", ignoreCase = true) ||
                 c.startsWith("Bot-", ignoreCase = true) ||
                 c.startsWith("Phone 1", ignoreCase = true) ||
                 c.startsWith("Phone 2", ignoreCase = true) ||
                 c.startsWith("Phone-1", ignoreCase = true) ||
                 c.startsWith("Phone-2", ignoreCase = true) ||
+                lower.endsWith(" relay") ||
                 lower.startsWith("phone1") ||
                 lower.startsWith("phone2") ||
                 lower.startsWith("server-") ||

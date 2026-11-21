@@ -142,23 +142,7 @@ object RootDetector {
     }
 
     /**
-     * Legacy/Testing probe bridge.
+     * Real root probe entrypoint (never simulates root access).
      */
-    fun executeProbe(forceSimulateOnePlus15Root: Boolean = false): RootProbeResult {
-        if (forceSimulateOnePlus15Root) {
-            return RootProbeResult(
-                isRooted = true,
-                rootType = "OnePlus 15 CN (Rooted / KernelSU Next + SusFS)",
-                hasSusFs = true,
-                seLinuxMode = "Permissive / SusFS Hooked",
-                binaryPath = "/data/adb/ksu/bin/su",
-                probeLogs = listOf(
-                    "SIMULATED: OnePlus 15 CN root profile active.",
-                    "VERIFIED: uid=0(root)"
-                ),
-                rawIdOutput = "uid=0(root) gid=0(root) groups=0(root) context=u:r:su:s0"
-            )
-        }
-        return checkRootAccess()
-    }
+    fun executeProbe(): RootProbeResult = checkRootAccess()
 }

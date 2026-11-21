@@ -38,15 +38,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
-data class RfSimNodePos(
-    val nodeId: String,
-    val callsign: String,
-    var x: Float,
-    var y: Float,
-    val isSelf: Boolean = false,
-    val isRepeater: Boolean = false
-)
-
 data class MeshUiState(
     // Top Status Bar & Operator Identity
     val localNodeId: String = "0x4F2A",
@@ -135,17 +126,11 @@ data class MeshUiState(
     val isPttPressed: Boolean = false,
     val pttTargetNodeId: String = "ALL (Broadcast)",
     val callDurationSec: Int = 0,
-    val packetLossPercent: Float = 0.8f,
-    val jitterMs: Int = 14,
+    val packetLossPercent: Float = 0f,
+    val jitterMs: Int = 0,
     val voiceHopStep: String = "Ready",
     val useLiveMicrophone: Boolean = true,
-
-    // RF Simulator
-    val simNodes: List<RfSimNodePos> = emptyList(),
-    val simPacketRingRadius: Float = 0f,
-    val simPacketRingActive: Boolean = false,
-    val simPacketType: String = "IDLE",
-    val simContentionLog: List<String> = emptyList(),
+    val lastPurgeStatus: String = "",
 
     // Root RF Super-Node Booster (Default unrooted)
     val bleCodedPhyEnabled: Boolean = true,
@@ -639,10 +624,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // Automatic startup migration: scrub any legacy bot claims/threads (e.g. "Bravo Relay") left from older installs
+        prefs.purgeLegacyBotRecords()
+        persistentChatManager.purgeCachedFakeThreads()
         initializeNodes()
         initializeWaypoints()
         initializePackets()
-        initializeSimNodes()
         startTelemetrySimulation()
         verifyRootStatus()
 
@@ -1574,15 +1561,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         refreshConversationsList()
     }
 
-    private fun initializeSimNodes() {
-        val selfId = _uiState.value.localNodeId
-        val selfCallsign = "${_uiState.value.operatorCallsign} (Self)"
-        val simList = listOf(
-            RfSimNodePos(selfId, selfCallsign, 120f, 200f, isSelf = true)
-        )
-        _uiState.update { it.copy(simNodes = simList) }
-    }
-
     private fun startTelemetrySimulation() {
         telemetryTickJob?.cancel()
         telemetryTickJob = viewModelScope.launch {
@@ -1733,14 +1711,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val updatedSimNodes = current.simNodes.map { node ->
-                if (node.isSelf) {
-                    node.copy(nodeId = nodeId, callsign = "$callsign (Self)")
-                } else {
-                    node
-                }
-            }
-
             current.copy(
                 localNodeId = nodeId,
                 operatorCallsign = callsign,
@@ -1754,7 +1724,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 x25519PublicKey = activePub,
                 hardwareMismatchReport = mismatch,
                 nodes = updatedNodes,
-                simNodes = updatedSimNodes,
                 showSetupWizard = false,
                 showMismatchWarningDialog = mismatch.isMismatched && !current.isMismatchOverrideConfirmed
             )
@@ -4024,8 +3993,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         callDurationSec = seconds,
                         voiceHopStep = hopDesc,
-                        packetLossPercent = (0.5f + Random.nextFloat() * 1.5f),
-                        jitterMs = Random.nextInt(12, 22)
+                        packetLossPercent = 0f,
+                        jitterMs = it.jitterMs
                     )
                 }
             }
@@ -6894,51 +6863,34 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(30)
     }
 
-    fun updateSimNodePosition(nodeId: String, newX: Float, newY: Float) {
-        val updated = _uiState.value.simNodes.map { node ->
-            if (node.nodeId == nodeId) {
-                node.copy(x = newX.coerceIn(30f, 370f), y = newY.coerceIn(40f, 360f))
-            } else {
-                node
+    fun purgePhantomAndCachedPeers(): Int {
+        var removed = 0
+        val staleIter = peersBackingMap.entries.iterator()
+        while (staleIter.hasNext()) {
+            val e = staleIter.next()
+            if (isBlockedFakeCallsign(e.value.callsign)) {
+                staleIter.remove()
+                removed++
             }
         }
-        _uiState.update { it.copy(simNodes = updated) }
-    }
-
-    fun triggerSimFlood(type: String) {
-        val selfId = _uiState.value.localNodeId
-        triggerHaptic(50)
-        simAnimJob?.cancel()
-        simAnimJob = viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    simPacketRingActive = true,
-                    simPacketRingRadius = 10f,
-                    simPacketType = type,
-                    simContentionLog = listOf(
-                        "TX START: Node $selfId broadcasts $type (Hop Limit: 5)",
-                        "CONVOLUTION: Evaluating RSSI-weighted contention delay..."
-                    )
-                )
-            }
-
-            for (r in 10..220 step 15) {
-                _uiState.update { it.copy(simPacketRingRadius = r.toFloat()) }
-                delay(40)
-            }
-
-            _uiState.update {
-                it.copy(
-                    simContentionLog = it.simContentionLog + listOf(
-                        "PROPAGATION: Wave reached simulator boundary.",
-                        "MANAGED FLOODING: Contention timers evaluated on test topology."
-                    )
-                )
-            }
-
-            delay(1200)
-            _uiState.update { it.copy(simPacketRingActive = false) }
+        removed += persistentChatManager.purgeCachedFakeThreads()
+        removed += prefs.purgeLegacyBotRecords()
+        _uiState.update { cur ->
+            val cleanNodes = cur.nodes.filter { n -> n.isSelf || !isBlockedFakeCallsign(n.callsign) }
+            cur.copy(
+                nodes = cleanNodes,
+                activePeerCount = cleanNodes.count { !it.isSelf },
+                meshGroups = prefs.loadMeshGroups(),
+                lastPurgeStatus = if (removed > 0) {
+                    "Purged $removed legacy/phantom bot record(s)"
+                } else {
+                    "Clean: 0 phantom or legacy bot records found"
+                }
+            )
         }
+        refreshConversationsList()
+        triggerHaptic(40)
+        return removed
     }
 
     fun verifyRootStatus() {
@@ -6992,10 +6944,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleUltrasonicModem() {
-        val next = !_uiState.value.ultrasonicModemEnabled
-        ultrasonicModem.setEnabled(next)
-        _uiState.update { it.copy(ultrasonicModemEnabled = next) }
-        triggerHaptic(35)
+        // Retired unreliable 18.5 kHz Ultrasonic in v1.4.2 in favor of audible Bell 202 AFSK (1200/2200 Hz)
+        toggleBell202Modem()
     }
 
     fun toggleBleCodedPhy() {
@@ -7308,8 +7258,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun transmitUltrasonicKeyVerifyChirp() {
         val st = _uiState.value
-        val pubKey = st.x25519PublicKey.ifBlank { prefs.x25519PublicKey }
-        ultrasonicModem.transmitKeyVerificationChirp(st.localNodeId, pubKey)
+        val fp = st.x25519Fingerprint.ifBlank { prefs.fingerprint }.take(16)
+        bell202Modem.transmitMessage(
+            com.example.service.Bell202AcousticModem.TYPE_KEY_VERIFY,
+            st.localNodeId,
+            "KEY:$fp"
+        )
         triggerHaptic(40)
     }
 
@@ -7818,7 +7772,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.4.1")
+            put("version", "1.4.2")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7990,7 +7944,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.4.1")
+            put("version", "1.4.2")
             put("webrtcSignaling", true)
             put("bell202Acoustic", true)
             put("sslEnabled", state.webPortalStatus.sslEnabled)

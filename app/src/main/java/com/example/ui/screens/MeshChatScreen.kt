@@ -738,7 +738,7 @@ private fun ConversationListView(
                     OutlinedTextField(
                         value = newGroupName,
                         onValueChange = { newGroupName = it },
-                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Group Name (e.g., Squad Alpha)", "Όνομα Ομάδας (π.χ. Ομάδα Α)"), color = p.textSecondary) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Group Name (e.g., Trail Team)", "Όνομα Ομάδας (π.χ. Ομάδα Πεζοπορίας)"), color = p.textSecondary) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = p.cyan,
@@ -861,7 +861,7 @@ private fun ConversationListView(
                                 .filter { it.isNotBlank() }
                                 .forEach { chosenPeers.add(it) }
                         }
-                        val finalName = newGroupName.trim().ifBlank { com.example.util.AppStrings.tr(state.appLanguage, "Squad Alpha", "Ομάδα Άλφα") }
+                        val finalName = newGroupName.trim().ifBlank { com.example.util.AppStrings.tr(state.appLanguage, "Mesh Group", "Ομάδα Mesh") }
                         onCreateGroup(finalName, chosenPeers.distinct())
                         showCreateGroupDialog = false
                     },
@@ -944,7 +944,7 @@ private fun ConversationListView(
                     OutlinedTextField(
                         value = connectUsernameInput,
                         onValueChange = { connectUsernameInput = it.lowercase().replace(" ", "") },
-                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Friend @username (e.g. bravo_far)", "Φίλος @username (π.χ. nikos_m)"), color = p.textSecondary) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Friend @username (e.g. alex_k)", "Φίλος @username (π.χ. nikos_m)"), color = p.textSecondary) },
                         prefix = { Text("@", color = p.cyan, fontWeight = FontWeight.Bold) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(

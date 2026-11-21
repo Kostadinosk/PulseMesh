@@ -623,6 +623,7 @@ class MainActivity : ComponentActivity() {
                                         onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
                                         onToggleBell202Modem = { viewModel.toggleBell202Modem() },
                                         onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
+                                        onPurgePhantomPeers = { viewModel.purgePhantomAndCachedPeers() },
                                     )
                                 } else {
                                     Column(
@@ -809,6 +810,7 @@ class MainActivity : ComponentActivity() {
                                                 onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
                                                 onToggleBell202Modem = { viewModel.toggleBell202Modem() },
                                                 onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
+                                                onPurgePhantomPeers = { viewModel.purgePhantomAndCachedPeers() },
                                             )
                                         } else {
                                             RootBoosterScreen(
