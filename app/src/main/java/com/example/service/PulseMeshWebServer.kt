@@ -929,7 +929,13 @@ class PulseMeshWebServer(
                     }
 
                     (method == "GET" || isHead) && path == "/api/info" -> {
-                        val info = buildInfoJson(_status.value.portalUrl, activeClients.size)
+                        val info = buildInfoJson(_status.value.portalUrl, activeClients.size).apply {
+                            put("httpsPortalUrl", _status.value.httpsPortalUrl)
+                            put("httpsPort", _status.value.httpsPort)
+                            put("sslEnabled", _status.value.sslEnabled)
+                            put("caCertUrl", "/api/ca.crt")
+                            put("iosProfileUrl", "/api/ca.mobileconfig")
+                        }
                         writeJson(output, 200, info.toString(), headOnly = isHead, keepAlive = keepAlive)
                     }
 
@@ -937,6 +943,63 @@ class PulseMeshWebServer(
                         val der = LocalSelfSignedTlsFactory.getCurrentCertificateDer(context)
                         if (der != null && der.isNotEmpty()) {
                             writeResponse(output, 200, "OK", "application/x-x509-ca-cert", der, headOnly = isHead, keepAlive = keepAlive)
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && (path == "/api/ca.crt" || path == "/api/ca.cer") -> {
+                        val der = LocalSelfSignedTlsFactory.getRootCaCertificateDer(context)
+                        if (der != null && der.isNotEmpty()) {
+                            writeResponse(
+                                output = output,
+                                code = 200,
+                                reason = "OK",
+                                contentType = "application/x-x509-ca-cert",
+                                body = der,
+                                headOnly = isHead,
+                                keepAlive = keepAlive,
+                                contentDisposition = "attachment; filename=\"PulseMesh-Root-CA.crt\""
+                            )
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && path == "/api/ca.pem" -> {
+                        val pem = LocalSelfSignedTlsFactory.getRootCaCertificatePem(context)
+                        if (!pem.isNullOrBlank()) {
+                            writeResponse(
+                                output = output,
+                                code = 200,
+                                reason = "OK",
+                                contentType = "application/x-pem-file",
+                                body = pem.toByteArray(Charsets.UTF_8),
+                                headOnly = isHead,
+                                keepAlive = keepAlive,
+                                contentDisposition = "attachment; filename=\"PulseMesh-Root-CA.pem\""
+                            )
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && path == "/api/ca.mobileconfig" -> {
+                        val profileBytes = LocalSelfSignedTlsFactory.buildIosMobileConfigXml(
+                            context,
+                            _status.value.hostIp.ifBlank { "192.168.43.1" }
+                        )
+                        if (profileBytes != null && profileBytes.isNotEmpty()) {
+                            writeResponse(
+                                output = output,
+                                code = 200,
+                                reason = "OK",
+                                contentType = "application/x-apple-aspen-config",
+                                body = profileBytes,
+                                headOnly = isHead,
+                                keepAlive = keepAlive,
+                                contentDisposition = "attachment; filename=\"PulseMesh-Root-CA.mobileconfig\""
+                            )
                         } else {
                             writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
                         }
@@ -962,7 +1025,8 @@ class PulseMeshWebServer(
                             append("Content-Type: text/event-stream\r\n")
                             append("Cache-Control: no-cache\r\n")
                             append("Connection: keep-alive\r\n")
-                            append("Access-Control-Allow-Origin: *\r\n\r\n")
+                            append("Access-Control-Allow-Origin: *\r\n")
+                            append("Access-Control-Allow-Private-Network: true\r\n\r\n")
                             append(": connected\n\n")
                         }
                         output.write(header.toByteArray(Charsets.UTF_8))
@@ -1200,12 +1264,16 @@ class PulseMeshWebServer(
         cacheControl: String = "no-store",
         headOnly: Boolean = false,
         keepAlive: Boolean = false,
-        contentEncoding: String? = null
+        contentEncoding: String? = null,
+        contentDisposition: String? = null
     ) {
         val header = buildString {
             append("HTTP/1.1 $code $reason\r\n")
             append("Content-Type: $contentType\r\n")
             append("Content-Length: ${body.size}\r\n")
+            if (!contentDisposition.isNullOrBlank()) {
+                append("Content-Disposition: $contentDisposition\r\n")
+            }
             if (!contentEncoding.isNullOrBlank()) {
                 append("Content-Encoding: $contentEncoding\r\n")
                 append("Vary: Accept-Encoding\r\n")
@@ -1214,6 +1282,7 @@ class PulseMeshWebServer(
             append("Access-Control-Allow-Origin: *\r\n")
             append("Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS\r\n")
             append("Access-Control-Allow-Headers: Content-Type\r\n")
+            append("Access-Control-Allow-Private-Network: true\r\n")
             if (keepAlive) {
                 append("Connection: keep-alive\r\n")
                 append("Keep-Alive: timeout=10, max=24\r\n\r\n")

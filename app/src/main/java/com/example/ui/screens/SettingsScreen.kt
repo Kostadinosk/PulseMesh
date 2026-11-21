@@ -1280,18 +1280,12 @@ fun SettingsScreen(
                         } else null
                     }
                     val defaultQrUrl = remember(
-                        state.webPortalStatus.sslEnabled,
-                        state.webPortalStatus.httpsPortalUrl,
                         state.webPortalStatus.portalUrl
                     ) {
-                        if (state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
-                            state.webPortalStatus.httpsPortalUrl
-                        } else {
-                            state.webPortalStatus.portalUrl
-                        }
+                        state.webPortalStatus.portalUrl
                     }
                     var useHttpsForQr by remember(defaultQrUrl) {
-                        mutableStateOf(state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank())
+                        mutableStateOf(false)
                     }
                     val activeQrUrl = if (useHttpsForQr && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
                         state.webPortalStatus.httpsPortalUrl
@@ -1376,9 +1370,9 @@ fun SettingsScreen(
                                         }
                                     } else {
                                         if (isGreek) {
-                                            "Βήμα 2: Στρέψτε την κάμερα για να ανοίξετε το $activeQrUrl εκτός δικτύου (το HTTPS :${state.webPortalStatus.httpsPort} επιτρέπει μικρόφωνο/κλήσεις · Κοινοποίηση -> Προσθήκη στην Αφετηρία)."
+                                            "Βήμα 2: Στρέψτε την κάμερα για να ανοίξετε το $activeQrUrl χωρίς προειδοποίηση SSL (ή εγκαταστήστε με 1 πάτημα το Root CA για HTTPS :${state.webPortalStatus.httpsPort})."
                                         } else {
-                                            "Step 2: Point iPhone Camera here to open $activeQrUrl offline in Safari (HTTPS :${state.webPortalStatus.httpsPort} enables mic calling; Share -> Add to Home Screen)."
+                                            "Step 2: Point iPhone Camera here to open $activeQrUrl with zero SSL warning (inside the portal, use Native Voice Call or tap 1-Tap Root CA for trusted HTTPS :${state.webPortalStatus.httpsPort})."
                                         }
                                     },
                                     style = MaterialTheme.typography.bodySmall.copy(
@@ -1392,27 +1386,27 @@ fun SettingsScreen(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         OutlinedButton(
+                                            onClick = { useHttpsForQr = false },
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (!useHttpsForQr) EmeraldMesh else p.border),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = "HTTP :${state.webPortalStatus.port} (No Warning)",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (!useHttpsForQr) EmeraldMesh else p.textSecondary
+                                            )
+                                        }
+                                        OutlinedButton(
                                             onClick = { useHttpsForQr = true },
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (useHttpsForQr) EmeraldMesh else p.border),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (useHttpsForQr) CyanGateway else p.border),
                                             modifier = Modifier.weight(1f)
                                         ) {
                                             Text(
                                                 text = "HTTPS :${state.webPortalStatus.httpsPort} (SSL)",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (useHttpsForQr) EmeraldMesh else p.textSecondary
-                                            )
-                                        }
-                                        OutlinedButton(
-                                            onClick = { useHttpsForQr = false },
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (!useHttpsForQr) CyanGateway else p.border),
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                text = "HTTP :${state.webPortalStatus.port}",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (!useHttpsForQr) CyanGateway else p.textSecondary
+                                                color = if (useHttpsForQr) CyanGateway else p.textSecondary
                                             )
                                         }
                                     }
@@ -3691,7 +3685,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.3.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.3.2 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

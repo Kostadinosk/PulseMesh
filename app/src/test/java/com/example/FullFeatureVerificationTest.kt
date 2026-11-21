@@ -737,4 +737,35 @@ class FullFeatureVerificationTest {
             com.example.util.AppStrings.weatherTrendLabel("en", "STORM WARNING")
         )
     }
+
+    @Test
+    fun `verify v1_3_2 two-tier Root CA and iOS mobileconfig and ca_crt endpoints`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val (factory, err) = com.example.service.LocalSelfSignedTlsFactory.createSslServerSocketFactory(
+            context = app,
+            extraIps = listOf("192.168.43.1", "192.168.49.1")
+        )
+        assertNotNull("2-Tier SSLServerSocketFactory must succeed: $err", factory)
+
+        val rootDer = com.example.service.LocalSelfSignedTlsFactory.getRootCaCertificateDer(app)
+        val leafDer = com.example.service.LocalSelfSignedTlsFactory.getLeafCertificateDer(app)
+        assertNotNull("Root CA DER must exist", rootDer)
+        assertNotNull("Leaf Cert DER must exist", leafDer)
+
+        val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+        val rootCert = cf.generateCertificate(rootDer!!.inputStream()) as java.security.cert.X509Certificate
+        val leafCert = cf.generateCertificate(leafDer!!.inputStream()) as java.security.cert.X509Certificate
+
+        assertTrue("Root CA must have BasicConstraints CA=TRUE (pathLen >= 0)", rootCert.basicConstraints >= 0)
+        assertEquals("Leaf certificate must have BasicConstraints CA=FALSE (-1)", -1, leafCert.basicConstraints)
+        // Cryptographically verify that the Server Leaf Certificate is signed by the PulseMesh Root CA!
+        leafCert.verify(rootCert.publicKey)
+        rootCert.verify(rootCert.publicKey)
+
+        val mobileConfigBytes = com.example.service.LocalSelfSignedTlsFactory.buildIosMobileConfigXml(app, "192.168.43.1")
+        assertNotNull("iOS .mobileconfig profile must be generated", mobileConfigBytes)
+        val mobileConfigXml = String(mobileConfigBytes!!, Charsets.UTF_8)
+        assertTrue(mobileConfigXml.contains("com.apple.security.root"))
+        assertTrue(mobileConfigXml.contains("PulseMesh Local Root CA"))
+    }
 }

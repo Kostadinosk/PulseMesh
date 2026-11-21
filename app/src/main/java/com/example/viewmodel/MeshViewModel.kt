@@ -7536,7 +7536,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.3.1")
+            put("version", "1.3.2")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7708,7 +7708,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.3.1")
+            put("version", "1.3.2")
             put("sslEnabled", state.webPortalStatus.sslEnabled)
             put("httpsSelfTestPassed", state.webPortalStatus.httpsSelfTestPassed)
             put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)
@@ -8036,12 +8036,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     handleIncomingPacket(wire)
                     sendOmniPacket(wire)
                 }
-                "QUICK_STATUS" -> {
+                "QUICK_STATUS", "CALL_SPEAK" -> {
                     val wire = com.example.service.WireMeshPacket(
                         packetId = submitted.packetId,
                         srcNodeId = srcId,
                         srcCallsign = srcCallsign,
-                        dstNodeId = "ALL",
+                        dstNodeId = submitted.dstNodeId.ifBlank { "ALL" },
                         type = "QUICK_STATUS",
                         payload = submitted.payload.ifBlank { submitted.text },
                         ttl = 7,

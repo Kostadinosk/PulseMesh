@@ -2,20 +2,21 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PulseMesh — Off-Grid Tactical Mesh Messenger &amp; Voice Communicator</title>
-  <meta name="description" content="Off-grid peer-to-peer Android communication over BLE 0xCAFE/0xCAFF, Wi-Fi Direct, Acoustic AFSK, and end-to-end encrypted @username accounts." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>PulseMesh v1.3.2 — Off-Grid Tactical Mesh Messenger &amp; Voice Communicator</title>
+  <meta name="description" content="Off-grid peer-to-peer Android, iPhone PWA &amp; Web communication over BLE 0xCAFE/0xCAFF, Wi-Fi Direct, 2-Tier Root CA SSL Hotspot, Acoustic AFSK, and E2EE @username accounts." />
   <meta name="theme-color" content="#041320" />
   <link rel="icon" type="image/png" sizes="512x512" href="assets/pulsemesh-logo.png?v=2" />
   <link rel="shortcut icon" type="image/png" href="assets/pulsemesh-logo.png?v=2" />
   <link rel="apple-touch-icon" href="assets/pulsemesh-logo.png?v=2" />
   <style>
     :root {
+      --target-size: 24px;
       --bg-canvas: #041320;
       --bg-gradient-1: #072238;
       --bg-gradient-2: #041320;
-      --glass-card: rgba(10, 34, 54, 0.80);
-      --glass-surface: rgba(14, 45, 69, 0.74);
+      --glass-card: rgba(10, 34, 54, 0.84);
+      --glass-surface: rgba(14, 45, 69, 0.78);
       --glass-highlight: rgba(255, 255, 255, 0.14);
       --border-crystal: rgba(60, 184, 240, 0.42);
       --border-bright: rgba(199, 240, 255, 0.65);
@@ -35,12 +36,18 @@
       --code-bg: rgba(3, 12, 22, 0.85);
     }
 
+    @media (pointer: coarse) {
+      :root {
+        --target-size: 44px;
+      }
+    }
+
     html[data-theme="light"] {
       --bg-canvas: #D6F2FF;
       --bg-gradient-1: #EBF9FF;
       --bg-gradient-2: #C2E9FF;
-      --glass-card: rgba(243, 251, 255, 0.86);
-      --glass-surface: rgba(248, 253, 255, 0.82);
+      --glass-card: rgba(243, 251, 255, 0.90);
+      --glass-surface: rgba(248, 253, 255, 0.85);
       --glass-highlight: rgba(255, 255, 255, 0.85);
       --border-crystal: rgba(100, 187, 232, 0.65);
       --border-bright: #FFFFFF;
@@ -66,6 +73,11 @@
       padding: 0;
     }
 
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
       background-color: var(--bg-canvas);
@@ -77,7 +89,25 @@
       color: var(--text-primary);
       line-height: 1.6;
       min-height: 100vh;
-      overflow-x: hidden;
+      min-height: 100dvh;
+      overflow-wrap: break-word;
+    }
+
+    h1, h2, h3 {
+      text-wrap: balance;
+    }
+
+    p, li {
+      text-wrap: pretty;
+    }
+
+    :where(a, code, pre) {
+      overflow-wrap: anywhere;
+    }
+
+    button, select, textarea, input, .btn, .menu-button, .site-menu a {
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
     }
 
     a {
@@ -96,44 +126,45 @@
       padding: 0 24px;
     }
 
-    /* Top Navigation */
-    header.navbar {
+    /* Responsive Top Navigation (modern-web-guidance navbar pattern) */
+    header.navbar.site-header {
       position: sticky;
-      top: 14px;
+      top: 12px;
       z-index: 100;
-      margin: 14px auto 0;
+      margin: 12px auto 0;
       max-width: 1160px;
       padding: 0 24px;
     }
 
     .navbar-inner {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 20px;
+      padding: 10px 18px;
       border-radius: 999px;
       background: var(--glass-card);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       border: 1px solid var(--border-crystal);
       box-shadow: var(--shadow-card);
-      gap: 16px;
-      flex-wrap: wrap;
+      gap: 12px;
     }
 
     .brand {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-weight: 800;
-      font-size: 1.15rem;
+      font-size: 1.12rem;
       letter-spacing: -0.02em;
       color: var(--text-primary);
+      flex-shrink: 0;
     }
 
     .brand img {
-      width: 38px;
-      height: 38px;
+      width: 36px;
+      height: 36px;
       border-radius: 11px;
       border: 1px solid var(--border-bright);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
@@ -150,21 +181,97 @@
       letter-spacing: 0.04em;
     }
 
-    .nav-links {
+    .nav-actions-right {
       display: flex;
       align-items: center;
-      gap: 20px;
-      flex-wrap: wrap;
+      gap: 8px;
     }
 
-    .nav-links a {
-      color: var(--text-secondary);
-      font-weight: 600;
-      font-size: 0.92rem;
-    }
-
-    .nav-links a:hover {
+    .menu-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border-crystal);
+      background: var(--glass-surface);
       color: var(--text-primary);
+      font-weight: 750;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .site-menu {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .site-menu a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-weight: 650;
+      font-size: 0.91rem;
+      white-space: nowrap;
+    }
+
+    .site-menu a:hover,
+    .site-menu a[aria-current="page"] {
+      color: var(--text-primary);
+      background: rgba(56, 207, 255, 0.12);
+    }
+
+    /* Narrow (mobile popover menu) vs Wide (inline bar) */
+    .site-header:not(.is-wide) .site-menu {
+      position: fixed;
+      inset: auto;
+      top: 74px;
+      right: 16px;
+      left: 16px;
+      max-width: 360px;
+      margin-left: auto;
+      padding: 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border-bright);
+      background: var(--glass-card);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      box-shadow: var(--shadow-card);
+      z-index: 120;
+    }
+
+    .site-header:not(.is-wide) .site-menu:popover-open {
+      display: grid;
+      gap: 4px;
+    }
+
+    @supports not selector(:popover-open) {
+      .site-header:not(.is-wide) .site-menu {
+        display: none;
+      }
+      .site-header:not(.is-wide) .site-menu.is-open {
+        display: grid;
+        gap: 4px;
+      }
+    }
+
+    .site-header.is-wide .menu-button {
+      display: none;
+    }
+
+    .site-header.is-wide .site-menu {
+      position: static;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
     }
 
     .theme-btn {
@@ -180,6 +287,7 @@
       align-items: center;
       gap: 6px;
       box-shadow: inset 0 1px 0 var(--glass-highlight);
+      white-space: nowrap;
     }
 
     /* Hero Section */
@@ -411,7 +519,7 @@
     /* Feature Cards Grid */
     .grid-3 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
       gap: 20px;
     }
 
@@ -467,8 +575,9 @@
       font-size: 0.94rem;
     }
 
-    /* Transport Layers Table */
+    /* Responsive Transport Layers Table (modern-web-guidance responsive-table pattern) */
     .table-wrap {
+      container-type: inline-size;
       overflow-x: auto;
       background: var(--glass-card);
       border: 1px solid var(--border-crystal);
@@ -476,7 +585,14 @@
       box-shadow: var(--shadow-card);
     }
 
+    .table-wrap:focus-visible {
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: 3px;
+    }
+
     table {
+      --label-2: "Protocol / Ports";
+      --label-3: "Primary Role";
       width: 100%;
       border-collapse: collapse;
       text-align: left;
@@ -488,7 +604,10 @@
       border-bottom: 1px solid var(--border-crystal);
     }
 
-    th {
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
       font-size: 0.76rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -496,8 +615,54 @@
       background: var(--glass-surface);
     }
 
+    tbody th {
+      font-weight: 780;
+      color: var(--text-primary);
+      background: transparent;
+    }
+
+    tr:last-child th,
     tr:last-child td {
       border-bottom: none;
+    }
+
+    @container (width < 640px) {
+      thead {
+        display: none;
+      }
+      tbody, tr, th, td {
+        display: block;
+      }
+      tbody tr {
+        padding: 16px;
+        border-bottom: 1px solid var(--border-crystal);
+      }
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+      tbody th {
+        padding: 0 0 8px 0;
+        border-bottom: 1px dashed var(--border-crystal);
+        margin-bottom: 8px;
+        font-size: 1rem;
+        color: var(--accent-emerald);
+      }
+      tbody td {
+        padding: 6px 0;
+        border-bottom: none;
+        display: grid;
+        gap: 3px;
+      }
+      tbody td::before {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+      tbody td:nth-child(2)::before { content: var(--label-2); }
+      tbody td:nth-child(3)::before { content: var(--label-3); }
     }
 
     code {
@@ -525,7 +690,7 @@
     /* Footer */
     footer {
       margin-top: 48px;
-      padding: 36px 0 48px;
+      padding: 36px 0 calc(48px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--border-crystal);
       color: var(--text-muted);
       font-size: 0.88rem;
@@ -539,35 +704,105 @@
       gap: 16px;
     }
 
+    /* Mobile Fixed Quick-Action Bottom Bar */
+    .mobile-action-bar {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 95;
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: var(--glass-card);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-top: 1px solid var(--border-crystal);
+      box-shadow: 0 -10px 30px rgba(0, 8, 18, 0.5);
+      gap: 10px;
+    }
+
+    .mobile-action-bar .btn {
+      flex: 1;
+      padding: 10px 12px;
+      font-size: 0.86rem;
+      border-radius: 13px;
+    }
+
     @media (max-width: 880px) {
       .hero {
         grid-template-columns: 1fr;
-        padding: 40px 0 28px;
+        padding: 36px 0 24px;
+        gap: 24px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .container,
+      header.navbar.site-header {
+        padding: 0 16px;
+      }
+      section {
+        padding: 30px 0;
+      }
+      .glass-card,
+      .hud-card {
+        padding: 18px;
+        border-radius: 18px;
+      }
+      footer {
+        padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+      }
+      .mobile-action-bar {
+        display: flex;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .cta-group {
+        flex-direction: column;
+      }
+      .cta-group .btn {
+        width: 100%;
+      }
+      .hud-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .brand span:not(.brand-badge) {
+        font-size: 1rem;
+      }
+      #themeLabel {
+        font-size: 0.76rem;
       }
     }
   </style>
 </head>
 <body>
-  <header class="navbar">
-    <div class="navbar-inner">
-      <a href="#" class="brand">
+  <header class="navbar site-header is-wide">
+    <nav class="navbar-inner" aria-label="Main">
+      <a href="index.html" class="brand" aria-current="page">
         <img src="assets/pulsemesh-logo.png?v=2" alt="PulseMesh Icon" />
         <span>PulseMesh</span>
-        <span class="brand-badge">v1.3.1</span>
+        <span class="brand-badge">v1.3.2</span>
       </a>
-      <nav class="nav-links">
-        <a href="web/" style="color:var(--accent-emerald);font-weight:800;">iPhone &amp; Web App</a>
-        <a href="#features">Capabilities</a>
-        <a href="#transports">Transports</a>
-        <a href="#security">Security</a>
-        <a href="#build">Build &amp; Install</a>
-        <a href="contact.html">Contact</a>
-        <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener">GitHub</a>
+      <ul id="site-menu" class="site-menu nav-links" popover="auto">
+        <li><a href="web/" style="color:var(--accent-emerald);font-weight:800;">iPhone &amp; Web App</a></li>
+        <li><a href="#features">Capabilities</a></li>
+        <li><a href="#transports">Transports</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#build">Build &amp; Install</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener">GitHub</a></li>
+      </ul>
+      <div class="nav-actions-right">
         <button class="theme-btn" id="themeToggle" type="button" aria-label="Toggle Frutiger Aero Theme">
           <span id="themeLabel">☀ Daylight Aero</span>
         </button>
-      </nav>
-    </div>
+        <button class="menu-button" type="button" popovertarget="site-menu" aria-expanded="false" aria-controls="site-menu">
+          ☰ Menu
+        </button>
+      </div>
+    </nav>
   </header>
 
   <main class="container">
@@ -577,7 +812,7 @@
         <div class="pill-row">
           <span class="pill emerald">● Android &amp; Official iPhone PWA</span>
           <span class="pill">BLE 0xCAFE / 0xCAFF</span>
-          <span class="pill amber">v1.3.1 Cloudflare D1, SSL Hotspot &amp; Field Safety Suite</span>
+          <span class="pill amber">v1.3.2 2-Tier Root CA SSL, Mobile Web App &amp; Field Suite</span>
         </div>
         <h1>
           Peer-to-Peer Tactical Mesh for <span class="gradient-text">Zero-Infrastructure</span> Android, iPhone &amp; Web.
@@ -585,20 +820,20 @@
         <p class="lead">
           PulseMesh links Android phones over Bluetooth Low Energy, Wi-Fi Direct / Auto-Hotspot subnets,
           Acoustic AFSK, and USB/Ethernet bridges, and officially supports iPhone &amp; iPad via an installable
-          offline PWA, scannable 2-step QR Wi-Fi Direct Web Portal, and <code>@username</code> encrypted account login.
+          offline PWA, 2-Tier Local Root CA SSL Hotspot (plus zero-warning HTTP <code>:8080</code> native mobile voice calling), and <code>@username</code> encrypted account login.
         </p>
         <div class="cta-group">
           <a class="btn btn-primary" href="web/">
             📱 Open iPhone PWA / Web Node
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-release.apk">
-            ⬇ Download Android APK (v1.3.1)
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.2/app-release.apk">
+            ⬇ Download Android APK (v1.3.2)
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-debug.apk">
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.2/app-debug.apk">
             ⚙ Debug APK
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1" target="_blank" rel="noopener">
-            v1.3.1 Release Notes →
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.2" target="_blank" rel="noopener">
+            v1.3.2 Release Notes →
           </a>
         </div>
         <div class="meta-caption">
@@ -625,8 +860,8 @@
             <div class="value">8 kHz μ-law / ADPCM</div>
           </div>
           <div class="hud-stat">
-            <div class="label">Identity &amp; Vault</div>
-            <div class="value">ECDSA P-256 + PMB1</div>
+            <div class="label">Hotspot PKI &amp; Vault</div>
+            <div class="value">2-Tier Root CA + PV1</div>
           </div>
           <div class="hud-stat">
             <div class="label">Hardware Profiles</div>
@@ -635,9 +870,9 @@
         </div>
         <div class="hud-log">
           <div><span class="ok">[BLE-MESH]</span> 0xCAFE 14B micro-degree beacon active (GATT staggered)</div>
-          <div><span class="cyan">[WEB-PORTAL]</span> Wi-Fi Direct HTTP :8080 offline browser node &amp; SSE bridge live</div>
-          <div><span class="amber">[VOICE]</span> Full-duplex 8kHz IMA-ADPCM + G.711 μ-law UDP 45888 subnet link</div>
-          <div><span class="ok">[MAP-CACHE]</span> EPSG:3857 offline tile cache served to Android &amp; Web clients</div>
+          <div><span class="cyan">[WEB-PORTAL]</span> HTTP :8080 + 2-Tier Root CA HTTPS :8443 (.mobileconfig / .crt)</div>
+          <div><span class="amber">[VOICE]</span> Full-duplex 8kHz IMA-ADPCM + HTTP :8080 Native Mobile Voice Call</div>
+          <div><span class="ok">[MAP-CACHE]</span> EPSG:3857 pinch-zoom, mobile compass &amp; GPX breadcrumb trail</div>
         </div>
       </aside>
     </section>
@@ -650,10 +885,10 @@
       </div>
       <div class="grid-3">
         <article class="glass-card">
-          <span class="card-tag emerald">Official iPhone</span>
-          <h3>iPhone PWA, Setup Login &amp; 2-Step QR Wi-Fi Portal</h3>
+          <span class="card-tag emerald">Official iPhone &amp; Mobile Web</span>
+          <h3>iPhone PWA, 2-Tier Root CA SSL &amp; Mobile Features</h3>
           <p>
-            Install PulseMesh on any iPhone or iPad via Safari (<strong>Share &rarr; Add to Home Screen</strong>) at <a href="web/"><code>/web/</code></a> with IndexedDB offline map tile caching and full <code>@username</code> PIN / Recovery Key vault sign-in. Off-grid, scan the Android host's 2-step QR codes (Wi-Fi + <code>192.168.49.1:8080</code>) to join the live BLE/Wi-Fi mesh with zero internet.
+            Install PulseMesh on any iPhone or iPad via Safari (<strong>Share &rarr; Add to Home Screen</strong>) at <a href="web/"><code>/web/</code></a> with pinch-to-zoom tactical maps, live mobile orientation compass, voice notes, ICE medical cards, Dead-Man timer, and 1-tap Root CA installer (<code>.mobileconfig</code> / <code>.crt</code>) or zero-warning HTTP <code>:8080</code> native mobile voice calling.
           </p>
         </article>
 
@@ -716,46 +951,46 @@
     <!-- Multi-Transport Matrix -->
     <section id="transports">
       <div class="section-header">
-        <h2>8-Layer Multi-Transport Routing Engine</h2>
+        <h2 id="transports-heading">8-Layer Multi-Transport Routing Engine</h2>
         <p>PulseMesh continuously negotiates the fastest available physical link between nearby devices while maintaining seamless packet deduplication.</p>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="transports-heading">
         <table>
           <thead>
             <tr>
-              <th>Transport Layer</th>
-              <th>Protocol / Ports</th>
-              <th>Primary Role</th>
+              <th scope="col">Transport Layer</th>
+              <th scope="col">Protocol / Ports</th>
+              <th scope="col">Primary Role</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>BLE Advertising &amp; GATT Mesh</strong></td>
+              <th scope="row">BLE Advertising &amp; GATT Mesh</th>
               <td><code>0xCAFE</code> Beacon / <code>0x0000CAFF</code> GATT</td>
               <td>Always-on low-power peer discovery, multi-hop text, location beacons, and pure-BLE voice bursts.</td>
             </tr>
             <tr>
-              <td><strong>Wi-Fi Direct &amp; Auto-Hotspot Swarm</strong></td>
+              <th scope="row">Wi-Fi Direct &amp; Auto-Hotspot Swarm</th>
               <td><code>UDP 45888</code> / <code>TCP 45889</code> / mDNS</td>
               <td>High-bandwidth local subnet multicast, full-duplex voice streaming, and rapid photo/message sync.</td>
             </tr>
             <tr>
-              <td><strong>Embedded Wi-Fi Direct Web Portal (HTTP + HTTPS SSL)</strong></td>
-              <td><code>HTTP :8080</code> / <code>HTTPS :8443 SSL</code> / SSE / <code>_http._tcp.</code></td>
-              <td>Serves the self-contained offline PulseMesh Web Node and cached map tiles to any browser on the local Wi-Fi Direct / Hotspot subnet.</td>
+              <th scope="row">Embedded Wi-Fi Direct Web Portal (HTTP + 2-Tier Root CA SSL)</th>
+              <td><code>HTTP :8080</code> / <code>HTTPS :8443 SSL</code> / <code>.mobileconfig</code> / <code>.crt</code></td>
+              <td>Serves the offline PulseMesh Web Node, cached map tiles, and 1-tap Root CA trust profiles (plus zero-warning HTTP :8080 native mobile voice calling).</td>
             </tr>
             <tr>
-              <td><strong>USB-C &amp; Ethernet Auto-Bridge</strong></td>
+              <th scope="row">USB-C &amp; Ethernet Auto-Bridge</th>
               <td><code>usb0</code> / <code>rndis0</code> / <code>eth0</code> / IPv6 <code>ff02::1</code></td>
               <td>Zero-RF wired tactical tethering between devices or field routers.</td>
             </tr>
             <tr>
-              <td><strong>Acoustic AFSK Ultrasonic Modem</strong></td>
+              <th scope="row">Acoustic AFSK Ultrasonic Modem</th>
               <td>Bell 202 (<code>1200/2200 Hz</code>) + Reed-Solomon FEC</td>
               <td>Air-gapped audio frame transmission over phone speakers/mics or 3.5mm audio cables.</td>
             </tr>
             <tr>
-              <td><strong>Hybrid Encrypted Relay (Optional)</strong></td>
+              <th scope="row">Hybrid Encrypted Relay (Optional)</th>
               <td>Cloudflare D1 / <code>ntfy</code> + <code>PM2</code> / <code>PMU2</code> AES-GCM</td>
               <td>Bridges distant mesh islands and <code>@username</code> inboxes when Internet is enabled; hard-blocked in Off-Grid Mode.</td>
             </tr>
@@ -813,10 +1048,16 @@ cd PulseMesh
         <a href="web/">Web App</a> &bull;
         <a href="contact.html">Contact</a> &bull;
         <a href="https://github.com/Kostadinosk/PulseMesh">Repository</a> &bull;
-        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1">Release v1.3.1</a>
+        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.2">Release v1.3.2</a>
       </div>
     </div>
   </footer>
+
+  <!-- Mobile Fixed Bottom Quick-Action Bar -->
+  <div class="mobile-action-bar" role="region" aria-label="Quick Mobile Actions">
+    <a class="btn btn-primary" href="web/">📱 Open Web App</a>
+    <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.2/app-release.apk">⬇ APK v1.3.2</a>
+  </div>
 
   <script>
     (function () {
@@ -838,6 +1079,41 @@ cd PulseMesh
         localStorage.setItem("pulsemesh-theme", next);
         syncLabel();
       });
+
+      // Responsive navbar overflow measurement + popover menu sync (modern-web-guidance navbar pattern)
+      const header = document.querySelector(".site-header");
+      const nav = header && header.querySelector(".navbar-inner");
+      const menuBtn = header && header.querySelector(".menu-button");
+      const menu = document.getElementById("site-menu");
+      if (header && nav && menuBtn && menu) {
+        function updateLayout() {
+          if (menu.matches(":popover-open")) menu.hidePopover();
+          menu.classList.remove("is-open");
+          menuBtn.setAttribute("aria-expanded", "false");
+          header.classList.add("is-wide");
+          if (nav.scrollWidth > nav.clientWidth || window.innerWidth < 920) {
+            header.classList.remove("is-wide");
+          }
+        }
+        new ResizeObserver(updateLayout).observe(header);
+        updateLayout();
+        menu.addEventListener("toggle", (e) => {
+          menuBtn.setAttribute("aria-expanded", String(e.newState === "open"));
+        });
+        menu.addEventListener("click", (e) => {
+          if (e.target.closest("a") && !header.classList.contains("is-wide")) {
+            if (typeof menu.hidePopover === "function" && menu.matches(":popover-open")) menu.hidePopover();
+            menu.classList.remove("is-open");
+            menuBtn.setAttribute("aria-expanded", "false");
+          }
+        });
+        if (!("popover" in HTMLElement.prototype)) {
+          menuBtn.addEventListener("click", () => {
+            const open = menu.classList.toggle("is-open");
+            menuBtn.setAttribute("aria-expanded", String(open));
+          });
+        }
+      }
     })();
   </script>
 </body>
