@@ -438,7 +438,7 @@ class FullFeatureVerificationTest {
             buildInfoJson = { portalUrl, count ->
                 JSONObject().apply {
                     put("pulsemeshHost", true)
-                    put("version", "1.3.0")
+                    put("version", "1.3.1")
                     put("sslEnabled", true)
                     put("portalUrl", portalUrl)
                     put("webClientCount", count)
@@ -449,18 +449,19 @@ class FullFeatureVerificationTest {
             onWebPacketSubmitted = {}
         )
         server.start("127.0.0.1")
-        val deadline = System.currentTimeMillis() + 4000L
-        while ((!server.isRunning() || !server.status.value.selfTestPassed) && System.currentTimeMillis() < deadline) {
+        val deadline = System.currentTimeMillis() + 5000L
+        while ((!server.isRunning() || !server.status.value.selfTestPassed || !server.status.value.httpsSelfTestPassed) && System.currentTimeMillis() < deadline) {
             Thread.sleep(50L)
         }
         val status = server.status.value
         assertTrue("Hotspot HTTP/HTTPS server must start", server.isRunning())
         assertTrue("SSL HTTPS listener must be enabled on hotspot server", status.sslEnabled)
+        assertTrue("HTTPS self-test must pass on hotspot server", status.httpsSelfTestPassed)
         assertTrue("HTTPS port must be bound", status.httpsPort > 0)
 
         try {
             // 1. Verify Offline File Transfer upload + list + download SHA-256 over HTTP
-            val payloadBytes = "PulseMesh v1.3.0 field briefing checklist".toByteArray(Charsets.UTF_8)
+            val payloadBytes = "PulseMesh v1.3.1 field briefing checklist".toByteArray(Charsets.UTF_8)
             val b64 = android.util.Base64.encodeToString(payloadBytes, android.util.Base64.NO_WRAP)
             val uploadConn = (URL("http://127.0.0.1:${status.port}/api/files/upload").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -500,7 +501,17 @@ class FullFeatureVerificationTest {
                 readTimeout = 3000
             }
             assertEquals("HTTPS /api/info must return 200 OK", 200, httpsConn.responseCode)
-            assertTrue(httpsConn.inputStream.bufferedReader().readText().contains("1.3.0"))
+            assertTrue(httpsConn.inputStream.bufferedReader().readText().contains("1.3.1"))
+
+            // 3. Verify GET /api/cert.der serves valid X.509 certificate
+            val certConn = (URL("http://127.0.0.1:${status.port}/api/cert.der").openConnection() as HttpURLConnection)
+            assertEquals(200, certConn.responseCode)
+            val certDer = certConn.inputStream.readBytes()
+            assertTrue("GET /api/cert.der must return non-empty DER bytes", certDer.isNotEmpty())
+            val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+            val x509 = cf.generateCertificate(certDer.inputStream()) as java.security.cert.X509Certificate
+            val daysValid = (x509.notAfter.time - x509.notBefore.time) / (1000L * 60L * 60L * 24L)
+            assertTrue("TLS certificate validity must be <= 397 days, got $daysValid", daysValid <= 397L)
         } finally {
             server.stop()
             scope.cancel()
@@ -508,7 +519,7 @@ class FullFeatureVerificationTest {
     }
 
     @Test
-    fun `verify v1_3_0 features - barometer storm, geofence, quick status, reactions, QR join, decoy, Cloudflare default`() {
+    fun `verify field safety features - barometer storm, geofence, quick status, reactions, QR join, decoy, Cloudflare default`() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val prefs = DevicePreferences(app)
         assertTrue(
@@ -516,7 +527,7 @@ class FullFeatureVerificationTest {
             prefs.usernameRelayUrl.contains("pulsemesh-username-relay.pulsemesh.workers.dev")
         )
 
-        // 2.3 Barometric storm trend detection
+        // Barometric storm trend detection
         val (delta, label, storm) = com.example.service.TacticalSensorService.evaluateBarometricTrend(
             listOf(0L to 1016.0f, 3_600_000L to 1014.0f, 7_200_000L to 1012.2f)
         )
@@ -527,7 +538,7 @@ class FullFeatureVerificationTest {
         val vm = MeshViewModel(app)
         vm.setManualGpsLocation(37.9838, 23.7275)
 
-        // 1.5 Geofence perimeter breach detection
+        // Geofence perimeter breach detection
         vm.configureGeofence(enabled = true, radiusMeters = 200)
         vm.handleIncomingPacket(
             WireMeshPacket(
@@ -551,11 +562,11 @@ class FullFeatureVerificationTest {
         vm.dismissGeofenceAlert()
         assertEquals("", vm.uiState.value.geofenceAlertMessage)
 
-        // 1.3 Quick-Status Text + Voice toggle
+        // Quick-Status Text + Voice toggle
         vm.sendQuickStatus(com.example.model.QuickStatusCode.NEED_WATER)
         assertEquals("NEED_WATER", vm.uiState.value.lastQuickStatusCode)
 
-        // 3.1 Reactions & 3.2 Pin + Search + Trip Export
+        // Reactions & Pin + Search + Trip Export
         vm.selectThread("channel_primary")
         vm.sendMessageInThread("channel_primary", "Check summit rally")
         val msg = vm.uiState.value.activeThreadPackets.first { it.content == "Check summit rally" }
@@ -567,14 +578,14 @@ class FullFeatureVerificationTest {
         assertTrue(vm.searchMessages("summit").any { it.second.id == msg.id })
         assertTrue(vm.exportTripArchiveJson().contains("Check summit rally"))
 
-        // 3.3 QR Instant Contact/Group Join round-trip
+        // QR Instant Contact/Group Join round-trip
         val qrUri = vm.buildInstantJoinQrPayload()
         assertTrue(qrUri.startsWith("pulsemesh://join?"))
         val (importOk, _) = vm.importInstantJoinQrPayload("pulsemesh://join?node=0xD888&cs=DeltaQR&ch=RidgeNet&pk=TESTPK")
         assertTrue(importOk)
         assertTrue(vm.uiState.value.nodes.any { it.id == "0xD888" })
 
-        // 3.4 Language + 2.2 Expedition Mode + 4.1 Per-thread burn + 4.2 Decoy PIN
+        // Language + Expedition Mode + Per-thread burn + Decoy PIN
         vm.setAppLanguage("el")
         assertEquals("el", vm.uiState.value.appLanguage)
         vm.toggleExpeditionMode()
@@ -590,5 +601,140 @@ class FullFeatureVerificationTest {
         // Daylight Theme selection works (no double-toggle bug)
         vm.setAppTheme(com.example.util.AppTheme.TACTICAL_LIGHT)
         assertEquals(com.example.util.AppTheme.TACTICAL_LIGHT, vm.uiState.value.appTheme)
+    }
+
+    @Test
+    fun `verify v1_3_1 duplicate retry CHAT dedupes bubbles and markPacketDelivered handles WEB PORTAL`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = MeshViewModel(app)
+        vm.selectThread("channel_primary")
+
+        val pkt = WireMeshPacket(
+            packetId = "retry_pkt_131",
+            srcNodeId = "0xB777",
+            srcCallsign = "BravoRetry",
+            dstNodeId = "ALL",
+            type = "CHAT",
+            payload = "Retried ridge check",
+            ttl = 7,
+            hops = 1
+        )
+        vm.handleIncomingPacket(pkt)
+        vm.handleIncomingPacket(pkt)
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        val matches = vm.uiState.value.activeThreadPackets.filter { it.id == "retry_pkt_131" }
+        assertEquals("Retried duplicate CHAT packet must produce exactly 1 bubble", 1, matches.size)
+
+        // Verify PersistentChatManager.markPacketDelivered marks WEB PORTAL outgoing packets
+        val chatMgr = PersistentChatManager(app)
+        chatMgr.savePacket(
+            "channel_primary",
+            MeshPacket(
+                id = "web_out_131",
+                sourceId = "0xW111",
+                destId = "ALL",
+                sourceCallsign = "iPhoneWeb",
+                type = PacketType.TEXT,
+                content = "Hello from iPhone Safari",
+                hops = 0,
+                transport = "WEB PORTAL",
+                rawHexBadge = "WEB",
+                isIncoming = false,
+                isDelivered = false
+            )
+        )
+        assertTrue(chatMgr.markPacketDelivered("web_out_131", "AndroidHost"))
+        val updated = chatMgr.getPacketsForThread("channel_primary").first { it.id == "web_out_131" }
+        assertTrue(updated.isDelivered)
+        assertEquals("AndroidHost", updated.ackedByCallsign)
+    }
+
+    @Test
+    fun `verify v1_3_1 LocalSelfSignedTlsFactory produces serverAuth X509 cert with dynamic SAN`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val (factory, err) = com.example.service.LocalSelfSignedTlsFactory.createSslServerSocketFactory(
+            app,
+            listOf("192.168.43.1", "192.168.49.1")
+        )
+        assertNotNull("SSLServerSocketFactory must succeed: $err", factory)
+        val der = com.example.service.LocalSelfSignedTlsFactory.getCurrentCertificateDer(app)
+        assertNotNull("Current DER certificate must be populated", der)
+
+        val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+        val cert = cf.generateCertificate(der!!.inputStream()) as java.security.cert.X509Certificate
+        val daysValid = (cert.notAfter.time - cert.notBefore.time) / (1000L * 60L * 60L * 24L)
+        assertTrue("Cert validity must be <= 397 days, was $daysValid", daysValid <= 397L)
+        assertTrue(
+            "ExtendedKeyUsage must contain id-kp-serverAuth (1.3.6.1.5.5.7.3.1)",
+            cert.extendedKeyUsage?.contains("1.3.6.1.5.5.7.3.1") == true
+        )
+        val sanValues = cert.subjectAlternativeNames?.mapNotNull { it.getOrNull(1)?.toString() }.orEmpty()
+        assertTrue("SANs must contain Hotspot IP 192.168.43.1, got $sanValues", sanValues.contains("192.168.43.1"))
+    }
+
+    @Test
+    fun `verify v1_3_1 Web Portal call signals polling buffer and POST send types`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val submittedList = CopyOnWriteArrayList<WebSubmittedPacket>()
+        val server = PulseMeshWebServer(
+            context = app,
+            scope = scope,
+            buildInfoJson = { url, cnt ->
+                JSONObject().apply {
+                    put("pulsemeshHost", true)
+                    put("version", "1.3.1")
+                    put("portalUrl", url)
+                    put("webClientCount", cnt)
+                }
+            },
+            buildStateJson = { JSONObject().apply { put("ok", true) } },
+            onClientRegistered = {},
+            onWebPacketSubmitted = { submittedList.add(it) }
+        )
+        server.start("127.0.0.1")
+        val deadline = System.currentTimeMillis() + 4000L
+        while ((!server.isRunning() || !server.status.value.selfTestPassed) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50L)
+        }
+        try {
+            server.notifyCallSignal("CALL_RING", "0xA111", "AlphaHost", "0xW222", "RING")
+            val signals = server.getRecentCallSignalsJson()
+            assertTrue("Recent call signals array must include CALL_RING", signals.length() >= 1)
+            assertEquals("CALL_RING", signals.getJSONObject(signals.length() - 1).getString("type"))
+
+            val port = server.status.value.port
+            for (pktType in listOf("CHAT_ACK", "SOS_CLEAR", "QUICK_STATUS", "REACTION")) {
+                val conn = (URL("http://127.0.0.1:$port/api/send").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    outputStream.use {
+                        it.write("""{"packetId":"wp_${pktType}","clientNodeId":"0xW222","callsign":"WebOp","dstNodeId":"ALL","type":"$pktType","text":"payload","payload":"payload"}""".toByteArray())
+                    }
+                }
+                assertEquals("POST /api/send for $pktType must return 200", 200, conn.responseCode)
+            }
+            assertEquals(4, submittedList.size)
+            assertEquals(listOf("CHAT_ACK", "SOS_CLEAR", "QUICK_STATUS", "REACTION"), submittedList.map { it.type })
+        } finally {
+            server.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `verify v1_3_1 AppStrings Greek translation and weather trend labels`() {
+        assertEquals("Ρυθμίσεις", com.example.util.AppStrings.tr("el", "Settings", "Ρυθμίσεις"))
+        assertEquals("Settings", com.example.util.AppStrings.tr("en", "Settings", "Ρυθμίσεις"))
+        assertEquals(
+            "ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΚΑΤΑΙΓΙΔΑΣ",
+            com.example.util.AppStrings.weatherTrendLabel("el", "STORM WARNING")
+        )
+        assertEquals(
+            "STORM WARNING",
+            com.example.util.AppStrings.weatherTrendLabel("en", "STORM WARNING")
+        )
     }
 }

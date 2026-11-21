@@ -10,5 +10,9 @@
     <string name="status_need_water">Χρειάζομαι νερό</string>
     <string name="status_moving">Σε κίνηση</string>
     <string name="status_need_help">Χρειάζομαι βοήθεια</string>
-    <string name="storm_warning">ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΚΑΤΑΙΓΙΔΑΣ</string>
+    <string name="storm_warning">ΠΡΟΕΙΔΟΠΟΙΗΣΗ ΚΑΤΑΙΓΙΔΑΣ: Απότομη πτώση βαρομετρικής πίεσης</string>
+    <string name="sos_trigger">Εκπομπή Έκτακτου SOS;</string>
+    <string name="geofence_perimeter">Ειδοποίηση Γεω-Περιμέτρου</string>
+    <string name="hotspot_portal">Πύλη Hotspot Web</string>
+    <string name="delete_account">Διαγραφή Στοιχείων Λογαριασμού</string>
 </resources>

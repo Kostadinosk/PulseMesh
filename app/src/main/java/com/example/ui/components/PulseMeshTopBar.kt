@@ -88,9 +88,12 @@ fun PulseMeshTopBar(
                 alpha = 1f
             )
             val bannerText = when {
-                state.isSosActive && state.incomingSosAlert.isNotBlank() -> "⚠ SOS ACTIVE • ${state.incomingSosAlert}"
-                state.incomingSosAlert.isNotBlank() -> "⚠ EMERGENCY ${state.incomingSosAlert}"
-                else -> "⚠ PRIORITY SOS DISTRESS BEACON BROADCASTING"
+                state.isSosActive && state.incomingSosAlert.isNotBlank() ->
+                    com.example.util.AppStrings.tr(state.appLanguage, "⚠ SOS ACTIVE • ${state.incomingSosAlert}", "⚠ ΕΝΕΡΓΟ SOS • ${state.incomingSosAlert}")
+                state.incomingSosAlert.isNotBlank() ->
+                    com.example.util.AppStrings.tr(state.appLanguage, "⚠ EMERGENCY ${state.incomingSosAlert}", "⚠ ΕΚΤΑΚΤΟ ${state.incomingSosAlert}")
+                else ->
+                    com.example.util.AppStrings.tr(state.appLanguage, "⚠ PRIORITY SOS DISTRESS BEACON BROADCASTING", "⚠ ΕΚΠΟΜΠΗ ΣΗΜΑΤΟΣ ΚΙΝΔΥΝΟΥ SOS")
             }
             Row(
                 modifier = Modifier
@@ -131,7 +134,11 @@ fun PulseMeshTopBar(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (state.isSosActive) "STOP SOS" else "DISMISS",
+                        text = if (state.isSosActive) {
+                            com.example.util.AppStrings.tr(state.appLanguage, "STOP SOS", "ΤΕΡΜΑΤΙΣΜΟΣ SOS")
+                        } else {
+                            com.example.util.AppStrings.tr(state.appLanguage, "DISMISS", "ΚΛΕΙΣΙΜΟ")
+                        },
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -203,7 +210,11 @@ fun PulseMeshTopBar(
                         .padding(horizontal = 5.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (isOffGrid) "OFF-GRID" else "HYBRID",
+                        text = if (isOffGrid) {
+                            com.example.util.AppStrings.tr(state.appLanguage, "OFF-GRID", "ΕΚΤΟΣ ΔΙΚΤΥΟΥ")
+                        } else {
+                            com.example.util.AppStrings.tr(state.appLanguage, "HYBRID", "ΥΒΡΙΔΙΚΟ")
+                        },
                         color = pillColor,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,

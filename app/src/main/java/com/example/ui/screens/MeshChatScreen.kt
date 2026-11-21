@@ -201,7 +201,7 @@ private fun ConversationListView(
                             )
                         }
                         Text(
-                            text = "TACTICAL MESSAGING",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "TACTICAL MESSAGING", "ΤΑΚΤΙΚΑ ΜΗΝΥΜΑΤΑ"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleMedium.copy(
@@ -214,7 +214,11 @@ private fun ConversationListView(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "BROADCAST • GROUPS (${state.meshGroups.size}) • E2EE DMs • DTN: ${state.pendingDtnCount}/50",
+                        text = com.example.util.AppStrings.tr(
+                            state.appLanguage,
+                            "BROADCAST • GROUPS (${state.meshGroups.size}) • E2EE DMs • DTN: ${state.pendingDtnCount}/50",
+                            "ΕΚΠΟΜΠΗ • ΟΜΑΔΕΣ (${state.meshGroups.size}) • E2EE • DTN: ${state.pendingDtnCount}/50"
+                        ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall.copy(
@@ -258,7 +262,7 @@ private fun ConversationListView(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "@USER",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "@USER", "@ΧΡΗΣΤΗΣ"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -300,7 +304,7 @@ private fun ConversationListView(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "+ GROUP",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "+ GROUP", "+ ΟΜΑΔΑ"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -334,7 +338,7 @@ private fun ConversationListView(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "PING MESH",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "PING MESH", "ΣΑΡΩΣΗ MESH"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -352,7 +356,7 @@ private fun ConversationListView(
                     onValueChange = onSearchQueryChange,
                     placeholder = {
                         Text(
-                            "Search channels, groups & peers...",
+                            com.example.util.AppStrings.tr(state.appLanguage, "Search channels, groups & peers...", "Αναζήτηση καναλιών, ομάδων & κόμβων..."),
                             color = p.textMuted,
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace
@@ -408,7 +412,7 @@ private fun ConversationListView(
             if (pinnedChannels.isNotEmpty()) {
                 item {
                     Text(
-                        text = "PUBLIC MESH BROADCAST (ALL)",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "PUBLIC MESH BROADCAST (ALL)", "ΔΗΜΟΣΙΟ ΚΑΝΑΛΙ MESH (ΟΛΟΙ)"),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -440,7 +444,7 @@ private fun ConversationListView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "MULTI-MESH GROUP CHATS (AES-256-GCM)",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "MULTI-MESH GROUP CHATS (AES-256-GCM)", "ΟΜΑΔΙΚΕΣ ΣΥΝΟΜΙΛΙΕΣ MESH (AES-256-GCM)"),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -450,7 +454,7 @@ private fun ConversationListView(
                         )
                     )
                     Text(
-                        text = "${groupConversations.size} GROUPS",
+                        text = "${groupConversations.size} ${com.example.util.AppStrings.tr(state.appLanguage, "GROUPS", "ΟΜΑΔΕΣ")}",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -488,7 +492,7 @@ private fun ConversationListView(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "No Multi-Mesh Groups Yet",
+                                    text = com.example.util.AppStrings.tr(state.appLanguage, "No Multi-Mesh Groups Yet", "Καμία Ομάδα Mesh Ακόμα"),
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
@@ -496,7 +500,7 @@ private fun ConversationListView(
                                     )
                                 )
                                 Text(
-                                    text = "Tap '+ GROUP' above to select multiple peers and create an encrypted squad channel.",
+                                    text = com.example.util.AppStrings.tr(state.appLanguage, "Tap '+ GROUP' above to select multiple peers and create an encrypted squad channel.", "Πατήστε '+ ΟΜΑΔΑ' επάνω για να επιλέξετε κόμβους και να φτιάξετε κρυπτογραφημένο κανάλι ομάδας."),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 10.sp,
                                         fontFamily = FontFamily.Monospace,
@@ -534,7 +538,7 @@ private fun ConversationListView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "1-ON-1 DIRECT CHATS (ACTIVE PEERS)",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "1-ON-1 DIRECT CHATS (ACTIVE PEERS)", "ΑΜΕΣΕΣ ΣΥΝΟΜΙΛΙΕΣ 1-ΠΡΟΣ-1 (ΕΝΕΡΓΟΙ ΚΟΜΒΟΙ)"),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -544,7 +548,7 @@ private fun ConversationListView(
                         )
                     )
                     Text(
-                        text = "${state.activePeerCount} ONLINE",
+                        text = "${state.activePeerCount} ${com.example.util.AppStrings.tr(state.appLanguage, "ONLINE", "ΕΝΕΡΓΟΙ")}",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -578,7 +582,7 @@ private fun ConversationListView(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "NO DIRECT PEERS HEARD YET",
+                                text = com.example.util.AppStrings.tr(state.appLanguage, "NO DIRECT PEERS HEARD YET", "ΔΕΝ ΕΝΤΟΠΙΣΤΗΚΑΝ ΚΟΝΤΙΝΟΙ ΚΟΜΒΟΙ"),
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
@@ -587,7 +591,7 @@ private fun ConversationListView(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Tap 'PING MESH' above or launch second device on same channel. BLE/Wi-Fi auto-discovery will create direct 1-on-1 encrypted DM threads instantly.",
+                                text = com.example.util.AppStrings.tr(state.appLanguage, "Tap 'PING MESH' above or launch second device on same channel. BLE/Wi-Fi auto-discovery will create direct 1-on-1 encrypted DM threads instantly.", "Πατήστε 'ΣΑΡΩΣΗ MESH' επάνω ή ανοίξτε δεύτερη συσκευή στο ίδιο κανάλι. Η αυτόματη εύρεση BLE/Wi-Fi θα ανοίξει αμέσως κρυπτογραφημένες συνομιλίες 1-προς-1."),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
@@ -608,7 +612,7 @@ private fun ConversationListView(
                 }
             }
 
-            // 4. v1.3.0 Tactical Quick-Status One-Tap Strip (Text + Voice TTS)
+            // Tactical Quick-Status One-Tap Strip (Text + Voice TTS)
             item(key = "quick_status_strip") {
                 val isGreek = state.appLanguage == "el"
                 Column(
@@ -714,7 +718,7 @@ private fun ConversationListView(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "CREATE MULTI-MESH GROUP",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "CREATE MULTI-MESH GROUP", "ΔΗΜΙΟΥΡΓΙΑ ΟΜΑΔΑΣ MESH"),
                         style = MaterialTheme.typography.titleMedium.copy(
                             color = p.cyan,
                             fontWeight = FontWeight.Bold,
@@ -734,7 +738,7 @@ private fun ConversationListView(
                     OutlinedTextField(
                         value = newGroupName,
                         onValueChange = { newGroupName = it },
-                        label = { Text("Group Name (e.g., Squad Alpha)", color = p.textSecondary) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Group Name (e.g., Squad Alpha)", "Όνομα Ομάδας (π.χ. Ομάδα Α)"), color = p.textSecondary) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = p.cyan,
@@ -748,7 +752,7 @@ private fun ConversationListView(
                     )
 
                     Text(
-                        text = "SELECT PEER NODES TO INCLUDE:",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "SELECT PEER NODES TO INCLUDE:", "ΕΠΙΛΟΓΗ ΚΟΜΒΩΝ ΓΙΑ ΣΥΜΜΕΤΟΧΗ:"),
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = p.emerald,
                             fontWeight = FontWeight.Bold,
@@ -758,7 +762,7 @@ private fun ConversationListView(
 
                     if (discoveredPeers.isEmpty()) {
                         Text(
-                            text = "No nearby peers discovered yet. You can add peer Node IDs manually below or create the group now.",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "No nearby peers discovered yet. You can add peer Node IDs manually below or create the group now.", "Δεν βρέθηκαν κοντινοί κόμβοι ακόμα. Μπορείτε να προσθέσετε Node ID παρακάτω ή να δημιουργήσετε την ομάδα τώρα."),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = p.textSecondary,
                                 fontSize = 11.sp
@@ -831,8 +835,8 @@ private fun ConversationListView(
                     OutlinedTextField(
                         value = manualMemberNodeId,
                         onValueChange = { manualMemberNodeId = it },
-                        label = { Text("Add Extra Node IDs (comma-separated, optional)", color = p.textSecondary, fontSize = 11.sp) },
-                        placeholder = { Text("e.g. 0x9B1C, 0x8C3E", fontSize = 11.sp, color = p.textMuted) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Add Extra Node IDs (comma-separated, optional)", "Προσθήκη επιπλέον Node ID (με κόμμα, προαιρετικά)"), color = p.textSecondary, fontSize = 11.sp) },
+                        placeholder = { Text(com.example.util.AppStrings.tr(state.appLanguage, "e.g. 0x9B1C, 0x8C3E", "π.χ. 0x9B1C, 0x8C3E"), fontSize = 11.sp, color = p.textMuted) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = p.emerald,
@@ -857,7 +861,7 @@ private fun ConversationListView(
                                 .filter { it.isNotBlank() }
                                 .forEach { chosenPeers.add(it) }
                         }
-                        val finalName = newGroupName.trim().ifBlank { "Squad Alpha" }
+                        val finalName = newGroupName.trim().ifBlank { com.example.util.AppStrings.tr(state.appLanguage, "Squad Alpha", "Ομάδα Άλφα") }
                         onCreateGroup(finalName, chosenPeers.distinct())
                         showCreateGroupDialog = false
                     },
@@ -869,7 +873,7 @@ private fun ConversationListView(
                     modifier = Modifier.testTag("confirm_create_group_button")
                 ) {
                     Text(
-                        text = "CREATE & BROADCAST GROUP",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "CREATE & BROADCAST GROUP", "ΔΗΜΙΟΥΡΓΙΑ & ΕΚΠΟΜΠΗ ΟΜΑΔΑΣ"),
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp
@@ -878,7 +882,7 @@ private fun ConversationListView(
             },
             dismissButton = {
                 TextButton(onClick = { showCreateGroupDialog = false }) {
-                    Text("CANCEL", color = p.textSecondary)
+                    Text(com.example.util.AppStrings.tr(state.appLanguage, "CANCEL", "ΑΚΥΡΩΣΗ"), color = p.textSecondary)
                 }
             }
         )
@@ -912,7 +916,7 @@ private fun ConversationListView(
                         )
                     }
                     Text(
-                        text = "CONNECT BY @USERNAME",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "CONNECT BY @USERNAME", "ΣΥΝΔΕΣΗ ΜΕ @USERNAME"),
                         style = MaterialTheme.typography.titleMedium.copy(
                             color = p.cyan,
                             fontWeight = FontWeight.Bold,
@@ -928,9 +932,9 @@ private fun ConversationListView(
                 ) {
                     Text(
                         text = if (state.isInternetEnabled) {
-                            "Enter your friend's reserved @username to open a direct E2EE chat over Hybrid Relay or local mesh."
+                            com.example.util.AppStrings.tr(state.appLanguage, "Enter your friend's reserved @username to open a direct E2EE chat over Hybrid Relay or local mesh.", "Πληκτρολογήστε το @username του φίλου σας για άμεση κρυπτογραφημένη συνομιλία E2EE μέσω Hybrid Relay ή τοπικού mesh.")
                         } else {
-                            "Enter a friend's @username. Note: Enable Hybrid (+Internet) in Settings or the top bar to reach distant friends outside BLE/Wi-Fi range."
+                            com.example.util.AppStrings.tr(state.appLanguage, "Enter a friend's @username. Note: Enable Hybrid (+Internet) in Settings or the top bar to reach distant friends outside BLE/Wi-Fi range.", "Πληκτρολογήστε το @username ενός φίλου. Σημείωση: Ενεργοποιήστε το Hybrid (+Internet) στις Ρυθμίσεις ή την επάνω μπάρα για μακρινούς φίλους εκτός εμβέλειας BLE/Wi-Fi.")
                         },
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = p.textSecondary,
@@ -940,7 +944,7 @@ private fun ConversationListView(
                     OutlinedTextField(
                         value = connectUsernameInput,
                         onValueChange = { connectUsernameInput = it.lowercase().replace(" ", "") },
-                        label = { Text("Friend @username (e.g. bravo_far)", color = p.textSecondary) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Friend @username (e.g. bravo_far)", "Φίλος @username (π.χ. nikos_m)"), color = p.textSecondary) },
                         prefix = { Text("@", color = p.cyan, fontWeight = FontWeight.Bold) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -985,7 +989,11 @@ private fun ConversationListView(
                     modifier = Modifier.testTag("username_connect_confirm_button")
                 ) {
                     Text(
-                        text = if (state.isConnectingByUsername) "SEARCHING..." else "CONNECT & CHAT",
+                        text = if (state.isConnectingByUsername) {
+                            com.example.util.AppStrings.tr(state.appLanguage, "SEARCHING...", "ΑΝΑΖΗΤΗΣΗ...")
+                        } else {
+                            com.example.util.AppStrings.tr(state.appLanguage, "CONNECT & CHAT", "ΣΥΝΔΕΣΗ & ΣΥΝΟΜΙΛΙΑ")
+                        },
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp
@@ -994,7 +1002,7 @@ private fun ConversationListView(
             },
             dismissButton = {
                 TextButton(onClick = { showConnectUsernameDialog = false }) {
-                    Text("CANCEL", color = p.textSecondary)
+                    Text(com.example.util.AppStrings.tr(state.appLanguage, "CANCEL", "ΑΚΥΡΩΣΗ"), color = p.textSecondary)
                 }
             }
         )
@@ -1453,12 +1461,12 @@ private fun ConversationThreadView(
 
                     Text(
                         text = when {
-                            isGroup && state.isSimpleMode -> "ENCRYPTED GROUP CHAT • ${currentConvo?.memberIds?.size ?: 0} MEMBERS"
-                            isGroup -> "ECDH-WRAPPED AES-256-GCM • ${currentConvo?.memberIds?.size ?: 0} MEMBERS (${currentConvo?.memberIds?.joinToString(", ") ?: ""})"
-                            isDm && state.isSimpleMode -> "ENCRYPTED DIRECT CHAT"
-                            isDm -> "ECDH P-256 TOFU • ${currentConvo?.safetyFingerprint?.ifBlank { "KEY PENDING" } ?: ""}"
-                            isEncrypted -> "E2EE ENCRYPTED • AES-256-GCM CHANNEL"
-                            else -> "PUBLIC MESH BROADCAST (ALL)"
+                            isGroup && state.isSimpleMode -> com.example.util.AppStrings.tr(state.appLanguage, "ENCRYPTED GROUP CHAT • ${currentConvo?.memberIds?.size ?: 0} MEMBERS", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΟΜΑΔΑ • ${currentConvo?.memberIds?.size ?: 0} ΜΕΛΗ")
+                            isGroup -> "ECDH-WRAPPED AES-256-GCM • ${currentConvo?.memberIds?.size ?: 0} ${com.example.util.AppStrings.tr(state.appLanguage, "MEMBERS", "ΜΕΛΗ")} (${currentConvo?.memberIds?.joinToString(", ") ?: ""})"
+                            isDm && state.isSimpleMode -> com.example.util.AppStrings.tr(state.appLanguage, "ENCRYPTED DIRECT CHAT", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΙΔΙΩΤΙΚΗ ΣΥΝΟΜΙΛΙΑ")
+                            isDm -> "ECDH P-256 TOFU • ${currentConvo?.safetyFingerprint?.ifBlank { com.example.util.AppStrings.tr(state.appLanguage, "KEY PENDING", "ΕΚΚΡΕΜΕΙ ΚΛΕΙΔΙ") } ?: ""}"
+                            isEncrypted -> com.example.util.AppStrings.tr(state.appLanguage, "E2EE ENCRYPTED • AES-256-GCM CHANNEL", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΟ • ΚΑΝΑΛΙ AES-256-GCM")
+                            else -> com.example.util.AppStrings.tr(state.appLanguage, "PUBLIC MESH BROADCAST (ALL)", "ΔΗΜΟΣΙΟ ΚΑΝΑΛΙ MESH (ΟΛΟΙ)")
                         },
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 10.sp,
@@ -1540,7 +1548,7 @@ private fun ConversationThreadView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "KEY CHANGED — VERIFY FINGERPRINT (${currentConvo.safetyFingerprint})",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "KEY CHANGED — VERIFY FINGERPRINT (${currentConvo.safetyFingerprint})", "ΑΛΛΑΓΗ ΚΛΕΙΔΙΟΥ — ΕΠΑΛΗΘΕΥΣΗ (${currentConvo.safetyFingerprint})"),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = p.red,
                                 fontWeight = FontWeight.Bold,
@@ -1552,7 +1560,7 @@ private fun ConversationThreadView(
                         onClick = { onVerifyFingerprint(currentConvo.peerNodeId) }
                     ) {
                         Text(
-                            text = "TRUST KEY",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "TRUST KEY", "ΕΜΠΙΣΤΟΣΥΝΗ ΚΛΕΙΔΙΟΥ"),
                             color = p.amber,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
@@ -1563,7 +1571,7 @@ private fun ConversationThreadView(
             }
         }
 
-        // v1.3.0 Thread Utility Strip: Search Toggle + Per-Chat Burn Timer + Pinned Message Banner
+        // Thread Utility Strip: Search Toggle + Per-Chat Burn Timer + Pinned Message Banner
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1582,7 +1590,7 @@ private fun ConversationThreadView(
                 }
             ) {
                 Text(
-                    text = if (showThreadSearch) "✕ SEARCH" else "🔍 SEARCH",
+                    text = if (showThreadSearch) com.example.util.AppStrings.tr(state.appLanguage, "✕ SEARCH", "✕ ΑΝΑΖΗΤΗΣΗ") else com.example.util.AppStrings.tr(state.appLanguage, "🔍 SEARCH", "🔍 ΑΝΑΖΗΤΗΣΗ"),
                     color = if (showThreadSearch) p.cyan else p.textSecondary,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
@@ -1591,12 +1599,12 @@ private fun ConversationThreadView(
                 )
             }
             val burnLabel = when (activeThreadBurnSec) {
-                0 -> "BURN: OFF"
-                60 -> "BURN: 1m"
-                300 -> "BURN: 5m"
-                3600 -> "BURN: 1h"
-                86400 -> "BURN: 24h"
-                else -> "BURN: ${activeThreadBurnSec}s"
+                0 -> com.example.util.AppStrings.tr(state.appLanguage, "BURN: OFF", "ΚΑΥΣΗ: OFF")
+                60 -> com.example.util.AppStrings.tr(state.appLanguage, "BURN: 1m", "ΚΑΥΣΗ: 1λ")
+                300 -> com.example.util.AppStrings.tr(state.appLanguage, "BURN: 5m", "ΚΑΥΣΗ: 5λ")
+                3600 -> com.example.util.AppStrings.tr(state.appLanguage, "BURN: 1h", "ΚΑΥΣΗ: 1ω")
+                86400 -> com.example.util.AppStrings.tr(state.appLanguage, "BURN: 24h", "ΚΑΥΣΗ: 24ω")
+                else -> "${com.example.util.AppStrings.tr(state.appLanguage, "BURN", "ΚΑΥΣΗ")}: ${activeThreadBurnSec}s"
             }
             Surface(
                 color = if (activeThreadBurnSec > 0) p.amberDim else p.surfaceVariant,
@@ -1635,7 +1643,7 @@ private fun ConversationThreadView(
             OutlinedTextField(
                 value = threadSearchQuery,
                 onValueChange = { threadSearchQuery = it },
-                placeholder = { Text("Search messages in this chat...", fontSize = 11.sp) },
+                placeholder = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Search messages in this chat...", "Αναζήτηση μηνυμάτων στη συνομιλία..."), fontSize = 11.sp) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1672,7 +1680,11 @@ private fun ConversationThreadView(
                             modifier = Modifier.size(30.dp)
                         )
                         Text(
-                            text = if (isEncrypted) "ENCRYPTED CHANNEL READY" else "PUBLIC MESH CHANNEL READY",
+                            text = if (isEncrypted) {
+                                com.example.util.AppStrings.tr(state.appLanguage, "ENCRYPTED CHANNEL READY", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΟ ΚΑΝΑΛΙ ΕΤΟΙΜΟ")
+                            } else {
+                                com.example.util.AppStrings.tr(state.appLanguage, "PUBLIC MESH CHANNEL READY", "ΔΗΜΟΣΙΟ ΚΑΝΑΛΙ MESH ΕΤΟΙΜΟ")
+                            },
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace,
@@ -1680,7 +1692,7 @@ private fun ConversationThreadView(
                             )
                         )
                         Text(
-                            text = "Send an off-grid text, encrypted photo, or GPS pin below.",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "Send an off-grid text, encrypted photo, or GPS pin below.", "Στείλτε μήνυμα εκτός δικτύου, κρυπτογραφημένη φωτογραφία ή στίγμα GPS παρακάτω."),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = p.textSecondary,
                                 fontFamily = FontFamily.Monospace,
@@ -1709,13 +1721,14 @@ private fun ConversationThreadView(
                         onPlayVoiceClip = onPlayVoiceClip,
                         onRetrySendPacket = onRetrySendPacket,
                         onReact = { emoji -> onSendReaction(packet.id, emoji) },
+                        appLanguage = state.appLanguage,
                         onTogglePin = { onTogglePinMessage(threadId, packet.id) }
                     )
                 }
             }
         }
 
-        // v1.3.0 Quick-Reply Chips Strip
+        // Quick-Reply Chips Strip
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1791,9 +1804,9 @@ private fun ConversationThreadView(
                     placeholder = {
                         Text(
                             when {
-                                isGroup -> "Encrypted group message..."
+                                isGroup -> com.example.util.AppStrings.tr(state.appLanguage, "Encrypted group message...", "Κρυπτογραφημένο ομαδικό μήνυμα...")
                                 isEncrypted -> "Secure message to $threadTitle..."
-                                else -> "Broadcast to Public Mesh..."
+                                else -> com.example.util.AppStrings.tr(state.appLanguage, "Broadcast to Public Mesh...", "Εκπομπή στο Δημόσιο Mesh...")
                             },
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace,
@@ -1872,7 +1885,7 @@ private fun ConversationThreadView(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "SHARE ENCRYPTED PHOTO",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "SHARE ENCRYPTED PHOTO", "ΚΟΙΝΟΠΟΙΗΣΗ ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗΣ ΦΩΤΟΓΡΑΦΙΑΣ"),
                         style = MaterialTheme.typography.titleSmall.copy(
                             color = p.cyan,
                             fontWeight = FontWeight.ExtraBold,
@@ -1884,7 +1897,7 @@ private fun ConversationThreadView(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Photos are automatically compressed into compact encrypted JPEG mesh frames for instant transmission over Bluetooth, Wi-Fi Hotspot, or Hybrid Relay.",
+                        text = com.example.util.AppStrings.tr(state.appLanguage, "Photos are automatically compressed into compact encrypted JPEG mesh frames for instant transmission over Bluetooth, Wi-Fi Hotspot, or Hybrid Relay.", "Οι φωτογραφίες συμπιέζονται αυτόματα σε κρυπτογραφημένα καρέ JPEG για άμεση αποστολή μέσω Bluetooth, Wi-Fi Hotspot ή Hybrid Relay."),
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = p.textSecondary,
                             fontSize = 11.sp
@@ -1893,7 +1906,7 @@ private fun ConversationThreadView(
                     OutlinedTextField(
                         value = pendingPhotoCaption,
                         onValueChange = { pendingPhotoCaption = it },
-                        label = { Text("Optional Caption", color = p.textSecondary, fontSize = 11.sp) },
+                        label = { Text(com.example.util.AppStrings.tr(state.appLanguage, "Optional Caption", "Προαιρετική λεζάντα"), color = p.textSecondary, fontSize = 11.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = p.cyan,
@@ -1925,7 +1938,7 @@ private fun ConversationThreadView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "CHOOSE PHOTO FROM GALLERY",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "CHOOSE PHOTO FROM GALLERY", "ΕΠΙΛΟΓΗ ΦΩΤΟΓΡΑΦΙΑΣ ΑΠΟ ΣΥΛΛΟΓΗ"),
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp
@@ -1953,7 +1966,7 @@ private fun ConversationThreadView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "CAPTURE CAMERA PHOTO",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "CAPTURE CAMERA PHOTO", "ΛΗΨΗ ΦΩΤΟΓΡΑΦΙΑΣ ΑΠΟ ΚΑΜΕΡΑ"),
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp
@@ -1979,7 +1992,7 @@ private fun ConversationThreadView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "SEND TACTICAL RECON CARD",
+                            text = com.example.util.AppStrings.tr(state.appLanguage, "SEND TACTICAL RECON CARD", "ΑΠΟΣΤΟΛΗ ΤΑΚΤΙΚΗΣ ΚΑΡΤΑΣ"),
                             color = p.amber,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace,
@@ -1991,7 +2004,7 @@ private fun ConversationThreadView(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showPhotoPickerModal = false }) {
-                    Text("CANCEL", color = p.textSecondary)
+                    Text(com.example.util.AppStrings.tr(state.appLanguage, "CANCEL", "ΑΚΥΡΩΣΗ"), color = p.textSecondary)
                 }
             }
         )
@@ -2005,6 +2018,7 @@ private fun MessageBubble(
     onPlayVoiceClip: (String) -> Unit = {},
     onRetrySendPacket: (MeshPacket) -> Unit = {},
     onReact: (String) -> Unit = {},
+    appLanguage: String = "en",
     onTogglePin: () -> Unit = {}
 ) {
     val p = LocalPulsePalette.current
@@ -2123,7 +2137,7 @@ private fun MessageBubble(
                                 .background(accentColor)
                         )
                         Text(
-                            text = if (isOutgoing) "Self (${packet.sourceId})" else "${packet.sourceCallsign} (${packet.sourceId})",
+                            text = if (isOutgoing) "${com.example.util.AppStrings.tr(appLanguage, "Self", "Εγώ")} (${packet.sourceId})" else "${packet.sourceCallsign} (${packet.sourceId})",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -2194,7 +2208,7 @@ private fun MessageBubble(
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "ENCRYPTED PHOTO • TAP TO ENLARGE",
+                                                text = com.example.util.AppStrings.tr(appLanguage, "ENCRYPTED PHOTO • TAP TO ENLARGE", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΦΩΤΟ • ΠΑΤΗΣΤΕ ΓΙΑ ΜΕΓΕΘΥΝΣΗ"),
                                                 style = MaterialTheme.typography.labelSmall.copy(
                                                     fontSize = 8.5.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -2243,7 +2257,7 @@ private fun MessageBubble(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "ENCRYPTED PHOTO (TRANSFER INCOMPLETE)",
+                                    text = com.example.util.AppStrings.tr(appLanguage, "ENCRYPTED PHOTO (TRANSFER INCOMPLETE)", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΦΩΤΟ (ΗΜΙΤΕΛΗΣ ΜΕΤΑΦΟΡΑ)"),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -2281,7 +2295,7 @@ private fun MessageBubble(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = "TACTICAL VOICE DROP",
+                                            text = com.example.util.AppStrings.tr(appLanguage, "TACTICAL VOICE DROP", "ΦΩΝΗΤΙΚΟ ΜΗΝΥΜΑ"),
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontFamily = FontFamily.Monospace,
@@ -2289,7 +2303,7 @@ private fun MessageBubble(
                                             )
                                         )
                                         Text(
-                                            text = "TAP TO PLAY AUDIO CLIP",
+                                            text = com.example.util.AppStrings.tr(appLanguage, "TAP TO PLAY AUDIO CLIP", "ΠΑΤΗΣΤΕ ΓΙΑ ΑΝΑΠΑΡΑΓΩΓΗ"),
                                             style = MaterialTheme.typography.bodySmall.copy(
                                                 fontSize = 9.sp,
                                                 fontFamily = FontFamily.Monospace,
@@ -2323,7 +2337,7 @@ private fun MessageBubble(
                 if (packet.transport == "ECDH KEY PENDING" || packet.rawHexBadge.contains("KEY EXCHANGE PENDING")) {
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = "Key exchange pending — queued locally",
+                        text = com.example.util.AppStrings.tr(appLanguage, "Key exchange pending — queued locally", "Εκκρεμεί ανταλλαγή κλειδιού — σε τοπική ουρά"),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
@@ -2373,7 +2387,7 @@ private fun MessageBubble(
                                 border = androidx.compose.foundation.BorderStroke(0.8.dp, p.border)
                             ) {
                                 Text(
-                                    text = if (packet.hops == 1) "1 HOP" else "${packet.hops} HOPS",
+                                    text = if (packet.hops == 1) com.example.util.AppStrings.tr(appLanguage, "1 HOP", "1 ΑΛΜΑ") else com.example.util.AppStrings.tr(appLanguage, "${packet.hops} HOPS", "${packet.hops} ΑΛΜΑΤΑ"),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 8.sp,
                                         fontWeight = FontWeight.Bold,
@@ -2400,10 +2414,10 @@ private fun MessageBubble(
                             else -> p.textSecondary
                         }
                         val receiptLabel = when {
-                            isQueuedKeyPending -> "QUEUED"
-                            packet.isDelivered -> if (packet.ackedByCallsign.isNotBlank()) "RECEIVED (${packet.ackedByCallsign})" else "RECEIVED"
-                            isInGraceWindow -> "SENDING"
-                            else -> "NO ACK"
+                            isQueuedKeyPending -> com.example.util.AppStrings.tr(appLanguage, "QUEUED", "ΣΕ ΑΝΑΜΟΝΗ")
+                            packet.isDelivered -> if (packet.ackedByCallsign.isNotBlank()) "${com.example.util.AppStrings.tr(appLanguage, "RECEIVED", "ΠΑΡΑΔΟΘΗΚΕ")} (${packet.ackedByCallsign})" else com.example.util.AppStrings.tr(appLanguage, "RECEIVED", "ΠΑΡΑΔΟΘΗΚΕ")
+                            isInGraceWindow -> com.example.util.AppStrings.tr(appLanguage, "SENDING", "ΑΠΟΣΤΟΛΗ")
+                            else -> com.example.util.AppStrings.tr(appLanguage, "NO ACK", "ΧΩΡΙΣ ACK")
                         }
 
                         Row(
@@ -2431,7 +2445,7 @@ private fun MessageBubble(
                                             modifier = Modifier.size(10.dp)
                                         )
                                         Text(
-                                            text = "RETRY",
+                                            text = com.example.util.AppStrings.tr(appLanguage, "RETRY", "ΕΠΑΝΑΛΗΨΗ"),
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.ExtraBold,
@@ -2467,7 +2481,7 @@ private fun MessageBubble(
                     }
                 }
 
-                // v1.3.0 Message Reactions & Pin Row
+                // Message Reactions & Pin Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2525,7 +2539,7 @@ private fun MessageBubble(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "MESSAGE NOT RECEIVED YET",
+                        text = com.example.util.AppStrings.tr(appLanguage, "MESSAGE NOT RECEIVED YET", "ΤΟ ΜΗΝΥΜΑ ΔΕΝ ΕΧΕΙ ΠΑΡΑΔΟΘΕΙ ΑΚΟΜΑ"),
                         style = MaterialTheme.typography.titleSmall.copy(
                             color = p.amber,
                             fontWeight = FontWeight.ExtraBold,
@@ -2536,7 +2550,7 @@ private fun MessageBubble(
             },
             text = {
                 Text(
-                    text = "No delivery receipt (ACK) has arrived for this message yet. Would you like to retry sending it across all active mesh transports (BLE, L2CAP, and Wi-Fi Hotspot)?",
+                    text = com.example.util.AppStrings.tr(appLanguage, "No delivery receipt (ACK) has arrived for this message yet. Would you like to retry sending it across all active mesh transports (BLE, L2CAP, and Wi-Fi Hotspot)?", "Δεν έχει φτάσει επιβεβαίωση παράδοσης (ACK) για αυτό το μήνυμα ακόμα. Θέλετε να ξανασταλεί σε όλα τα ενεργά δίκτυα (BLE, L2CAP και Wi-Fi Hotspot);"),
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = p.textPrimary,
                         fontSize = 12.sp
@@ -2559,7 +2573,7 @@ private fun MessageBubble(
                     modifier = Modifier.testTag("confirm_retry_send_button")
                 ) {
                     Text(
-                        text = "RETRY SEND NOW",
+                        text = com.example.util.AppStrings.tr(appLanguage, "RETRY SEND NOW", "ΕΠΑΝΑΠΟΣΤΟΛΗ ΤΩΡΑ"),
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp
@@ -2568,7 +2582,7 @@ private fun MessageBubble(
             },
             dismissButton = {
                 TextButton(onClick = { showRetryConfirmDialog = false }) {
-                    Text("WAIT", color = p.textSecondary, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    Text(com.example.util.AppStrings.tr(appLanguage, "WAIT", "ΑΝΑΜΟΝΗ"), color = p.textSecondary, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
         )
@@ -2587,7 +2601,7 @@ private fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isOutgoing) "SHARED PHOTO (SELF)" else "PHOTO FROM ${packet.sourceCallsign}",
+                        text = if (isOutgoing) com.example.util.AppStrings.tr(appLanguage, "SHARED PHOTO (SELF)", "ΚΟΙΝΟΠΟΙΗΜΕΝΗ ΦΩΤΟ (ΕΓΩ)") else "${com.example.util.AppStrings.tr(appLanguage, "PHOTO FROM", "ΦΩΤΟ ΑΠΟ")} ${packet.sourceCallsign}",
                         style = MaterialTheme.typography.titleSmall.copy(
                             color = p.cyan,
                             fontWeight = FontWeight.ExtraBold,
@@ -2625,7 +2639,7 @@ private fun MessageBubble(
                         )
                     }
                     Text(
-                        text = "Transport: $transportBadge",
+                        text = "${com.example.util.AppStrings.tr(appLanguage, "Transport", "Μεταφορά")}: $transportBadge",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = p.emerald,
                             fontFamily = FontFamily.Monospace
@@ -2644,7 +2658,7 @@ private fun MessageBubble(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "CLOSE",
+                        text = com.example.util.AppStrings.tr(appLanguage, "CLOSE", "ΚΛΕΙΣΙΜΟ"),
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp

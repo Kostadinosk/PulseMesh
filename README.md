@@ -6,16 +6,16 @@
 
 **Off-Grid Peer-to-Peer Android Mesh Messenger, Full-Duplex Voice Communicator & Tactical Offline Map**
 
-[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.0)
-[![Platform](https://img.shields.io/badge/Android%20%2B%20iPhone%20PWA-API%2024--36%20%7C%20iOS%20Safari-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.0)
+[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1)
+[![Platform](https://img.shields.io/badge/Android%20%2B%20iPhone%20PWA-API%2024--36%20%7C%20iOS%20Safari-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://github.com/Kostadinosk/PulseMesh)
 [![Encryption](https://img.shields.io/badge/Crypto-ECDH%20P--256%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-0088E6?style=flat-square)](LICENSE)
 
 [**Live Website**](https://kostadinosk.github.io/PulseMesh/) &bull;
 [**iPhone PWA & Web Node**](https://kostadinosk.github.io/PulseMesh/web/) &bull;
-[**Download Release APK (v1.3.0)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.0/app-release.apk) &bull;
-[**Download Debug APK (v1.3.0)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.0/app-debug.apk) &bull;
+[**Download Release APK (v1.3.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-release.apk) &bull;
+[**Download Debug APK (v1.3.1)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-debug.apk) &bull;
 [**Contact & Field Reports**](https://kostadinosk.github.io/PulseMesh/contact.html) &bull;
 [**Report an Issue**](https://github.com/Kostadinosk/PulseMesh/issues)
 
@@ -33,7 +33,7 @@
 
 | Module | Highlights |
 | :--- | :--- |
-| **Wi-Fi Direct Web Portal & Browser Node (v1.2)** | Embedded pure-Kotlin HTTP/SSE server (`:8080`) auto-hosted on Wi-Fi Direct (`192.168.49.1`) and Local Hotspot (`192.168.43.1`) subnets so iPhones, laptops, and browsers join the live BLE/Wi-Fi mesh, cached offline map tiles, waypoints, and G.711 μ-law PTT with zero internet. Also available online at [`/web/`](https://kostadinosk.github.io/PulseMesh/web/). |
+| **Wi-Fi Direct Web Portal & Browser Node** | Embedded pure-Kotlin HTTP (`:8080`) + HTTPS SSL (`:8443`) + SSE server auto-hosted on Wi-Fi Direct (`192.168.49.1`) and Local Hotspot (`192.168.43.1`) subnets so iPhones, laptops, and browsers join the live BLE/Wi-Fi mesh, cached offline map tiles, waypoints, and browser mic voice calls & G.711 μ-law PTT with zero internet. Also available online at [`/web/`](https://kostadinosk.github.io/PulseMesh/web/). |
 | **Multi-Hop DTN Messaging** | Broadcast channels, ECDH group chats, and direct messages with `TTL=7` flood routing, packet deduplication, delivery ACKs, and a persistent Delay-Tolerant Networking (DTN) outbox. |
 | **Encrypted `@username` Accounts (`PMU2` / `PMB1`)** | Free cryptographic `@username` handles signed with ECDSA P-256 keys, PBKDF2-HMAC-SHA256 encrypted key vaults, and full-device migration (chats, contacts, keys) via PIN or one-time Recovery Key. |
 | **Full-Duplex Voice & Walkie-Talkie (PTT)** | Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice streaming over local Wi-Fi/Hotspot UDP or pure BLE GATT, with half-duplex echo ducking, lock-screen call controls, mini call bar, and voicemail capture. |
@@ -70,7 +70,7 @@ PulseMesh continuously negotiates the highest-bandwidth physical link between pe
 ## Quick Start & Building from Source
 
 ### Install Pre-Built APK
-Grab [`app-release.apk`](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.0/app-release.apk) from the [**v1.0 Release**](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.0) and install on two or more physical Android devices (Android 7.0 / API 24+).
+Grab [`app-release.apk`](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-release.apk) from the [**v1.3.1 Release**](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1) and install on two or more physical Android devices (Android 7.0 / API 24+).
 
 ### Build Locally with Gradle
 

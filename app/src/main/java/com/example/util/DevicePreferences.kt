@@ -427,7 +427,7 @@ class DevicePreferences(context: Context) {
         get() = prefs.getString("username_relay_url", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_CLOUDFLARE_RELAY_URL
         set(value) = prefs.edit().putString("username_relay_url", value.trim().trimEnd('/')).apply()
 
-    // PulseMesh v1.3.0 Preferences: Language (en/el), ICE Medical, Dead-Man's Switch, Geofence, Expedition, Decoy PIN, Per-Chat Burn TTL
+    // PulseMesh Field Preferences: Language (en/el), ICE Medical, Dead-Man's Switch, Geofence, Expedition, Decoy PIN, Per-Chat Burn TTL
     var appLanguage: String
         get() = prefs.getString("app_language", "en")?.takeIf { it == "el" || it == "en" } ?: "en"
         set(value) = prefs.edit().putString("app_language", if (value == "el") "el" else "en").apply()

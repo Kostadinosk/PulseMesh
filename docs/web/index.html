@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.3.0)</title>
+  <title>PulseMesh Web Node — Off-Grid &amp; iPhone PWA Mesh Client (v1.3.1)</title>
   <meta name="description" content="Official PulseMesh Web &amp; iPhone PWA client for Wi-Fi Direct Local Web Portals and encrypted E2EE hybrid mesh channels." />
   <meta name="theme-color" content="#041320" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -880,7 +880,7 @@
     <div class="brand-left" id="openSetupFromTop" title="Open Setup / Account Login">
       <span class="brand-dot connecting" id="connDot"></span>
       <span class="callsign-title" id="topIdentity">WebOperator (0x0000)</span>
-      <span class="version-tag">v1.3.0</span>
+      <span class="version-tag">v1.3.1</span>
     </div>
     <div class="topbar-right">
       <span class="pill cyan" id="modePill">DETECTING...</span>
@@ -940,7 +940,7 @@
             <span class="badge-e2ee" id="activeThreadBadge">MESH</span>
           </div>
         </div>
-        <!-- v1.3.0 Tactical Quick-Status Bar (Text + Web Speech Voice!) -->
+        <!-- Tactical Quick-Status Bar (Text + Web Speech Voice) -->
         <div id="quickStatusBar" style="display:flex;gap:6px;overflow-x:auto;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--bg-card);align-items:center;">
           <button type="button" class="btn" id="qsVoiceToggleBtn" style="padding:4px 8px;font-size:10px;white-space:nowrap;">🔊 Voice ON</button>
           <button type="button" class="btn quick-status-btn" data-code="ALL_OK" style="padding:4px 8px;font-size:10px;white-space:nowrap;border-color:var(--emerald);color:var(--emerald);">✅ ALL OK</button>
@@ -1021,7 +1021,7 @@
       </div>
     </section>
 
-    <!-- TAB 5: SETTINGS & PORTAL (v1.3.0 HORIZONTAL EXPANDABLE TOPIC LANES) -->
+    <!-- TAB 5: SETTINGS & PORTAL (HORIZONTAL EXPANDABLE TOPIC LANES) -->
     <section class="tab-view scroll-panel" id="tab-settings">
       <div class="panel-container">
         <div class="h-stack" id="quickSettingsStack">
@@ -1042,7 +1042,7 @@
         </div>
 
         <div class="card lane-panel" data-lane-panel="identity">
-          <h3>OPERATOR IDENTITY, CLOUDFLARE D1 &amp; QR JOIN (3.3)</h3>
+          <h3 id="hdrLaneIdentity">OPERATOR IDENTITY, CLOUDFLARE D1 &amp; QR JOIN</h3>
           <div class="form-grid">
             <div class="field">
               <label for="setCallsign">Operator Callsign / @username</label>
@@ -1093,7 +1093,7 @@
         </div>
 
         <div class="card lane-panel" data-lane-panel="files" style="display:none;">
-          <h3>OFFLINE FILE TRANSFER (1.1) &amp; TRIP ARCHIVE (3.2)</h3>
+          <h3 id="hdrLaneFiles">OFFLINE FILE TRANSFER &amp; TRIP ARCHIVE</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;">
             Share documents, GPX tracks, or notes over the Android Hotspot portal with SHA-256 verification (up to 5 MB), or export your full trip archive JSON.
           </p>
@@ -1108,7 +1108,7 @@
         </div>
 
         <div class="card lane-panel" data-lane-panel="safety" style="display:none;">
-          <h3>GEOFENCE PERIMETER (1.5) &amp; LANGUAGE (3.4)</h3>
+          <h3 id="hdrLaneSafety">GEOFENCE PERIMETER &amp; LANGUAGE</h3>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
             <label style="font-size:12px;color:var(--text-secondary);">Language:</label>
             <button type="button" class="btn btn-emerald" id="langEnBtn">English (EN)</button>
@@ -1145,10 +1145,10 @@
         </div>
 
         <div class="card">
-          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.3.0)</h3>
+          <h3>ABOUT PULSEMESH WEB &amp; IPHONE PWA (v1.3.1)</h3>
           <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.55;">
             Official browser &amp; iPhone/iPad PWA counterpart to PulseMesh Android. Uses <strong>Cloudflare Workers + D1</strong> global username registry, <strong>ECDH P-256</strong>, <strong>PBKDF2-HMAC-SHA256</strong> account vaults (<code>PV1:</code>), <strong>HTTPS :8443 SSL</strong> local portal, <strong>8 kHz IMA-ADPCM &amp; G.711 μ-law</strong> live voice calls, and <strong>AES-256-GCM</strong>.<br /><br />
-            <strong>PulseMesh v1.3.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
+            <strong>PulseMesh v1.3.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0</strong> (<a href="../index.html" style="color:var(--cyan);">Website</a> • <a href="https://github.com/Kostadinosk/PulseMesh" target="_blank" rel="noopener" style="color:var(--cyan);">GitHub</a>)
           </p>
         </div>
       </div>
@@ -1170,7 +1170,7 @@
       <div class="setup-brand">
         <img src="../assets/pulsemesh-logo.png" onerror="this.src='/api/icon.png'" alt="PulseMesh" />
         <div>
-          <h1>PulseMesh v1.3.0 Setup &amp; Login</h1>
+          <h1>PulseMesh v1.3.1 Setup &amp; Login</h1>
           <p>Official iPhone PWA, Desktop Browser &amp; Wi-Fi Direct Mesh Node</p>
         </div>
       </div>
@@ -1382,6 +1382,7 @@
       waypoints: new Map(),
       packets: [],
       seenIds: new Set(),
+      ackedIds: new Set(),
       logs: [],
       map: {
         lat: 37.9838,
@@ -1399,7 +1400,8 @@
       sseSource: null,
       localPollTimer: null,
       heartbeatTimer: null,
-      lastVoiceSeq: 0
+      lastVoiceSeq: 0,
+      lastCallSignalSeq: 0
     };
     saveConfig({ nodeId: state.nodeId, callsign: state.callsign, passphrase: state.passphrase, locationMode: state.locationMode });
 
@@ -1649,7 +1651,7 @@
           const j = await cfRes.json();
           if (j && j.found && j.record) return j.record;
           if (j && j.found === false) {
-            // Also check legacy ntfy fallback in case older client claimed before v1.3.0
+            // Also check legacy ntfy fallback for older claims
           }
         }
       } catch (_) {}
@@ -2025,6 +2027,20 @@
     // =========================================================================
     // PACKET INGESTION & UI RENDERING
     // =========================================================================
+    function sendChatAck(targetPacketId, senderNodeId) {
+      if (!targetPacketId || state.ackedIds.has(targetPacketId)) return;
+      if (senderNodeId && normId(senderNodeId) === normId(state.nodeId)) return;
+      state.ackedIds.add(targetPacketId);
+      if (state.ackedIds.size > 2000) state.ackedIds.delete(state.ackedIds.values().next().value);
+      sendMeshAction({
+        type: "CHAT_ACK",
+        threadId: "channel_primary",
+        dstNodeId: senderNodeId || "ALL",
+        payload: targetPacketId,
+        text: targetPacketId
+      }).catch(() => {});
+    }
+
     async function ingestWirePacket(pkt, sourceTransportLabel) {
       if (!pkt || !pkt.packetId || state.seenIds.has(pkt.packetId)) return;
       state.seenIds.add(pkt.packetId);
@@ -2126,9 +2142,32 @@
         drawMap();
         return;
       }
+      if (type === "CHAT_ACK") {
+        const ackTargetId = pkt.targetPacketId || pkt.payload || "";
+        const target = state.packets.find((p) => p.id === ackTargetId);
+        if (target) {
+          target.isDelivered = true;
+          target.ackedByCallsign = pkt.srcCallsign || pkt.srcNodeId || target.ackedByCallsign || "";
+          renderMessages();
+        }
+        return;
+      }
       if (type === "QUICK_STATUS") {
-        const parts = String(pkt.payload || "").split("|");
-        const label = parts[1] || parts[0] || "STATUS";
+        let label = "STATUS";
+        const rawQs = String(pkt.payload || "");
+        try {
+          if (rawQs.startsWith("{")) {
+            const obj = JSON.parse(rawQs);
+            const isEl = (localStorage.getItem("pulsemesh-lang") || "en") === "el";
+            label = (isEl ? obj.labelEl : obj.labelEn) || obj.labelEn || obj.code || label;
+          } else {
+            const parts = rawQs.split("|");
+            label = parts[1] || parts[0] || label;
+          }
+        } catch (_) {
+          const parts = rawQs.split("|");
+          label = parts[1] || parts[0] || label;
+        }
         addChatMessage({
           id: pkt.packetId, threadId: "channel_primary", sender: pkt.srcCallsign || pkt.srcNodeId,
           srcNodeId: pkt.srcNodeId, text: `⚡ QUICK STATUS: ${label}`,
@@ -2138,9 +2177,19 @@
         return;
       }
       if (type === "REACTION") {
-        const parts = String(pkt.payload || "").split("|");
-        if (parts.length >= 2) {
-          const targetId = parts[0], emoji = parts[1];
+        let targetId = "", emoji = "";
+        const rawRx = String(pkt.payload || "");
+        try {
+          if (rawRx.startsWith("{")) {
+            const obj = JSON.parse(rawRx);
+            targetId = obj.packetId || "";
+            emoji = obj.emoji || "";
+          } else {
+            const parts = rawRx.split("|");
+            if (parts.length >= 2) { targetId = parts[0]; emoji = parts[1]; }
+          }
+        } catch (_) {}
+        if (targetId && emoji) {
           const target = state.packets.find((p) => p.id === targetId);
           if (target) {
             target.reactions = target.reactions || {};
@@ -2178,6 +2227,7 @@
           text: displayText, kind: "text", isSelf, transport: sourceTransportLabel || "MESH",
           hops: pkt.hops || 0, timestamp: pkt.timestamp || Date.now()
         });
+        if (!isSelf) sendChatAck(pkt.packetId, pkt.srcNodeId);
       }
     }
 
@@ -2295,14 +2345,21 @@
           bodyHtml = `<div class="msg-text">${escapeHtml(m.text)}</div>`;
         }
         const rxEntries = Object.entries(m.reactions || {});
-        const rxBadges = rxEntries.map(([em, actors]) => `<span style="background:rgba(25,230,140,0.18);border:1px solid var(--emerald);border-radius:10px;padding:1px 6px;font-size:10px;">${escapeHtml(em)} ${actors.length}</span>`).join(" ");
+        const rxBadges = rxEntries.map(([em, actors]) => `<span style="background:rgba(25,230,140,0.18);border:1px solid var(--emerald);border-radius:10px;padding:1px 6px;font-size:10px;">${escapeHtml(em)} ${(actors || []).length}</span>`).join(" ");
         const safeMid = escapeHtml(m.id);
+        const isElLang = (localStorage.getItem("pulsemesh-lang") || "en") === "el";
+        const ackTag = m.isSelf
+          ? (m.isDelivered
+            ? ` • <span style="color:var(--emerald);font-weight:700;">✓✓ ${isElLang ? "Παραδόθηκε" : "Received"}${m.ackedByCallsign ? " (" + escapeHtml(m.ackedByCallsign) + ")" : ""}</span>`
+            : ` • <span style="color:var(--text-muted);">✓ ${isElLang ? "Απεστάλη" : "Sent"}</span>`)
+          : "";
+        const pinTag = m.isPinned ? ` <span title="Pinned">📌</span>` : "";
         return `
           <div class="${cls}">
-            <div class="msg-meta"><span class="msg-sender">${escapeHtml(m.sender)}</span><span>${ts}</span></div>
+            <div class="msg-meta"><span class="msg-sender">${escapeHtml(m.sender)}${pinTag}</span><span>${ts}</span></div>
             ${bodyHtml}
             <div class="msg-badge" style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
-              <span>${escapeHtml(m.transport)} • Hop ${m.hops} ${rxBadges}</span>
+              <span>${escapeHtml(m.transport)} • Hop ${m.hops}${ackTag} ${rxBadges}</span>
               <span style="cursor:pointer;">
                 <span onclick="window.__reactMsg('${safeMid}','👍')">👍</span>
                 <span onclick="window.__reactMsg('${safeMid}','✅')">✅</span>
@@ -2424,7 +2481,7 @@
         packetId: `hb_${Date.now()}_${Math.floor(1000 + Math.random() * 8999)}`,
         srcNodeId: state.nodeId, srcCallsign: state.callsign, dstNodeId: "BROADCAST",
         type: (loc.lat != null && loc.lng != null) ? "GPS_BEACON" : "HEARTBEAT",
-        payload: "PulseMesh Web/iPhone Node v1.2.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
+        payload: "PulseMesh Web/iPhone Node v1.3.1", ttl: 7, hops: 0, battery: 100, timestamp: Date.now()
       };
       if (loc.lat != null && loc.lng != null) { pkt.lat = loc.lat; pkt.lng = loc.lng; }
       if (state.pubKeyB64) pkt.pk = state.pubKeyB64;
@@ -2473,17 +2530,40 @@
       }
       if (Array.isArray(snap.packets)) {
         for (const p of snap.packets) {
-          if (!p.id || state.packets.some((x) => x.id === p.id)) continue;
+          if (!p.id) continue;
+          const existing = state.packets.find((x) => x.id === p.id);
+          if (existing) {
+            existing.isDelivered = Boolean(existing.isDelivered || p.isDelivered);
+            if (p.ackedByCallsign) existing.ackedByCallsign = p.ackedByCallsign;
+            existing.isPinned = Boolean(p.isPinned);
+            if (p.reactions && typeof p.reactions === "object") existing.reactions = p.reactions;
+            continue;
+          }
           state.seenIds.add(p.id);
+          const isSelfPkt = normId(p.sourceId) === normId(state.nodeId);
           state.packets.push({
             id: p.id, threadId: p.threadId || "channel_primary", sender: p.sourceCallsign || p.sourceId || "Peer",
             srcNodeId: p.sourceId || "", text: p.content || "",
             kind: p.type === "SOS" ? "sos" : (p.type === "WAYPOINT" ? "waypoint" : "text"),
-            isSelf: normId(p.sourceId) === normId(state.nodeId), transport: p.transport || "WI-FI DIRECT",
-            hops: p.hops || 0, timestamp: p.timestamp || Date.now()
+            isSelf: isSelfPkt, transport: p.transport || "WI-FI DIRECT",
+            hops: p.hops || 0, timestamp: p.timestamp || Date.now(),
+            isDelivered: Boolean(p.isDelivered), ackedByCallsign: p.ackedByCallsign || "",
+            isPinned: Boolean(p.isPinned), reactions: p.reactions || {}
           });
+          if (!isSelfPkt && !p.isDelivered && (p.type === "CHAT" || p.type === "E2EE_DM" || p.type === "GROUP_CHAT" || !p.type)) {
+            sendChatAck(p.id, p.sourceId);
+          }
         }
         state.packets.sort((a, b) => a.timestamp - b.timestamp);
+      }
+      if (Array.isArray(snap.recentCallSignals)) {
+        for (const sig of snap.recentCallSignals) {
+          if (!sig || typeof sig.seq !== "number" || sig.seq <= state.lastCallSignalSeq) continue;
+          state.lastCallSignalSeq = sig.seq;
+          if (normId(sig.srcNodeId) !== normId(state.nodeId)) {
+            handleIncomingCallSignal(sig.type, sig.srcNodeId, sig.srcCallsign || sig.srcNodeId, sig.dstNodeId || "ALL");
+          }
+        }
       }
       if (snap.recentVoice && snap.recentVoice.seq > state.lastVoiceSeq) {
         state.lastVoiceSeq = snap.recentVoice.seq;
@@ -2509,9 +2589,13 @@
 
       const portalCard = document.getElementById("localPortalCard");
       portalCard.style.display = "block";
+      const httpsBanner = (location.protocol !== "https:" && info.sslEnabled && info.httpsPortalUrl)
+        ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><a class="btn btn-emerald" href="${escapeHtml(info.httpsPortalUrl)}">🔒 Switch to HTTPS :${info.httpsPort || 8443} (Required for Mic Calls)</a><a class="btn" href="/api/cert.der">📜 Download Host SSL Cert</a></div>`
+        : "";
       document.getElementById("localPortalDetails").innerHTML =
         `Connected offline to Android host <strong>${escapeHtml(info.hostCallsign)}</strong> (<code>${escapeHtml(info.hostNodeId)}</code>).<br/>` +
-        `SSID: <code>${escapeHtml(info.ssid || "Local Wi-Fi")}</code> • Portal: <code>${escapeHtml(info.portalUrl || location.origin)}</code>`;
+        `SSID: <code>${escapeHtml(info.ssid || "Local Wi-Fi")}</code> • Portal: <code>${escapeHtml(info.portalUrl || location.origin)}</code>` +
+        httpsBanner;
 
       logLine("LOCAL", `Bridged to Android Host ${info.hostCallsign} (${info.hostNodeId}) v${info.version}`);
       await sendPresencePing();
@@ -2739,7 +2823,7 @@
         const t = latLonToTile(lat, lng, z);
         return { x: w / 2 + (t.x - center.x) * tileSize, y: h / 2 + (t.y - center.y) * tileSize };
       };
-      // 1.5 Geofence Perimeter Circle
+      // Geofence Perimeter Circle
       const gfRadM = Number(localStorage.getItem("pulsemesh-geofence-m") || "0");
       if (gfRadM > 0 && state.lat != null && state.lng != null) {
         const selfPt = project(state.lat, state.lng);
@@ -2753,7 +2837,7 @@
         mctx.beginPath(); mctx.arc(selfPt.x, selfPt.y, radPx, 0, Math.PI * 2); mctx.fill(); mctx.stroke();
         mctx.restore();
       }
-      // 1.2 Mesh Topology Link Lines
+      // Mesh Topology Link Lines
       if (state.lat != null && state.lng != null) {
         const selfPt = project(state.lat, state.lng);
         mctx.save();
@@ -2903,7 +2987,10 @@
           }
         };
         pttSourceNode.connect(pttProcessor);
-        pttProcessor.connect(ctx.destination);
+        const silentPttSink = ctx.createGain();
+        silentPttSink.gain.value = 0;
+        pttProcessor.connect(silentPttSink);
+        silentPttSink.connect(ctx.destination);
         document.getElementById("voiceStatusBox").textContent = "🔴 LIVE PTT TX — STREAMING G.711 μ-LAW";
       } catch (e) {
         logLine("VOICE", "Mic error: " + e.message);
@@ -3099,7 +3186,10 @@
           }
         };
         callState.srcNode.connect(callState.proc);
-        callState.proc.connect(ctx.destination);
+        const silentCallSink = ctx.createGain();
+        silentCallSink.gain.value = 0;
+        callState.proc.connect(silentCallSink);
+        silentCallSink.connect(ctx.destination);
         document.getElementById("callHintLabel").textContent = "8 kHz HD IMA-ADPCM Duplex Active";
       } catch (e) {
         document.getElementById("callHintLabel").textContent = "Mic denied — listening in RX-only mode";
@@ -3173,6 +3263,7 @@
     }
 
     document.getElementById("btnAcceptCall").addEventListener("click", async () => {
+      getAudioCtx();
       await sendMeshAction({ type: "CALL_ACCEPT", dstNodeId: callState.peerId, payload: "ACCEPT" }).catch(() => {});
       enterActiveCallState();
     });
@@ -3224,7 +3315,7 @@
       await sendMeshAction({ type: "SOS_CLEAR", text: `SOS CANCELLED by ${state.callsign}` }).catch(() => {});
     });
 
-    // v1.3.0 Quick-Status (Text + Web Speech Voice!), Reactions, Quick Replies, Search, Lanes, Files, QR Join & Language
+    // Quick-Status (Text + Web Speech Voice), Reactions, Quick Replies, Search, Lanes, Files, QR Join & Language
     let quickStatusVoiceOn = true;
     function speakQuickStatusWeb(phrase) {
       if (!quickStatusVoiceOn) return;
@@ -3239,17 +3330,25 @@
     }
     document.getElementById("qsVoiceToggleBtn")?.addEventListener("click", (e) => {
       quickStatusVoiceOn = !quickStatusVoiceOn;
-      e.target.textContent = quickStatusVoiceOn ? "🔊 Voice ON" : "🔇 Voice OFF";
+      const isEl = (localStorage.getItem("pulsemesh-lang") || "en") === "el";
+      e.target.textContent = quickStatusVoiceOn ? (isEl ? "🔊 Φωνή ON" : "🔊 Voice ON") : (isEl ? "🔇 Φωνή OFF" : "🔇 Voice OFF");
     });
     const quickStatusLabels = {
-      ALL_OK: "ALL OK", LOW_BATTERY: "LOW BATTERY", NEED_WATER: "NEED WATER", MOVING: "MOVING", NEED_HELP: "NEED HELP"
+      ALL_OK: { en: "ALL OK", el: "ΟΛΑ ΚΑΛΑ" },
+      LOW_BATTERY: { en: "LOW BATTERY", el: "ΧΑΜΗΛΗ ΜΠΑΤΑΡΙΑ" },
+      NEED_WATER: { en: "NEED WATER", el: "ΧΡΕΙΑΖΟΜΑΙ ΝΕΡΟ" },
+      MOVING: { en: "MOVING", el: "ΣΕ ΚΙΝΗΣΗ" },
+      NEED_HELP: { en: "NEED HELP", el: "ΧΡΕΙΑΖΟΜΑΙ ΒΟΗΘΕΙΑ" }
     };
     document.querySelectorAll(".quick-status-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const code = btn.getAttribute("data-code") || "ALL_OK";
-        const label = quickStatusLabels[code] || code;
+        const pair = quickStatusLabels[code] || { en: code, el: code };
+        const isEl = (localStorage.getItem("pulsemesh-lang") || "en") === "el";
+        const label = isEl ? pair.el : pair.en;
         speakQuickStatusWeb(`${state.callsign}: ${label}`);
-        await sendMeshAction({ type: "QUICK_STATUS", threadId: "channel_primary", payload: `${code}|${label}`, text: `⚡ QUICK STATUS: ${label}` }).catch(() => {});
+        const jsonPayload = JSON.stringify({ code, labelEn: pair.en, labelEl: pair.el });
+        await sendMeshAction({ type: "QUICK_STATUS", threadId: "channel_primary", payload: jsonPayload, text: jsonPayload }).catch(() => {});
       });
     });
     document.querySelectorAll(".quick-reply-chip").forEach((btn) => {
@@ -3268,7 +3367,8 @@
         target.reactions[emoji] = Array.from(s);
         renderMessages();
       }
-      await sendMeshAction({ type: "REACTION", threadId: state.selectedThreadId, payload: `${pktId}|${emoji}`, text: `${pktId}|${emoji}` }).catch(() => {});
+      const rxJson = JSON.stringify({ packetId: pktId, emoji });
+      await sendMeshAction({ type: "REACTION", threadId: state.selectedThreadId, payload: rxJson, text: rxJson }).catch(() => {});
     };
 
     // Horizontal Expandable Settings Topic Lanes
@@ -3288,7 +3388,7 @@
     });
     selectWebSettingsLane("identity");
 
-    // 1.1 Offline File Transfer (Hotspot /api/files, /api/files/upload, /api/files/download)
+    // Offline File Transfer (Hotspot /api/files, /api/files/upload, /api/files/download)
     async function refreshOfflineFiles() {
       const listEl = document.getElementById("offlineFilesList");
       const statusEl = document.getElementById("offlineFilesStatus");
@@ -3342,10 +3442,10 @@
       reader.readAsDataURL(file);
     });
 
-    // 3.2 Trip Log JSON Export
+    // Trip Log JSON Export
     document.getElementById("exportTripJsonBtn")?.addEventListener("click", () => {
       const payload = JSON.stringify({
-        exportedAt: Date.now(), version: "1.3.0", nodeId: state.nodeId, callsign: state.callsign,
+        exportedAt: Date.now(), version: "1.3.1", nodeId: state.nodeId, callsign: state.callsign,
         waypoints: Array.from(state.waypoints.values()), packets: state.packets
       }, null, 2);
       const blob = new Blob([payload], { type: "application/json" });
@@ -3355,7 +3455,7 @@
       a.click();
     });
 
-    // 3.3 QR / URI Instant Join Export & Import
+    // QR / URI Instant Join Export & Import
     document.getElementById("copyJoinUriBtn")?.addEventListener("click", async () => {
       const uri = `pulsemesh://join?id=${encodeURIComponent(state.nodeId)}&cs=${encodeURIComponent(state.callsign)}&ch=${encodeURIComponent(state.passphrase)}&pk=${encodeURIComponent(state.pubKeyB64 || "")}`;
       try { await navigator.clipboard.writeText(uri); } catch (_) {}
@@ -3373,7 +3473,7 @@
       statusEl.textContent = `Imported peer ${cs} (${node})!`;
     });
 
-    // 3.4 Multi-Language Switcher (EN / EL) & 1.5 Geofence Selector
+    // Multi-Language Switcher (EN / EL) & Geofence Selector
     function applyWebLang(lang) {
       localStorage.setItem("pulsemesh-lang", lang);
       const el = lang === "el";
@@ -3384,7 +3484,54 @@
         if (spans[1] && navMap[k]) spans[1].textContent = navMap[k];
       });
       const qsLang = document.getElementById("qsLangVal");
-      if (qsLang) qsLang.textContent = el ? "ΕΛ / FENCE" : "EN / FENCE";
+      if (qsLang) qsLang.textContent = el ? "ΕΛ / ΟΡΙΟ" : "EN / FENCE";
+      const searchIn = document.getElementById("chatSearchInput");
+      if (searchIn) searchIn.placeholder = el ? "Αναζήτηση..." : "Search...";
+      const chatIn = document.getElementById("chatInput");
+      if (chatIn) chatIn.placeholder = el ? "Μήνυμα στο mesh..." : "Message mesh...";
+      const sendBtn = document.querySelector("#chatForm button[type='submit']");
+      if (sendBtn) sendBtn.textContent = el ? "ΑΠΟΣΤΟΛΗ" : "SEND";
+      const qsVoice = document.getElementById("qsVoiceToggleBtn");
+      if (qsVoice) qsVoice.textContent = quickStatusVoiceOn ? (el ? "🔊 Φωνή ON" : "🔊 Voice ON") : (el ? "🔇 Φωνή OFF" : "🔇 Voice OFF");
+      const pttLbl = document.getElementById("pttBtnLabel");
+      if (pttLbl && !pttActive) pttLbl.textContent = el ? "ΚΡΑΤΗΣΤΕ ΓΙΑ ΟΜΙΛΙΑ" : "HOLD TO TALK";
+      const vBox = document.getElementById("voiceStatusBox");
+      if (vBox && !pttActive) vBox.textContent = el ? "ΑΝΑΜΟΝΗ • ΚΡΑΤΗΣΤΕ ΠΑΤΗΜΕΝΟ ΤΟ PTT" : "STANDBY • HOLD PTT TO TRANSMIT";
+      const voiceSos = document.getElementById("voiceSosBtn");
+      if (voiceSos) voiceSos.textContent = el ? "⚠ ΕΚΠΟΜΠΗ ΕΚΤΑΚΤΟΥ SOS" : "⚠ TRIGGER PRIORITY SOS ALERT";
+      const hId = document.getElementById("hdrLaneIdentity");
+      if (hId) hId.textContent = el ? "ΤΑΥΤΟΤΗΤΑ ΧΕΙΡΙΣΤΗ, CLOUDFLARE D1 & QR" : "OPERATOR IDENTITY, CLOUDFLARE D1 & QR JOIN";
+      const hFiles = document.getElementById("hdrLaneFiles");
+      if (hFiles) hFiles.textContent = el ? "ΜΕΤΑΦΟΡΑ ΑΡΧΕΙΩΝ & ΕΞΑΓΩΓΗ ΤΑΞΙΔΙΟΥ" : "OFFLINE FILE TRANSFER & TRIP ARCHIVE";
+      const hSafety = document.getElementById("hdrLaneSafety");
+      if (hSafety) hSafety.textContent = el ? "ΠΕΡΙΜΕΤΡΟΣ ΧΑΡΤΗ & ΓΛΩΣΣΑ" : "GEOFENCE PERIMETER & LANGUAGE";
+      const lMap = {
+        laneIdentity: el ? "ΛΟΓΑΡΙΑΣΜΟΣ" : "ACCOUNT & QR",
+        lanePortal: "HOTSPOT & SSL",
+        laneFiles: el ? "ΑΡΧΕΙΑ" : "FILES & EXPORT",
+        laneSafety: el ? "ΓΛΩΣΣΑ/ΟΡΙΟ" : "GEOFENCE & LANG",
+        qsDeleteTile: el ? "ΔΙΑΓΡΑΦΗ" : "ERASE DATA"
+      };
+      Object.entries(lMap).forEach(([id, txt]) => {
+        const lbl = document.querySelector("#" + id + " .ht-lbl");
+        if (lbl) lbl.textContent = txt;
+      });
+      const qsBtnLabels = {
+        ALL_OK: el ? "✅ ΟΛΑ ΚΑΛΑ" : "✅ ALL OK",
+        LOW_BATTERY: el ? "🔋 ΧΑΜΗΛΗ" : "🔋 LOW BAT",
+        NEED_WATER: el ? "💧 ΝΕΡΟ" : "💧 WATER",
+        MOVING: el ? "🚶 ΚΙΝΟΥΜΑΙ" : "🚶 MOVING",
+        NEED_HELP: el ? "🆘 ΒΟΗΘΕΙΑ" : "🆘 HELP"
+      };
+      document.querySelectorAll(".quick-status-btn").forEach((b) => {
+        const c = b.getAttribute("data-code");
+        if (c && qsBtnLabels[c]) b.textContent = qsBtnLabels[c];
+      });
+      const chipLabels = el ? ["Ελήφθη / ΟΚ", "Έρχομαι", "Μένω εδώ", "Δες τον χάρτη"] : ["Roger", "On my way", "Holding", "Check map"];
+      document.querySelectorAll(".quick-reply-chip").forEach((b, idx) => {
+        if (chipLabels[idx]) b.textContent = chipLabels[idx];
+      });
+      if (typeof renderMessages === "function") renderMessages();
     }
     document.getElementById("langEnBtn")?.addEventListener("click", () => applyWebLang("en"));
     document.getElementById("langElBtn")?.addEventListener("click", () => applyWebLang("el"));
@@ -3449,7 +3596,7 @@
     document.getElementById("qsAudioTile").addEventListener("click", () => { document.getElementById("voiceRxToggleBtn").click(); syncSettingsInputs(); });
     document.getElementById("qsPingTile").addEventListener("click", () => { sendPresencePing(); spikeWaveRibbon(); logLine("PING", "Presence beacon sent."); });
 
-    // Delete All Account Information Handler (v1.2.9: strictly requires active login OR BOTH PIN + Recovery Key)
+    // Delete All Account Information Handler (strictly requires active login OR BOTH PIN + Recovery Key)
     document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
       const statusEl = document.getElementById("deleteAccountStatus");
       const rawTarget = document.getElementById("deleteAccountInput").value.trim();
@@ -3577,7 +3724,8 @@
       }
 
       let localInfo = null;
-      const maxProbes = location.protocol === "http:" ? 3 : 1;
+      const isLocalOrigin = location.protocol === "http:" || location.port === "8443" || /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
+      const maxProbes = isLocalOrigin ? 3 : 1;
       for (let attempt = 0; attempt < maxProbes && !localInfo; attempt++) {
         try {
           const ctrl = new AbortController();

@@ -165,7 +165,7 @@ class PersistentChatManager(private val context: Context) {
         for ((_, list) in memoryCache) {
             for (idx in list.indices) {
                 val existing = list[idx]
-                if (existing.id == packetId && !existing.isIncoming) {
+                if (existing.id == packetId && (!existing.isIncoming || existing.transport == "WEB PORTAL")) {
                     if (!existing.isDelivered || (ackerCallsign.isNotBlank() && existing.ackedByCallsign.isBlank())) {
                         list[idx] = existing.copy(
                             isDelivered = true,
@@ -180,6 +180,25 @@ class PersistentChatManager(private val context: Context) {
             persistToDisk()
         }
         return updatedAny
+    }
+
+    @Synchronized
+    fun updatePacketTransportBadge(
+        threadId: String,
+        packetId: String,
+        transport: String,
+        rawHexBadge: String
+    ): Boolean {
+        val list = memoryCache[threadId] ?: return false
+        for (idx in list.indices) {
+            val existing = list[idx]
+            if (existing.id == packetId) {
+                list[idx] = existing.copy(transport = transport, rawHexBadge = rawHexBadge)
+                persistToDisk()
+                return true
+            }
+        }
+        return false
     }
 
     @Synchronized

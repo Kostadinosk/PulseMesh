@@ -406,6 +406,7 @@ class MainActivity : ComponentActivity() {
                                     barometricPressureHpa = state.barometricPressureHpa,
                                     weatherTrendLabel = state.weatherTrendLabel,
                                     isStormAlertActive = state.isStormAlertActive,
+                                    appLanguage = state.appLanguage,
                                 )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(
@@ -457,6 +458,7 @@ class MainActivity : ComponentActivity() {
                                 duplexCallState = state.duplexCallState,
                                 audioService = viewModel.audioService,
                                 onStartCall = { viewModel.startDuplexCall(it) },
+                                appLanguage = state.appLanguage,
                                 onStartGroupCall = { viewModel.startGroupMeshCall() },
                                 onEndCall = { viewModel.endDuplexCall() },
                                 onToggleMute = { viewModel.toggleCallMute() },
@@ -618,7 +620,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "SYSTEM & CRYPTO",
+                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "SYSTEM & CRYPTO", "ΣΥΣΤΗΜΑ & ΚΡΥΠΤΟ"),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -653,7 +655,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "RF LAB & KERNEL",
+                                                    text = com.example.util.AppStrings.tr(state.appLanguage, "RF LAB & KERNEL", "RF LAB & ΠΥΡΗΝΑΣ"),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -816,7 +818,11 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Text(
-                                        text = if (state.isSosActive) "⚠ SOS BROADCASTING" else "⚠ SOS",
+                                        text = if (state.isSosActive) {
+                                            com.example.util.AppStrings.tr(state.appLanguage, "⚠ SOS BROADCASTING", "⚠ ΕΚΠΟΜΠΗ SOS")
+                                        } else {
+                                            "⚠ SOS"
+                                        },
                                         color = Color.White,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontFamily = FontFamily.Monospace,
@@ -853,7 +859,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                         Text(
-                                            text = "BROADCAST EMERGENCY SOS?",
+                                            text = com.example.util.AppStrings.tr(state.appLanguage, "BROADCAST EMERGENCY SOS?", "ΕΚΠΟΜΠΗ ΕΚΤΑΚΤΟΥ SOS;"),
                                             color = p.red,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 14.sp,
@@ -863,7 +869,11 @@ class MainActivity : ComponentActivity() {
                                 },
                                 text = {
                                     Text(
-                                        text = "This will immediately broadcast an SOS alert and your current GPS coordinates (if locked) to all nearby mesh peers and drop an SOS waypoint on the tactical map.",
+                                        text = com.example.util.AppStrings.tr(
+                                            state.appLanguage,
+                                            "This will immediately broadcast an SOS alert and your current GPS coordinates (if locked) to all nearby mesh peers and drop an SOS waypoint on the tactical map.",
+                                            "Θα σταλεί άμεσα σήμα κινδύνου SOS με τις συντεταγμένες GPS σε όλους τους κοντινούς κόμβους και θα προστεθεί πινέζα SOS στον χάρτη."
+                                        ),
                                         color = p.textPrimary,
                                         fontSize = 12.sp
                                     )
@@ -881,7 +891,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.testTag("sos_confirm_dialog_button")
                                     ) {
                                         Text(
-                                            text = "TRIGGER SOS NOW",
+                                            text = com.example.util.AppStrings.tr(state.appLanguage, "TRIGGER SOS NOW", "ΕΚΠΟΜΠΗ SOS ΤΩΡΑ"),
                                             fontWeight = FontWeight.ExtraBold,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 11.sp
@@ -890,7 +900,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 dismissButton = {
                                     TextButton(onClick = { showSosConfirmDialog = false }) {
-                                        Text("CANCEL", color = p.textSecondary)
+                                        Text(com.example.util.AppStrings.tr(state.appLanguage, "CANCEL", "ΑΚΥΡΩΣΗ"), color = p.textSecondary)
                                     }
                                 }
                             )
@@ -898,7 +908,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // 4.2 Decoy / Panic Mode Benign Hiking Trail Log Overlay
+                // Decoy / Panic Mode Benign Hiking Trail Log Overlay
                 if (state.isDecoyModeActive) {
                     var exitTapCount by remember { mutableIntStateOf(0) }
                     Surface(
@@ -930,13 +940,13 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column {
                                     Text(
-                                        text = "TrailNote Compass & Hike Log",
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "TrailNote Compass & Hike Log", "Ημερολόγιο Διαδρομών & Πυξίδα"),
                                         color = Color(0xFF1E3A2F),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 20.sp
                                     )
                                     Text(
-                                        text = "Offline Step & Elevation Journal",
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "Offline Step & Elevation Journal", "Καταγραφή Βημάτων & Υψομέτρου"),
                                         color = Color(0xFF5A6B62),
                                         fontSize = 12.sp
                                     )
@@ -955,12 +965,12 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Today's Trail Summary", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A2F))
-                                    Text("Compass Heading: ${state.deviceHeadingDeg.toInt()}°", color = Color(0xFF3E5248), fontSize = 13.sp)
-                                    Text("Steps Logged: ${state.stepCount}", color = Color(0xFF3E5248), fontSize = 13.sp)
+                                    Text(com.example.util.AppStrings.tr(state.appLanguage, "Today's Trail Summary", "Σημερινή Σύνοψη"), fontWeight = FontWeight.Bold, color = Color(0xFF1E3A2F))
+                                    Text("${com.example.util.AppStrings.tr(state.appLanguage, "Compass Heading", "Πυξίδα")}: ${state.deviceHeadingDeg.toInt()}°", color = Color(0xFF3E5248), fontSize = 13.sp)
+                                    Text("${com.example.util.AppStrings.tr(state.appLanguage, "Steps Logged", "Βήματα")}: ${state.stepCount}", color = Color(0xFF3E5248), fontSize = 13.sp)
                                     if (state.hasBarometerSensor && state.barometricPressureHpa != null) {
                                         Text(
-                                            text = "Barometer: %.1f hPa (${state.weatherTrendLabel})".format(state.barometricPressureHpa),
+                                            text = "${com.example.util.AppStrings.tr(state.appLanguage, "Barometer", "Βαρόμετρο")}: %.1f hPa (${com.example.util.AppStrings.weatherTrendLabel(state.appLanguage, state.weatherTrendLabel)})".format(state.barometricPressureHpa),
                                             color = Color(0xFF3E5248),
                                             fontSize = 13.sp
                                         )
@@ -1032,7 +1042,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "SWARM HOTSPOT DETECTED",
+                                    text = com.example.util.AppStrings.tr(state.appLanguage, "SWARM HOTSPOT DETECTED", "ΕΝΤΟΠΙΣΤΗΚΕ HOTSPOT ΟΜΑΔΑΣ"),
                                     color = p.cyan,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 14.sp,
@@ -1043,12 +1053,20 @@ class MainActivity : ComponentActivity() {
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "Peer ${hotspotPrompt.hostNodeId} is hosting a high-speed off-grid Wi-Fi Direct / Swarm Hotspot (${hotspotPrompt.ssid} @ ${hotspotPrompt.hostIp}).",
+                                    text = com.example.util.AppStrings.tr(
+                                        state.appLanguage,
+                                        "Peer ${hotspotPrompt.hostNodeId} is hosting a high-speed off-grid Wi-Fi Direct / Swarm Hotspot (${hotspotPrompt.ssid} @ ${hotspotPrompt.hostIp}).",
+                                        "Ο κόμβος ${hotspotPrompt.hostNodeId} φιλοξενεί γρήγορο Hotspot Wi-Fi Direct (${hotspotPrompt.ssid} @ ${hotspotPrompt.hostIp})."
+                                    ),
                                     color = p.textPrimary,
                                     fontSize = 12.sp,
                                 )
                                 Text(
-                                    text = "You can connect for high-speed UDP voice, dismiss for now, or disable automatic hotspot popups to stay silently on Bluetooth.",
+                                    text = com.example.util.AppStrings.tr(
+                                        state.appLanguage,
+                                        "You can connect for high-speed UDP voice, dismiss for now, or disable automatic hotspot popups to stay silently on Bluetooth.",
+                                        "Μπορείς να συνδεθείς για φωνή UDP υψηλής ταχύτητας, να το αγνοήσεις ή να απενεργοποιήσεις τις αυτόματες ειδοποιήσεις Hotspot."
+                                    ),
                                     color = p.textSecondary,
                                     fontSize = 11.sp,
                                 )
@@ -1066,7 +1084,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "DISABLE HOTSPOT POPUPS",
+                                        text = com.example.util.AppStrings.tr(state.appLanguage, "DISABLE HOTSPOT POPUPS", "ΑΠΕΝΕΡΓΟΠΟΙΗΣΗ ΕΙΔΟΠΟΙΗΣΕΩΝ"),
                                         color = p.red,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.ExtraBold,
@@ -1085,7 +1103,7 @@ class MainActivity : ComponentActivity() {
                                 shape = RoundedCornerShape(6.dp),
                             ) {
                                 Text(
-                                    text = "CONNECT NOW",
+                                    text = com.example.util.AppStrings.tr(state.appLanguage, "CONNECT NOW", "ΣΥΝΔΕΣΗ ΤΩΡΑ"),
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
@@ -1095,7 +1113,7 @@ class MainActivity : ComponentActivity() {
                         dismissButton = {
                             TextButton(onClick = { viewModel.dismissHotspotPrompt() }) {
                                 Text(
-                                    text = "NOT NOW",
+                                    text = com.example.util.AppStrings.tr(state.appLanguage, "NOT NOW", "ΟΧΙ ΤΩΡΑ"),
                                     color = p.textSecondary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,

@@ -157,7 +157,7 @@ fun SettingsScreen(
     var deleteAccountFeedback by remember { mutableStateOf("") }
     var deleteAccountError by remember { mutableStateOf("") }
 
-    // v1.3.0 Horizontal Expandable Topic Lanes state (defaults to APPEARANCE)
+    // Horizontal Expandable Topic Lanes state (defaults to APPEARANCE)
     var selectedLane by remember { mutableStateOf("APPEARANCE") }
     var iceBloodInput by remember(state.iceBloodType) { mutableStateOf(state.iceBloodType) }
     var iceAllergiesInput by remember(state.iceAllergies) { mutableStateOf(state.iceAllergies) }
@@ -285,7 +285,7 @@ fun SettingsScreen(
         }
 
         // -------------------------------------------------------------
-        // v1.3.0 HORIZONTAL EXPANDABLE SETTINGS TOPIC LANES
+        // HORIZONTAL EXPANDABLE SETTINGS TOPIC LANES
         // -------------------------------------------------------------
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
@@ -308,12 +308,12 @@ fun SettingsScreen(
             val lanes = listOf(
                 SettingsLaneSpec("APPEARANCE", "THEME & LANG", "ΘΕΜΑ & ΓΛΩΣΣΑ", state.appTheme.displayName.substringBefore(" "), Icons.Default.Palette, p.cyan),
                 SettingsLaneSpec("IDENTITY", "ACCOUNT & QR", "ΛΟΓΑΡΙΑΣΜΟΣ", if (state.claimedUsername.isNotBlank()) "@${state.claimedUsername}" else "Cloudflare D1", Icons.Default.Badge, EmeraldMesh),
-                SettingsLaneSpec("HOTSPOT", "HOTSPOT & SSL", "HOTSPOT & SSL", if (state.webPortalStatus.isRunning) "HTTP+HTTPS ON" else "Portal & Mesh", Icons.Default.WifiTethering, CyanGateway),
-                SettingsLaneSpec("SAFETY", "SAFETY & SOS", "ΑΣΦΑΛΕΙΑ/SOS", if (state.geofenceEnabled) "Fence ${state.geofenceRadiusMeters}m" else "ICE & Status", Icons.Default.HealthAndSafety, RedSosAlert),
+                SettingsLaneSpec("HOTSPOT", "HOTSPOT & SSL", "HOTSPOT & SSL", if (state.webPortalStatus.isRunning) (if (isGreek) "HTTP+HTTPS ΟΚ" else "HTTP+HTTPS ON") else (if (isGreek) "Πύλη & Mesh" else "Portal & Mesh"), Icons.Default.WifiTethering, CyanGateway),
+                SettingsLaneSpec("SAFETY", "SAFETY & SOS", "ΑΣΦΑΛΕΙΑ/SOS", if (state.geofenceEnabled) (if (isGreek) "Περίμετρος ${state.geofenceRadiusMeters}μ" else "Fence ${state.geofenceRadiusMeters}m") else (if (isGreek) "ICE & Κατάσταση" else "ICE & Status"), Icons.Default.HealthAndSafety, RedSosAlert),
                 SettingsLaneSpec("MAPS", "MAPS & WEATHER", "ΧΑΡΤΗΣ/ΚΑΙΡΟΣ", if (state.hasBarometerSensor) "${state.barometricPressureHpa?.toInt() ?: "--"} hPa" else "GPS & GPX", Icons.Default.Map, AmberRootBoost),
-                SettingsLaneSpec("FILES", "FILES & EXPORT", "ΑΡΧΕΙΑ", "${state.sharedFiles.size} shared", Icons.Default.FolderShared, p.emerald),
-                SettingsLaneSpec("POWER", "BATTERY & HW", "ΜΠΑΤΑΡΙΑ/HW", if (state.expeditionModeEnabled) "EXPEDITION" else "Radios & HW", Icons.Default.BatterySaver, AmberRootBoost),
-                SettingsLaneSpec("SECURITY", "SECURITY/DECOY", "ΑΣΦΑΛΕΙΑ/PIN", if (state.hasDecoyPin) "DECOY ARMED" else "Keys & Wipe", Icons.Default.Security, p.cyan)
+                SettingsLaneSpec("FILES", "FILES & EXPORT", "ΑΡΧΕΙΑ", if (isGreek) "${state.sharedFiles.size} αρχεία" else "${state.sharedFiles.size} shared", Icons.Default.FolderShared, p.emerald),
+                SettingsLaneSpec("POWER", "BATTERY & HW", "ΜΠΑΤΑΡΙΑ/HW", if (state.expeditionModeEnabled) (if (isGreek) "ΕΚΣΤΡΑΤΕΙΑ" else "EXPEDITION") else (if (isGreek) "Ασύρματοι & HW" else "Radios & HW"), Icons.Default.BatterySaver, AmberRootBoost),
+                SettingsLaneSpec("SECURITY", "SECURITY/DECOY", "ΑΣΦΑΛΕΙΑ/PIN", if (state.hasDecoyPin) (if (isGreek) "ΔΟΛΩΜΑ ΕΝΕΡΓΟ" else "DECOY ARMED") else (if (isGreek) "Κλειδιά & Wipe" else "Keys & Wipe"), Icons.Default.Security, p.cyan)
             )
             Row(
                 modifier = Modifier
@@ -568,7 +568,7 @@ fun SettingsScreen(
             }
         }
 
-        // 3.4 Multi-Language Switcher (English / Ελληνικά)
+        // Multi-Language Switcher (English / Ελληνικά)
         Surface(
             color = p.card,
             shape = cardShape,
@@ -584,7 +584,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isGreek) "Γλώσσα Εφαρμογής & Φωνητικών (3.4)" else "App & Voice Language (3.4)",
+                        text = if (isGreek) "Γλώσσα Εφαρμογής & Φωνητικών" else "App & Voice Language",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = p.textPrimary)
                     )
                     Text(
@@ -995,7 +995,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // v1.2.1 Wi-Fi Direct Embedded Web Portal & Official iPhone QR Join Card (Visible in both Simple & Pro modes)
+                // Wi-Fi Direct Embedded Web Portal & Official iPhone QR Join Card (Visible in both Simple & Pro modes)
                 var showIphoneQrDialog by remember { mutableStateOf(false) }
                 Surface(
                     color = p.surfaceVariant,
@@ -1019,7 +1019,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "v1.3.0 HOTSPOT WEB PORTAL (HTTP + SSL) & QR",
+                                    text = if (isGreek) "HOTSPOT ΠΥΛΗ WEB (HTTP + HTTPS SSL) & QR" else "HOTSPOT WEB PORTAL (HTTP + HTTPS SSL) & QR",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = if (state.webPortalStatus.isRunning) EmeraldMesh else CyanGateway,
                                         fontWeight = FontWeight.Bold,
@@ -1033,7 +1033,11 @@ fun SettingsScreen(
                                             state.webPortalStatus.selfTestPassed -> "LOCAL HTTP 200 OK"
                                             else -> "STARTING"
                                         }
-                                        val sslStr = if (state.webPortalStatus.sslEnabled) " • SSL :${state.webPortalStatus.httpsPort}" else ""
+                                        val sslStr = if (state.webPortalStatus.sslEnabled) {
+                                            val verified = if (state.webPortalStatus.httpsSelfTestPassed) " ✓" else ""
+                                            val err = if (state.webPortalStatus.sslError.isNotBlank()) " [${state.webPortalStatus.sslError}]" else ""
+                                            " • SSL :${state.webPortalStatus.httpsPort}$verified$err"
+                                        } else ""
                                         "$verifiedStr$sslStr • ${state.webPortalStatus.activeClientCount} linked • ${state.webPortalStatus.requestsServed} hits"
                                     } else if (state.webPortalStatus.bindError.isNotBlank()) {
                                         "Bind error: ${state.webPortalStatus.bindError}"
@@ -1094,9 +1098,13 @@ fun SettingsScreen(
                                             )
                                             if (state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
                                                 Text(
-                                                    text = "🔒 SSL HTTPS: ${state.webPortalStatus.httpsPortalUrl}",
+                                                    text = if (state.webPortalStatus.httpsSelfTestPassed) {
+                                                        "🔒 HTTPS SSL ✓: ${state.webPortalStatus.httpsPortalUrl}"
+                                                    } else {
+                                                        "🔒 HTTPS SSL: ${state.webPortalStatus.httpsPortalUrl}"
+                                                    },
                                                     style = MaterialTheme.typography.labelSmall.copy(
-                                                        color = AmberRootBoost,
+                                                        color = if (state.webPortalStatus.httpsSelfTestPassed) EmeraldMesh else AmberRootBoost,
                                                         fontWeight = FontWeight.Bold,
                                                         fontFamily = FontFamily.Monospace,
                                                         fontSize = 10.sp
@@ -1104,10 +1112,20 @@ fun SettingsScreen(
                                                     modifier = Modifier.testTag("hotspot_https_url_text")
                                                 )
                                             }
+                                            if (state.webPortalStatus.sslError.isNotBlank()) {
+                                                Text(
+                                                    text = "⚠ SSL: ${state.webPortalStatus.sslError}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = RedSosAlert,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 9.sp
+                                                    )
+                                                )
+                                            }
                                             val altLabeled = state.webPortalStatus.labeledReachableUrls.filter { it.first != state.webPortalStatus.portalUrl }
                                             if (altLabeled.isNotEmpty()) {
                                                 Text(
-                                                    text = "Alt: ${altLabeled.joinToString(" • ") { "${it.first} (${it.second})" }}",
+                                                    text = "${if (isGreek) "Εναλλ." else "Alt"}: ${altLabeled.joinToString(" • ") { "${it.first} (${it.second})" }}",
                                                     style = MaterialTheme.typography.bodySmall.copy(
                                                         color = CyanGateway,
                                                         fontFamily = FontFamily.Monospace,
@@ -1116,7 +1134,11 @@ fun SettingsScreen(
                                                 )
                                             }
                                             Text(
-                                                text = "Connect the other phone to this Hotspot Wi-Fi, then open the URL above (or scan 2-step QR). Pause mobile data on the other phone if it redirects to 4G/5G.",
+                                                text = if (isGreek) {
+                                                    "Συνδέστε το άλλο τηλέφωνο στο Hotspot Wi-Fi, ανοίξτε το HTTPS :8443 για κλήσεις μικροφώνου (ή HTTP :8080 / QR 2 βημάτων). Απενεργοποιήστε προσωρινά τα δεδομένα 4G/5G στο άλλο κινητό."
+                                                } else {
+                                                    "Connect the other phone to this Hotspot Wi-Fi, open HTTPS :${state.webPortalStatus.httpsPort} for mic calling (or HTTP :${state.webPortalStatus.port} / 2-step QR). Pause mobile data on the other phone if it stays on 4G/5G."
+                                                },
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     color = p.textSecondary,
                                                     fontSize = 9.sp
@@ -1124,6 +1146,35 @@ fun SettingsScreen(
                                             )
                                         }
                                         Column(horizontalAlignment = Alignment.End) {
+                                            val hasHttpsUrl = state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()
+                                            if (hasHttpsUrl) {
+                                                TextButton(
+                                                    onClick = {
+                                                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                        cm?.setPrimaryClip(
+                                                            android.content.ClipData.newPlainText(
+                                                                "PulseMesh HTTPS Portal URL",
+                                                                state.webPortalStatus.httpsPortalUrl
+                                                            )
+                                                        )
+                                                    }
+                                                ) {
+                                                    Text(if (isGreek) "ΑΝΤΙΓΡ. HTTPS" else "COPY HTTPS", color = AmberRootBoost, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                                }
+                                                TextButton(
+                                                    onClick = {
+                                                        runCatching {
+                                                            val intent = android.content.Intent(
+                                                                android.content.Intent.ACTION_VIEW,
+                                                                android.net.Uri.parse(state.webPortalStatus.httpsPortalUrl)
+                                                            )
+                                                            context.startActivity(intent)
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text(if (isGreek) "ΑΝΟΙΓΜΑ HTTPS" else "OPEN HTTPS", color = EmeraldMesh, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                                }
+                                            }
                                             TextButton(
                                                 onClick = {
                                                     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -1135,7 +1186,7 @@ fun SettingsScreen(
                                                     )
                                                 }
                                             ) {
-                                                Text("COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                                Text(if (isGreek) "ΑΝΤΙΓΡ. HTTP" else "COPY", color = CyanGateway, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                                             }
                                             TextButton(
                                                 onClick = {
@@ -1148,7 +1199,7 @@ fun SettingsScreen(
                                                     }
                                                 }
                                             ) {
-                                                Text("TEST", color = EmeraldMesh, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                                Text(if (isGreek) "ΔΟΚΙΜΗ" else "TEST", color = EmeraldMesh, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                                             }
                                         }
                                     }
@@ -1228,8 +1279,27 @@ fun SettingsScreen(
                             com.example.util.QrCodeGenerator.generateBitmap(wifiPayload, 360)?.asImageBitmap()
                         } else null
                     }
-                    val urlQrBmp = remember(state.webPortalStatus.portalUrl) {
-                        com.example.util.QrCodeGenerator.generateBitmap(state.webPortalStatus.portalUrl, 360)?.asImageBitmap()
+                    val defaultQrUrl = remember(
+                        state.webPortalStatus.sslEnabled,
+                        state.webPortalStatus.httpsPortalUrl,
+                        state.webPortalStatus.portalUrl
+                    ) {
+                        if (state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
+                            state.webPortalStatus.httpsPortalUrl
+                        } else {
+                            state.webPortalStatus.portalUrl
+                        }
+                    }
+                    var useHttpsForQr by remember(defaultQrUrl) {
+                        mutableStateOf(state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank())
+                    }
+                    val activeQrUrl = if (useHttpsForQr && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
+                        state.webPortalStatus.httpsPortalUrl
+                    } else {
+                        state.webPortalStatus.portalUrl
+                    }
+                    val urlQrBmp = remember(activeQrUrl) {
+                        com.example.util.QrCodeGenerator.generateBitmap(activeQrUrl, 360)?.asImageBitmap()
                     }
                     var qrStep by remember { mutableStateOf(if (wifiQrBmp != null) 1 else 2) }
 
@@ -1299,15 +1369,54 @@ fun SettingsScreen(
 
                                 Text(
                                     text = if (qrStep == 1 && wifiQrBmp != null) {
-                                        "Step 1: Point iPhone Camera here to join Wi-Fi \"${state.hotspotState.ssid}\" (Pass: ${state.hotspotState.passphrase.ifBlank { "Open" }}), then tap Step 2."
+                                        if (isGreek) {
+                                            "Βήμα 1: Στρέψτε την κάμερα για σύνδεση στο Wi-Fi \"${state.hotspotState.ssid}\" (Κωδικός: ${state.hotspotState.passphrase.ifBlank { "Open" }}) και πατήστε Επόμενο."
+                                        } else {
+                                            "Step 1: Point iPhone Camera here to join Wi-Fi \"${state.hotspotState.ssid}\" (Pass: ${state.hotspotState.passphrase.ifBlank { "Open" }}), then tap Step 2."
+                                        }
                                     } else {
-                                        "Step 2: Point iPhone Camera here to open ${state.webPortalStatus.portalUrl} offline in Safari (Share -> Add to Home Screen for app icon)."
+                                        if (isGreek) {
+                                            "Βήμα 2: Στρέψτε την κάμερα για να ανοίξετε το $activeQrUrl εκτός δικτύου (το HTTPS :${state.webPortalStatus.httpsPort} επιτρέπει μικρόφωνο/κλήσεις · Κοινοποίηση -> Προσθήκη στην Αφετηρία)."
+                                        } else {
+                                            "Step 2: Point iPhone Camera here to open $activeQrUrl offline in Safari (HTTPS :${state.webPortalStatus.httpsPort} enables mic calling; Share -> Add to Home Screen)."
+                                        }
                                     },
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = p.textSecondary,
                                         fontSize = 11.sp
                                     )
                                 )
+                                if (qrStep != 1 && state.webPortalStatus.sslEnabled && state.webPortalStatus.httpsPortalUrl.isNotBlank()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { useHttpsForQr = true },
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (useHttpsForQr) EmeraldMesh else p.border),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = "HTTPS :${state.webPortalStatus.httpsPort} (SSL)",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (useHttpsForQr) EmeraldMesh else p.textSecondary
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = { useHttpsForQr = false },
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (!useHttpsForQr) CyanGateway else p.border),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = "HTTP :${state.webPortalStatus.port}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (!useHttpsForQr) CyanGateway else p.textSecondary
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         },
                         confirmButton = {
@@ -1316,20 +1425,20 @@ fun SettingsScreen(
                                     onClick = { qrStep = 2 },
                                     colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black)
                                 ) {
-                                    Text("Next: Portal QR", fontWeight = FontWeight.Bold)
+                                    Text(if (isGreek) "Επόμενο: QR Πύλης" else "Next: Portal QR", fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 Button(
                                     onClick = { showIphoneQrDialog = false },
                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black)
                                 ) {
-                                    Text("Done", fontWeight = FontWeight.Bold)
+                                    Text(if (isGreek) "Τέλος" else "Done", fontWeight = FontWeight.Bold)
                                 }
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showIphoneQrDialog = false }) {
-                                Text("Close", color = p.textSecondary)
+                                Text(if (isGreek) "Κλείσιμο" else "Close", color = p.textSecondary)
                             }
                         }
                     )
@@ -1626,7 +1735,7 @@ fun SettingsScreen(
         // LANE: POWER & HARDWARE (2.2 EXPEDITION MODE + 75+ CHIPSET PROFILES)
         // -------------------------------------------------------------
         if (selectedLane == "POWER") {
-        // 2.2 Battery-Saver Duty-Cycle Mode ("Expedition Mode")
+        // Battery-Saver Duty-Cycle Mode ("Expedition Mode")
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1643,11 +1752,11 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Expedition Battery-Saver Mode (2.2)",
+                            text = if (isGreek) "Λειτουργία Εξοικονόμησης Μπαταρίας" else "Expedition Battery-Saver Mode",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AmberRootBoost)
                         )
                         Text(
-                            text = "Duty-cycles BLE scans & beacons to extend multi-day off-grid battery life.",
+                            text = if (isGreek) "Εναλλάσσει έξυπνα τις σαρώσεις BLE & beacons για πολυήμερη αυτονομία εκτός δικτύου." else "Duty-cycles BLE scans & beacons to extend multi-day off-grid battery life.",
                             style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                         )
                     }
@@ -1664,11 +1773,11 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Auto-Enable Below 20% Battery",
+                            text = if (isGreek) "Αυτόματη Ενεργοποίηση Κάτω από 20%" else "Auto-Enable Below 20% Battery",
                             style = MaterialTheme.typography.bodyMedium.copy(color = p.textPrimary, fontWeight = FontWeight.SemiBold)
                         )
                         Text(
-                            text = "Automatically engages duty-cycling when battery drops to 20% or lower.",
+                            text = if (isGreek) "Ενεργοποιεί αυτόματα το duty-cycling όταν η μπαταρία πέσει στο 20% ή χαμηλότερα." else "Automatically engages duty-cycling when battery drops to 20% or lower.",
                             style = MaterialTheme.typography.labelSmall.copy(color = p.textSecondary)
                         )
                     }
@@ -1823,7 +1932,7 @@ fun SettingsScreen(
         // LANE: SAFETY & SOS (1.3 QUICK STATUS + 1.4 ICE & DEAD-MAN + 1.5 GEOFENCE + CHECK-IN)
         // -------------------------------------------------------------
         if (selectedLane == "SAFETY") {
-        // 1.3 Tactical Quick-Status (Text + Voice TTS)
+        // Tactical Quick-Status (Text + Voice TTS)
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1840,7 +1949,7 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isGreek) "Ταχεία Κατάσταση & Φωνή (1.3)" else "Quick-Status & Voice Check-Ins (1.3)",
+                            text = if (isGreek) "Ταχεία Κατάσταση & Φωνή" else "Quick-Status & Voice Check-Ins",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = EmeraldMesh)
                         )
                         Text(
@@ -1885,7 +1994,7 @@ fun SettingsScreen(
             }
         }
 
-        // 1.4 Offline Emergency Medical / ICE Card + Dead-Man's Switch
+        // Offline Emergency Medical / ICE Card + Dead-Man's Switch
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1896,31 +2005,31 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = if (isGreek) "Κάρτα ICE & Διακόπτης Dead-Man (1.4)" else "Emergency Medical / ICE Card & Dead-Man Switch (1.4)",
+                    text = if (isGreek) "Κάρτα ICE & Διακόπτης Dead-Man" else "Emergency Medical / ICE Card & Dead-Man Switch",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = RedSosAlert)
                 )
                 Text(
-                    text = "Medical info is attached automatically to SOS distress broadcasts. Dead-Man's Switch auto-triggers SOS if you don't check in before countdown ends.",
+                    text = if (isGreek) "Τα ιατρικά στοιχεία επισυνάπτονται αυτόματα στις εκπομπές SOS. Ο διακόπτης Dead-Man εκπέμπει SOS αν δεν γίνει check-in πριν λήξει η αντίστροφη μέτρηση." else "Medical info is attached automatically to SOS distress broadcasts. Dead-Man's Switch auto-triggers SOS if you don't check in before countdown ends.",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                 )
                 OutlinedTextField(
                     value = iceBloodInput,
                     onValueChange = { iceBloodInput = it },
-                    label = { Text("Blood Type (e.g. O+, A-)") },
+                    label = { Text(if (isGreek) "Ομάδα Αίματος (π.χ. O+, A-)" else "Blood Type (e.g. O+, A-)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = iceAllergiesInput,
                     onValueChange = { iceAllergiesInput = it },
-                    label = { Text("Allergies / Medical Notes") },
+                    label = { Text(if (isGreek) "Αλλεργίες / Ιατρικές Σημειώσεις" else "Allergies / Medical Notes") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = iceContactInput,
                     onValueChange = { iceContactInput = it },
-                    label = { Text("ICE Contact Name / Phone") },
+                    label = { Text(if (isGreek) "Επαφή ICE (Όνομα / Τηλέφωνο)" else "ICE Contact Name / Phone") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1932,13 +2041,13 @@ fun SettingsScreen(
                     Button(
                         onClick = {
                             onSaveIceMedicalCard(iceBloodInput, iceAllergiesInput, iceContactInput)
-                            iceSavedNotice = "ICE medical card saved offline."
+                            iceSavedNotice = if (isGreek) "Η κάρτα ICE αποθηκεύτηκε τοπικά." else "ICE medical card saved offline."
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("SAVE ICE CARD", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(if (isGreek) "ΑΠΟΘΗΚΕΥΣΗ ICE" else "SAVE ICE CARD", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                     if (state.deadManSwitchMinutes > 0) {
                         Button(
@@ -1947,7 +2056,7 @@ fun SettingsScreen(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("I'M OK (${state.deadManRemainingSeconds / 60}m)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text(if (isGreek) "ΕΙΜΑΙ ΚΑΛΑ (${state.deadManRemainingSeconds / 60}λ)" else "I'M OK (${state.deadManRemainingSeconds / 60}m)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -1955,7 +2064,7 @@ fun SettingsScreen(
                     Text(iceSavedNotice, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                 }
                 Text(
-                    text = "Dead-Man's Switch Countdown:",
+                    text = if (isGreek) "Αντίστροφη Μέτρηση Dead-Man Switch:" else "Dead-Man's Switch Countdown:",
                     style = MaterialTheme.typography.labelSmall.copy(color = p.textMuted, fontWeight = FontWeight.Bold)
                 )
                 Row(
@@ -1977,7 +2086,7 @@ fun SettingsScreen(
             }
         }
 
-        // 1.5 Geofence / Perimeter Alerts
+        // Geofence / Perimeter Alerts
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -1994,11 +2103,11 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Geofence Perimeter Alert (1.5)",
+                            text = if (isGreek) "Ειδοποίηση Περιμέτρου (Geofence)" else "Geofence Perimeter Alert",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AmberRootBoost)
                         )
                         Text(
-                            text = "Draws a perimeter on the map around your location and alerts when any mesh peer drifts outside.",
+                            text = if (isGreek) "Σχεδιάζει περίμετρο στον χάρτη γύρω από τη θέση σας και ειδοποιεί αν κάποιος κόμβος απομακρυνθεί." else "Draws a perimeter on the map around your location and alerts when any mesh peer drifts outside.",
                             style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                         )
                     }
@@ -2208,7 +2317,7 @@ fun SettingsScreen(
         // LANE: SECURITY & DECOY (4.2 DECOY PIN + ECDH E2EE + LOCATION PRIVACY)
         // -------------------------------------------------------------
         if (selectedLane == "SECURITY" || selectedLane == "SAFETY") {
-        // 4.2 Decoy / Panic Mode Profile (only shown in SECURITY lane)
+        // Decoy / Panic Mode Profile (only shown in SECURITY lane)
         if (selectedLane == "SECURITY") {
             ElevatedCard(
                 shape = cardShape,
@@ -2220,17 +2329,17 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Decoy / Panic Mode Profile (4.2)",
+                        text = if (isGreek) "Προφίλ Δολώματος / Πανικού (Decoy PIN)" else "Decoy / Panic Mode Profile",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
                     )
                     Text(
-                        text = "Set a separate Decoy PIN (4-8 digits). Entering it switches the screen into a benign Hiking Trail Log without erasing your encrypted vault.",
+                        text = if (isGreek) "Ορίστε ξεχωριστό Decoy PIN (4-8 ψηφία). Με την εισαγωγή του εμφανίζεται ένα απλό ημερολόγιο πεζοπορίας χωρίς διαγραφή του κρυπτογραφημένου θησαυροφυλακίου." else "Set a separate Decoy PIN (4-8 digits). Entering it switches the screen into a benign Hiking Trail Log without erasing your encrypted vault.",
                         style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                     )
                     OutlinedTextField(
                         value = decoyPinInput,
                         onValueChange = { decoyPinInput = it },
-                        label = { Text("Decoy PIN (4-8 digits)") },
+                        label = { Text(if (isGreek) "Decoy PIN (4-8 ψηφία)" else "Decoy PIN (4-8 digits)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -2241,18 +2350,18 @@ fun SettingsScreen(
                         Button(
                             onClick = {
                                 val ok = onSetDecoyPin(decoyPinInput)
-                                decoyFeedback = if (ok) "Decoy PIN armed." else "Enter 4 to 8 digits."
+                                decoyFeedback = if (ok) (if (isGreek) "Το Decoy PIN ενεργοποιήθηκε." else "Decoy PIN armed.") else (if (isGreek) "Εισάγετε 4 έως 8 ψηφία." else "Enter 4 to 8 digits.")
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(if (state.hasDecoyPin) "UPDATE DECOY PIN" else "ARM DECOY PIN", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(if (state.hasDecoyPin) (if (isGreek) "ΕΝΗΜΕΡΩΣΗ DECOY PIN" else "UPDATE DECOY PIN") else (if (isGreek) "ΟΠΛΙΣΜΟΣ DECOY PIN" else "ARM DECOY PIN"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         if (state.hasDecoyPin) {
                             OutlinedButton(
                                 onClick = {
                                     val triggered = onTriggerDecoyMode(decoyPinInput)
-                                    decoyFeedback = if (triggered) "Decoy Mode active." else "Enter your armed Decoy PIN to activate."
+                                    decoyFeedback = if (triggered) (if (isGreek) "Λειτουργία Decoy ενεργή." else "Decoy Mode active.") else (if (isGreek) "Πληκτρολογήστε το Decoy PIN για ενεργοποίηση." else "Enter your armed Decoy PIN to activate.")
                                 },
                                 border = androidx.compose.foundation.BorderStroke(1.dp, AmberRootBoost),
                                 modifier = Modifier.weight(1f)
@@ -2747,7 +2856,7 @@ fun SettingsScreen(
             }
         }
 
-        // 3.3 QR Contact & Group Instant Join Card
+        // QR Contact & Group Instant Join Card
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -2758,11 +2867,11 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "QR Contact & Group Instant Join (3.3)",
+                    text = if (isGreek) "Άμεση Σύνδεση Επαφής & Ομάδας με QR" else "QR Contact & Group Instant Join",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
                 )
                 Text(
-                    text = "Share your scannable pulsemesh://join QR code (Node ID, Callsign, Channel & Public Key) or paste a peer's join URI to add them offline.",
+                    text = if (isGreek) "Μοιραστείτε τον κωδικό QR pulsemesh://join (Node ID, Κωδικός Κλήσης, Κανάλι & Δημόσιο Κλειδί) ή επικολλήστε ένα URI για προσθήκη εκτός δικτύου." else "Share your scannable pulsemesh://join QR code (Node ID, Callsign, Channel & Public Key) or paste a peer's join URI to add them offline.",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2773,25 +2882,25 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("MY JOIN QR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isGreek) "ΤΟ QR ΜΟΥ" else "MY JOIN QR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = {
                             val payload = onBuildInstantJoinQr()
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                             cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh Join URI", payload))
-                            joinQrFeedback = "Copied pulsemesh://join URI to clipboard."
+                            joinQrFeedback = if (isGreek) "Το pulsemesh://join URI αντιγράφηκε." else "Copied pulsemesh://join URI to clipboard."
                         },
                         border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("COPY URI", color = CyanGateway, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isGreek) "ΑΝΤΙΓΡΑΦΗ URI" else "COPY URI", color = CyanGateway, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 OutlinedTextField(
                     value = joinQrImportInput,
                     onValueChange = { joinQrImportInput = it },
-                    label = { Text("Paste pulsemesh://join?... URI") },
+                    label = { Text(if (isGreek) "Επικόλληση pulsemesh://join?... URI" else "Paste pulsemesh://join?... URI") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2805,7 +2914,7 @@ fun SettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("IMPORT PEER & JOIN CHANNEL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text(if (isGreek) "ΕΙΣΑΓΩΓΗ ΚΟΜΒΟΥ & ΣΥΝΔΕΣΗ" else "IMPORT PEER & JOIN CHANNEL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
                 if (joinQrFeedback.isNotBlank()) {
                     Text(joinQrFeedback, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -2815,10 +2924,10 @@ fun SettingsScreen(
         } // end selectedLane == "IDENTITY" (part 1)
 
         // -------------------------------------------------------------
-        // LANE: MAPS & WEATHER (2.3 BAROMETRIC STORM ALERT + GPS)
+        // LANE: MAPS & WEATHER (BAROMETRIC STORM ALERT + GPS)
         // -------------------------------------------------------------
         if (selectedLane == "MAPS") {
-        // 2.3 Offline Weather & Barometric Storm Alert (ONLY for phones that support a barometer sensor)
+        // Offline Weather & Barometric Storm Alert (ONLY for phones that support a barometer sensor)
         if (state.hasBarometerSensor) {
             ElevatedCard(
                 shape = cardShape,
@@ -2830,7 +2939,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Barometric Weather & Storm Alert (2.3)",
+                        text = if (isGreek) "Βαρομετρικός Καιρός & Προειδοποίηση Καταιγίδας" else "Barometric Weather & Storm Alert",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = if (state.isStormAlertActive) RedSosAlert else CyanGateway
@@ -2838,10 +2947,10 @@ fun SettingsScreen(
                     )
                     Text(
                         text = buildString {
-                            append("Pressure: ")
-                            append(state.barometricPressureHpa?.let { "%.1f hPa".format(it) } ?: "Calibrating...")
-                            append(" • Trend: ")
-                            append(state.weatherTrendLabel)
+                            append(if (isGreek) "Πίεση: " else "Pressure: ")
+                            append(state.barometricPressureHpa?.let { "%.1f hPa".format(it) } ?: if (isGreek) "Βαθμονόμηση..." else "Calibrating...")
+                            append(if (isGreek) " • Τάση: " else " • Trend: ")
+                            append(com.example.util.AppStrings.weatherTrendLabel(state.appLanguage, state.weatherTrendLabel))
                             state.pressureTrendHpaPer3h?.let { append(" (%+.1f hPa/3h)".format(it)) }
                         },
                         style = MaterialTheme.typography.labelMedium.copy(
@@ -2852,9 +2961,17 @@ fun SettingsScreen(
                     )
                     Text(
                         text = if (state.isStormAlertActive) {
-                            "STORM ALERT: Rapid pressure drop detected (<= -3.0 hPa / 3h). Weather warning broadcast to nearby mesh peers."
+                            if (isGreek) {
+                                "ΣΥΝΑΓΕΡΜΟΣ ΚΑΤΑΙΓΙΔΑΣ: Ταχεία πτώση πίεσης (<= -3.0 hPa / 3h). Η προειδοποίηση μεταδόθηκε στο mesh."
+                            } else {
+                                "STORM ALERT: Rapid pressure drop detected (<= -3.0 hPa / 3h). Weather warning broadcast to nearby mesh peers."
+                            }
                         } else {
-                            "Hardware barometer active. Automatically monitors 3-hour pressure trends offline and alerts your team before incoming storms."
+                            if (isGreek) {
+                                "Το βαρόμετρο υλικού είναι ενεργό. Παρακολουθεί αυτόματα τις μεταβολές πίεσης εκτός δικτύου."
+                            } else {
+                                "Hardware barometer active. Automatically monitors 3-hour pressure trends offline and alerts your team before incoming storms."
+                            }
                         },
                         style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                     )
@@ -2868,7 +2985,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Offline Barometric Weather (2.3): Not available on this phone (no hardware barometer sensor detected).",
+                    text = if (isGreek) "Βαρομετρικός Καιρός εκτός δικτύου: Μη διαθέσιμος σε αυτή τη συσκευή (δεν ανιχνεύθηκε αισθητήρας βαρομέτρου)." else "Offline Barometric Weather: Not available on this phone (no hardware barometer sensor detected).",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textMuted, fontSize = 11.sp),
                     modifier = Modifier.padding(12.dp)
                 )
@@ -2975,24 +3092,24 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Offline File & Document Transfer (1.1)",
+                    text = if (isGreek) "Μεταφορά Αρχείων & Εγγράφων εκτός Δικτύου" else "Offline File & Document Transfer",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = EmeraldMesh)
                 )
                 Text(
-                    text = "Share notes, GPX routes, or field checklists over the Hotspot HTTP/HTTPS portal with SHA-256 checksum verification (up to 5 MB per file).",
+                    text = if (isGreek) "Μοιραστείτε σημειώσεις, διαδρομές GPX ή λίστες μέσω της πύλης Hotspot HTTP/HTTPS με έλεγχο SHA-256 (έως 5 MB)." else "Share notes, GPX routes, or field checklists over the Hotspot HTTP/HTTPS portal with SHA-256 checksum verification (up to 5 MB per file).",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                 )
                 OutlinedTextField(
                     value = shareFileNameInput,
                     onValueChange = { shareFileNameInput = it },
-                    label = { Text("File Name (e.g. rally-plan.txt)") },
+                    label = { Text(if (isGreek) "Όνομα Αρχείου (π.χ. rally-plan.txt)" else "File Name (e.g. rally-plan.txt)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = shareFileTextInput,
                     onValueChange = { shareFileTextInput = it },
-                    label = { Text("Document Content / Checklist") },
+                    label = { Text(if (isGreek) "Περιεχόμενο / Λίστα Ελέγχου" else "Document Content / Checklist") },
                     minLines = 2,
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth()
@@ -3005,25 +3122,25 @@ fun SettingsScreen(
                                 "text/plain",
                                 shareFileTextInput.toByteArray(Charsets.UTF_8)
                             )
-                            shareFileNotice = if (ok) "Shared over Hotspot Portal with SHA-256!" else "Failed to share file."
+                            shareFileNotice = if (ok) (if (isGreek) "Κοινοποιήθηκε στην Πύλη Hotspot με SHA-256!" else "Shared over Hotspot Portal with SHA-256!") else (if (isGreek) "Αποτυχία κοινοποίησης αρχείου." else "Failed to share file.")
                             if (ok) shareFileTextInput = ""
                         },
                         enabled = shareFileTextInput.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldMesh, contentColor = Color.Black),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("SHARE TO PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(if (isGreek) "ΚΟΙΝΟΠΟΙΗΣΗ ΣΤΗΝ ΠΥΛΗ" else "SHARE TO PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                     OutlinedButton(
                         onClick = {
                             val gpx = onExportGpx()
                             val ok = onShareLocalFile("pulsemesh-trail.gpx", "application/gpx+xml", gpx.toByteArray(Charsets.UTF_8))
-                            shareFileNotice = if (ok) "GPX trail published to Hotspot Portal!" else "Could not publish GPX."
+                            shareFileNotice = if (ok) (if (isGreek) "Η διαδρομή GPX δημοσιεύθηκε!" else "GPX trail published to Hotspot Portal!") else (if (isGreek) "Αποτυχία δημοσίευσης GPX." else "Could not publish GPX.")
                         },
                         border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("SHARE GPX TRAIL", color = CyanGateway, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(if (isGreek) "ΔΗΜΟΣΙΕΥΣΗ GPX" else "SHARE GPX TRAIL", color = CyanGateway, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                 }
                 if (shareFileNotice.isNotBlank()) {
@@ -3066,7 +3183,7 @@ fun SettingsScreen(
             }
         }
 
-        // 3.2 Trip Log & Chat Archive Export
+        // Trip Log & Chat Archive Export
         ElevatedCard(
             shape = cardShape,
             colors = CardDefaults.elevatedCardColors(containerColor = p.card),
@@ -3077,11 +3194,11 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Trip Log & Chat Archive Export (3.2)",
+                    text = if (isGreek) "Εξαγωγή Ημερολογίου Ταξιδιού & Αρχείου Συνομιλιών" else "Trip Log & Chat Archive Export",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = CyanGateway)
                 )
                 Text(
-                    text = "Bundle your chats, pinned messages, waypoints, and breadcrumb coordinates into a portable JSON archive.",
+                    text = if (isGreek) "Πακετάρετε συνομιλίες, καρφιτσωμένα μηνύματα, σημεία διαδρομής και συντεταγμένες σε φορητό αρχείο JSON." else "Bundle your chats, pinned messages, waypoints, and breadcrumb coordinates into a portable JSON archive.",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                 )
                 Button(
@@ -3090,12 +3207,12 @@ fun SettingsScreen(
                         val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                         cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh Trip Archive JSON", json))
                         onShareLocalFile("pulsemesh-trip-archive.json", "application/json", json.toByteArray(Charsets.UTF_8))
-                        tripExportNotice = "Trip archive (${json.length} chars) copied & published to Hotspot Files!"
+                        tripExportNotice = if (isGreek) "Το αρχείο ταξιδιού (${json.length} χαρακτήρες) αντιγράφηκε & δημοσιεύθηκε!" else "Trip archive (${json.length} chars) copied & published to Hotspot Files!"
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("EXPORT TRIP ARCHIVE (CLIPBOARD + PORTAL)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text(if (isGreek) "ΕΞΑΓΩΓΗ ΑΡΧΕΙΟΥ ΤΑΞΙΔΙΟΥ (ΠΡΟΧΕΙΡΟ + ΠΥΛΗ)" else "EXPORT TRIP ARCHIVE (CLIPBOARD + PORTAL)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
                 if (tripExportNotice.isNotBlank()) {
                     Text(tripExportNotice, color = EmeraldMesh, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -3123,7 +3240,7 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.RocketLaunch,
-                        contentDescription = "v1.1 Tactical Upgrades",
+                        contentDescription = "Field Upgrades",
                         tint = CyanGateway,
                         modifier = Modifier.size(20.dp)
                     )
@@ -3574,7 +3691,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.3.0 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v1.3.1 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,

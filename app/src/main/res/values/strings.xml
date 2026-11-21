@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PulseMesh</string>
     <string name="tab_map">Map</string>
@@ -9,5 +10,9 @@
     <string name="status_need_water">NEED WATER</string>
     <string name="status_moving">MOVING</string>
     <string name="status_need_help">NEED HELP</string>
-    <string name="storm_warning">STORM ALERT: Rapid barometric pressure drop detected</string>
+    <string name="storm_warning">STORM WARNING: Rapid barometric pressure drop detected</string>
+    <string name="sos_trigger">Broadcast Emergency SOS?</string>
+    <string name="geofence_perimeter">Geofence Perimeter Alert</string>
+    <string name="hotspot_portal">Hotspot Web Portal</string>
+    <string name="delete_account">Delete Account Information</string>
 </resources>

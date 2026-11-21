@@ -85,6 +85,7 @@ fun TacticalMap(
     barometricPressureHpa: Float? = null,
     weatherTrendLabel: String = "",
     isStormAlertActive: Boolean = false,
+    appLanguage: String = "en",
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -281,7 +282,7 @@ fun TacticalMap(
                 )
             }
 
-            // 1.5 Draw Geofence Perimeter Circle when enabled
+            // Draw Geofence Perimeter Circle when enabled
             if (geofenceEnabled && (geofenceLat != 0.0 || geofenceLng != 0.0)) {
                 val (gfTileX, gfTileY) = NativeTileMapManager.latLonToTileCoords(geofenceLat, geofenceLng, intZoom)
                 val gfPx = viewCenterX + ((gfTileX - curTileX) * tileSizePx).toFloat()
@@ -308,7 +309,7 @@ fun TacticalMap(
                 )
             }
 
-            // 1.2 Draw Mesh Topology & Relay Route Lines between Self and live Peers
+            // Draw Mesh Topology & Relay Route Lines between Self and live Peers
             val selfNodeWithPos = nodes.firstOrNull { it.isSelf && (it.latitude != 0.0 || it.longitude != 0.0) }
             if (selfNodeWithPos != null) {
                 val (sxT, syT) = NativeTileMapManager.latLonToTileCoords(selfNodeWithPos.latitude, selfNodeWithPos.longitude, intZoom)
@@ -418,7 +419,7 @@ fun TacticalMap(
                 }
             }
 
-            // 2.5 Draw Operator & Mesh Breadcrumb Trail Polyline (v1.1)
+            // Draw Operator & Mesh Breadcrumb Trail Polyline
             if (breadcrumbs.size >= 2) {
                 var prevOffset: Offset? = null
                 for (pt in breadcrumbs) {
@@ -645,7 +646,7 @@ fun TacticalMap(
                         text = if (isGpsLocked) {
                             "GPS: %.4f, %.4f".format(centerLat, centerLon)
                         } else {
-                            "GPS: ACQUIRING (PAN/PIN ACTIVE)"
+                            com.example.util.AppStrings.tr(appLanguage, "GPS: ACQUIRING (PAN/PIN ACTIVE)", "GPS: ΑΝΑΖΗΤΗΣΗ ΣΗΜΑΤΟΣ")
                         },
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 10.sp,
@@ -665,8 +666,9 @@ fun TacticalMap(
                 }
             }
 
-            // 2.3 Barometric Weather Pill (ONLY shown on phones equipped with a hardware barometer sensor)
+            // Barometric Weather Pill (ONLY shown on phones equipped with a hardware barometer sensor)
             if (hasBarometerSensor && barometricPressureHpa != null) {
+                val localizedTrend = com.example.util.AppStrings.weatherTrendLabel(appLanguage, weatherTrendLabel)
                 Surface(
                     color = if (isStormAlertActive) RedSosAlert.copy(alpha = 0.92f) else DeepCarbon.copy(alpha = 0.88f),
                     shape = RoundedCornerShape(6.dp),
@@ -677,9 +679,17 @@ fun TacticalMap(
                 ) {
                     Text(
                         text = if (isStormAlertActive) {
-                            "⛈️ STORM DROP • %.1f hPa • %s".format(barometricPressureHpa, weatherTrendLabel)
+                            com.example.util.AppStrings.tr(
+                                appLanguage,
+                                "⛈️ STORM DROP • %.1f hPa • %s".format(barometricPressureHpa, localizedTrend),
+                                "⛈️ ΠΤΩΣΗ ΚΑΤΑΙΓΙΔΑΣ • %.1f hPa • %s".format(barometricPressureHpa, localizedTrend)
+                            )
                         } else {
-                            "BARO: %.1f hPa • %s".format(barometricPressureHpa, weatherTrendLabel)
+                            com.example.util.AppStrings.tr(
+                                appLanguage,
+                                "BARO: %.1f hPa • %s".format(barometricPressureHpa, localizedTrend),
+                                "ΒΑΡΟΜΕΤΡΟ: %.1f hPa • %s".format(barometricPressureHpa, localizedTrend)
+                            )
                         },
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 9.5.sp,
@@ -692,7 +702,7 @@ fun TacticalMap(
                 }
             }
 
-            // 1.5 Geofence Breach Alert Banner
+            // Geofence Breach Alert Banner
             if (geofenceAlertMessage.isNotBlank()) {
                 Surface(
                     color = RedSosAlert.copy(alpha = 0.94f),
@@ -701,7 +711,11 @@ fun TacticalMap(
                     modifier = Modifier.clickable { onDismissGeofenceAlert() }
                 ) {
                     Text(
-                        text = "⚠ $geofenceAlertMessage (TAP TO DISMISS)",
+                        text = com.example.util.AppStrings.tr(
+                            appLanguage,
+                            "⚠ $geofenceAlertMessage (TAP TO DISMISS)",
+                            "⚠ $geofenceAlertMessage (ΠΑΤΗΣΤΕ ΓΙΑ ΚΛΕΙΣΙΜΟ)"
+                        ),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -791,7 +805,7 @@ fun TacticalMap(
                 containerColor = DeepCarbon,
                 title = {
                     Text(
-                        text = "DROP SHARED TACTICAL PIN",
+                        text = com.example.util.AppStrings.tr(appLanguage, "DROP SHARED TACTICAL PIN", "ΠΡΟΣΘΗΚΗ ΚΟΙΝΟΧΡΗΣΤΗΣ ΠΙΝΕΖΑΣ"),
                         color = CyanGateway,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -833,7 +847,7 @@ fun TacticalMap(
                         OutlinedTextField(
                             value = customPinTitle,
                             onValueChange = { customPinTitle = it },
-                            label = { Text("Waypoint Label (optional)", fontSize = 11.sp) },
+                            label = { Text(com.example.util.AppStrings.tr(appLanguage, "Waypoint Label (optional)", "Ετικέτα Σημείου (προαιρετικό)"), fontSize = 11.sp) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -852,12 +866,12 @@ fun TacticalMap(
                             contentColor = Color.Black
                         )
                     ) {
-                        Text("BROADCAST PIN", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(com.example.util.AppStrings.tr(appLanguage, "BROADCAST PIN", "ΑΠΟΣΤΟΛΗ ΣΗΜΕΙΟΥ"), fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingPinCoords = null }) {
-                        Text("CLOSE", color = TelemetryTextSecondary, fontSize = 11.sp)
+                        Text(com.example.util.AppStrings.tr(appLanguage, "CLOSE", "ΚΛΕΙΣΙΜΟ"), color = TelemetryTextSecondary, fontSize = 11.sp)
                     }
                 }
             )

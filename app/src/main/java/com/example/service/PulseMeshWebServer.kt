@@ -35,6 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.GZIPOutputStream
 
 data class WebPortalStatus(
@@ -42,6 +43,8 @@ data class WebPortalStatus(
     val port: Int = 8080,
     val httpsPort: Int = 8443,
     val sslEnabled: Boolean = false,
+    val httpsSelfTestPassed: Boolean = false,
+    val sslError: String = "",
     val hostIp: String = "",
     val portalUrl: String = "",
     val httpsPortalUrl: String = "",
@@ -83,7 +86,7 @@ data class WebSubmittedPacket(
 )
 
 /**
- * Pure-Kotlin/Java Embedded HTTP/1.1 + SSE Web Server for PulseMesh v1.2.5.
+ * Pure-Kotlin/Java Embedded HTTP/1.1 + HTTPS SSL + SSE Web Server for PulseMesh.
  * - Binds wildcard dual-stack ServerSocket exclusively on Dispatchers.IO (never on Main Thread).
  * - Automatically detects dynamic Android 11-16 SoftAP / Wi-Fi Direct gateway IPs (p2p*, ap*, swlan*, softap*, wlan1/2)
  *   while strictly filtering out unreachable cellular (rmnet/ccmni) and VPN (tun) interfaces.
@@ -117,10 +120,15 @@ class PulseMeshWebServer(
     private val running = AtomicBoolean(false)
     private val starting = AtomicBoolean(false)
     private val selfTestPassed = AtomicBoolean(false)
+    private val httpsSelfTestPassed = AtomicBoolean(false)
     private val lanSelfTestPassed = AtomicBoolean(false)
     private val requestsServed = AtomicInteger(0)
     @Volatile
     private var lastBindError: String = ""
+    @Volatile
+    private var lastSslError: String = ""
+    @Volatile
+    private var sslSanSignature: String = ""
     @Volatile
     private var serverSocket: ServerSocket? = null
     @Volatile
@@ -147,6 +155,19 @@ class PulseMeshWebServer(
             isDaemon = true
         }
     }
+
+    private data class CallSignalRecord(
+        val seq: Long,
+        val type: String,
+        val srcNodeId: String,
+        val srcCallsign: String,
+        val dstNodeId: String,
+        val payload: String,
+        val timestamp: Long
+    )
+
+    private val callSignalSeq = AtomicLong(0L)
+    private val recentCallSignals = CopyOnWriteArrayList<CallSignalRecord>()
 
     private val activeClients = ConcurrentHashMap<String, Long>()
     private val sseStreams = CopyOnWriteArrayList<SseConnection>()
@@ -268,32 +289,8 @@ class PulseMeshWebServer(
 
                 // Dual-stack SSL/HTTPS listener (:8443) with pure-Kotlin self-signed ECDSA P-256 cert
                 // Enables WebCrypto ECDH & microphone getUserMedia on iPhone Safari / Chrome over local Hotspot!
-                val sslSock = openSslServerSocket()
-                if (sslSock != null) {
-                    sslServerSocket = sslSock
-                    boundHttpsPort = sslSock.localPort
-                    runCatching { sslAcceptThread?.interrupt() }
-                    sslAcceptThread = Thread({
-                        while (running.get() && !sslSock.isClosed) {
-                            try {
-                                val tlsClient = sslSock.accept()
-                                runCatching {
-                                    tlsClient.tcpNoDelay = true
-                                    tlsClient.sendBufferSize = 65536
-                                    tlsClient.setSoLinger(true, 4)
-                                }
-                                workerExecutor.execute { handleClientSocket(tlsClient) }
-                            } catch (_: Exception) {
-                                if (!running.get() || sslSock.isClosed) break
-                            }
-                        }
-                    }, "PulseMesh-HTTPS-Accept").apply {
-                        isDaemon = true
-                        priority = Thread.NORM_PRIORITY + 1
-                        start()
-                    }
-                    refreshPortalUrl()
-                }
+                val initialIps = resolveRankedLabeledIpv4s().map { it.first }
+                ensureSslListenerBound(initialIps, refreshAfter = true)
 
                 // Loopback + real LAN/Hotspot IP HTTP 200 self-test right after bind
                 scope.launch(Dispatchers.IO) {
@@ -339,6 +336,10 @@ class PulseMeshWebServer(
         val port = boundPort
         val loopOk = runHttpSelfTest("127.0.0.1", port)
         selfTestPassed.set(loopOk)
+        val httpsOk = if (sslServerSocket?.isClosed == false) {
+            runHttpsSelfTest("127.0.0.1", boundHttpsPort)
+        } else false
+        httpsSelfTestPassed.set(httpsOk)
         val bestIp = _status.value.hostIp
         val lanOk = if (bestIp.isNotBlank() && bestIp != "127.0.0.1") {
             runHttpSelfTest(bestIp, port)
@@ -384,6 +385,10 @@ class PulseMeshWebServer(
         }
         sseStreams.clear()
         activeClients.clear()
+        recentCallSignals.clear()
+        sslSanSignature = ""
+        httpsSelfTestPassed.set(false)
+        lastSslError = ""
         _status.value = WebPortalStatus(
             isRunning = false,
             port = boundPort,
@@ -412,24 +417,82 @@ class PulseMeshWebServer(
     }
 
     fun notifyCallSignal(type: String, srcNodeId: String, srcCallsign: String, dstNodeId: String, payload: String = "") {
-        if (!running.get() || sseStreams.isEmpty()) return
-        val json = JSONObject().apply {
-            put("event", "call")
-            put("type", type)
-            put("srcNodeId", srcNodeId)
-            put("srcCallsign", srcCallsign)
-            put("dstNodeId", dstNodeId)
-            put("payload", payload)
-            put("timestamp", System.currentTimeMillis())
-        }.toString()
-        broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+        val seq = callSignalSeq.incrementAndGet()
+        val nowMs = System.currentTimeMillis()
+        recentCallSignals.add(
+            CallSignalRecord(
+                seq = seq,
+                type = type,
+                srcNodeId = srcNodeId,
+                srcCallsign = srcCallsign,
+                dstNodeId = dstNodeId,
+                payload = payload,
+                timestamp = nowMs
+            )
+        )
+        while (recentCallSignals.size > 20) {
+            runCatching { recentCallSignals.removeAt(0) }
+        }
+        if (!running.get()) return
+        if (sseStreams.isNotEmpty()) {
+            val json = JSONObject().apply {
+                put("event", "call")
+                put("seq", seq)
+                put("type", type)
+                put("srcNodeId", srcNodeId)
+                put("srcCallsign", srcCallsign)
+                put("dstNodeId", dstNodeId)
+                put("payload", payload)
+                put("timestamp", nowMs)
+            }.toString()
+            broadcastSseBytes("data: $json\n\n".toByteArray(Charsets.UTF_8))
+        }
+        notifyStateChanged()
     }
 
-    private fun openSslServerSocket(): ServerSocket? {
-        val sslFactory = LocalSelfSignedTlsFactory.createSslServerSocketFactory(context) ?: return null
+    fun getRecentCallSignalsJson(): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        val cutoff = System.currentTimeMillis() - 35_000L
+        for (sig in recentCallSignals) {
+            if (sig.timestamp < cutoff) continue
+            arr.put(
+                JSONObject().apply {
+                    put("seq", sig.seq)
+                    put("type", sig.type)
+                    put("srcNodeId", sig.srcNodeId)
+                    put("srcCallsign", sig.srcCallsign)
+                    put("dstNodeId", sig.dstNodeId)
+                    put("payload", sig.payload)
+                    put("timestamp", sig.timestamp)
+                }
+            )
+        }
+        return arr
+    }
+
+    @Synchronized
+    private fun ensureSslListenerBound(extraIps: List<String>, refreshAfter: Boolean = false) {
+        val sortedSig = extraIps.distinct().sorted().joinToString(",")
+        if (sslServerSocket?.isClosed == false && sslSanSignature == sortedSig) {
+            return
+        }
+        val (sslFactory, factoryErr) = LocalSelfSignedTlsFactory.createSslServerSocketFactory(context, extraIps)
+        if (sslFactory == null) {
+            lastSslError = factoryErr.ifBlank { "SSL factory initialization failed" }
+            if (refreshAfter) refreshPortalUrl()
+            return
+        }
+        if (sslServerSocket?.isClosed == false && sslSanSignature.isNotBlank() && sslSanSignature != sortedSig) {
+            // Re-bind only when new Hotspot/LAN IPs appear so SAN matches the live AP gateway
+            runCatching { sslServerSocket?.close() }
+            sslServerSocket = null
+            runCatching { sslAcceptThread?.interrupt() }
+            sslAcceptThread = null
+        }
         val ipv4Any = runCatching { InetAddress.getByName("0.0.0.0") }.getOrNull()
+        var boundSock: ServerSocket? = null
         for (port in PREFERRED_HTTPS_PORTS) {
-            val sock = runCatching {
+            val sock = try {
                 val ss = sslFactory.createServerSocket()
                 ss.reuseAddress = true
                 if (ipv4Any != null) {
@@ -437,11 +500,50 @@ class PulseMeshWebServer(
                 } else {
                     ss.bind(InetSocketAddress(port), 64)
                 }
+                if (ss is javax.net.ssl.SSLServerSocket) {
+                    val supported = ss.supportedProtocols.toSet()
+                    val preferred = listOf("TLSv1.3", "TLSv1.2").filter { it in supported }.toTypedArray()
+                    if (preferred.isNotEmpty()) ss.enabledProtocols = preferred
+                }
                 ss
-            }.getOrNull()
-            if (sock != null) return sock
+            } catch (e: Exception) {
+                lastSslError = "${e.javaClass.simpleName}: ${e.message}"
+                null
+            }
+            if (sock != null) {
+                boundSock = sock
+                break
+            }
         }
-        return null
+        if (boundSock == null) {
+            if (lastSslError.isBlank()) lastSslError = "All HTTPS ports 8443-9443 busy"
+            if (refreshAfter) refreshPortalUrl()
+            return
+        }
+        lastSslError = ""
+        sslSanSignature = sortedSig
+        sslServerSocket = boundSock
+        boundHttpsPort = boundSock.localPort
+        sslAcceptThread = Thread({
+            while (running.get() && !boundSock.isClosed) {
+                try {
+                    val tlsClient = boundSock.accept()
+                    runCatching {
+                        tlsClient.tcpNoDelay = true
+                        tlsClient.sendBufferSize = 65536
+                        tlsClient.setSoLinger(true, 4)
+                    }
+                    workerExecutor.execute { handleClientSocket(tlsClient) }
+                } catch (_: Exception) {
+                    if (!running.get() || boundSock.isClosed) break
+                }
+            }
+        }, "PulseMesh-HTTPS-Accept").apply {
+            isDaemon = true
+            priority = Thread.NORM_PRIORITY + 1
+            start()
+        }
+        if (refreshAfter) refreshPortalUrl()
     }
 
     fun listSharedFiles(): List<com.example.model.SharedMeshFile> = sharedFilesIndex.toList()
@@ -516,6 +618,34 @@ class PulseMeshWebServer(
         return null
     }
 
+    private fun runHttpsSelfTest(host: String, port: Int): Boolean {
+        return runCatching {
+            val trustAll = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun checkServerTrusted(c: Array<java.security.cert.X509Certificate>, a: String) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+            })
+            val sslCtx = javax.net.ssl.SSLContext.getInstance("TLS").apply {
+                init(null, trustAll, java.security.SecureRandom())
+            }
+            val url = java.net.URL("https://$host:$port/api/info")
+            val conn = (url.openConnection() as javax.net.ssl.HttpsURLConnection).apply {
+                sslSocketFactory = sslCtx.socketFactory
+                hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                connectTimeout = 1800
+                readTimeout = 1800
+                requestMethod = "GET"
+            }
+            try {
+                val code = conn.responseCode
+                val body = if (code in 200..299) conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) } else ""
+                code == 200 && body.contains("pulsemeshHost")
+            } finally {
+                runCatching { conn.disconnect() }
+            }
+        }.getOrDefault(false)
+    }
+
     private fun runHttpSelfTest(host: String, port: Int): Boolean {
         return runCatching {
             val url = java.net.URL("http://$host:$port/api/info")
@@ -561,6 +691,11 @@ class PulseMeshWebServer(
     private fun refreshPortalUrl() {
         if (!running.get()) return
         val rankedLabeled = resolveRankedLabeledIpv4s()
+        val liveIps = rankedLabeled.map { it.first }
+        val newSanSig = liveIps.distinct().sorted().joinToString(",")
+        if (liveIps.isNotEmpty() && (sslServerSocket?.isClosed != false || sslSanSignature != newSanSig)) {
+            ensureSslListenerBound(liveIps, refreshAfter = false)
+        }
         val bestPair = rankedLabeled.firstOrNull()
         val bestIp = bestPair?.first
             ?: preferredHostIp.ifBlank { AutoHotspotNegotiator.LOCAL_HOTSPOT_IP }
@@ -575,12 +710,15 @@ class PulseMeshWebServer(
         val allUrls = labeledUrls.map { it.first }
         val cur = _status.value
         val ok = selfTestPassed.get()
+        val httpsOk = httpsSelfTestPassed.get()
         val lanOk = lanSelfTestPassed.get()
         val hits = requestsServed.get()
         val filesCount = sharedFilesIndex.size
         if (cur.portalUrl != primaryUrl ||
             cur.httpsPortalUrl != httpsUrl ||
             cur.sslEnabled != sslActive ||
+            cur.httpsSelfTestPassed != httpsOk ||
+            cur.sslError != lastSslError ||
             cur.allReachableUrls != allUrls ||
             cur.labeledReachableUrls != labeledUrls ||
             cur.activeClientCount != activeClients.size ||
@@ -595,6 +733,8 @@ class PulseMeshWebServer(
                 port = boundPort,
                 httpsPort = boundHttpsPort,
                 sslEnabled = sslActive,
+                httpsSelfTestPassed = httpsOk,
+                sslError = lastSslError,
                 hostIp = bestIp,
                 portalUrl = primaryUrl,
                 httpsPortalUrl = httpsUrl,
@@ -607,9 +747,10 @@ class PulseMeshWebServer(
                 sharedFilesCount = filesCount,
                 bindError = "",
                 statusMessage = when {
-                    lanOk && sslActive -> "HTTP + SSL HTTPS Verified • LIVE at $primaryUrl"
+                    lanOk && sslActive && httpsOk -> "HTTP + SSL HTTPS Verified • LIVE at $httpsUrl"
+                    lanOk && sslActive -> "LAN HTTP + SSL Ready • LIVE at $httpsUrl"
                     lanOk -> "LAN & Local HTTP 200 Verified • LIVE at $primaryUrl"
-                    ok && sslActive -> "HTTP + SSL HTTPS Ready • LIVE at $primaryUrl"
+                    ok && sslActive -> "HTTP + SSL HTTPS Ready • LIVE at $httpsUrl"
                     ok -> "Local HTTP 200 Verified • LIVE at $primaryUrl"
                     else -> "Web Portal LIVE at $primaryUrl"
                 }
@@ -693,6 +834,13 @@ class PulseMeshWebServer(
         var keepOpenForSse = false
         try {
             socket.soTimeout = 10_000
+            if (socket is javax.net.ssl.SSLSocket) {
+                try {
+                    socket.startHandshake()
+                } catch (_: Exception) {
+                    return
+                }
+            }
             val input = BufferedInputStream(socket.getInputStream(), 16384)
             val output = socket.getOutputStream()
             val isLoopback = socket.inetAddress?.isLoopbackAddress == true
@@ -783,6 +931,15 @@ class PulseMeshWebServer(
                     (method == "GET" || isHead) && path == "/api/info" -> {
                         val info = buildInfoJson(_status.value.portalUrl, activeClients.size)
                         writeJson(output, 200, info.toString(), headOnly = isHead, keepAlive = keepAlive)
+                    }
+
+                    (method == "GET" || isHead) && path == "/api/cert.der" -> {
+                        val der = LocalSelfSignedTlsFactory.getCurrentCertificateDer(context)
+                        if (der != null && der.isNotEmpty()) {
+                            writeResponse(output, 200, "OK", "application/x-x509-ca-cert", der, headOnly = isHead, keepAlive = keepAlive)
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
                     }
 
                     method == "GET" && path == "/api/state" -> {

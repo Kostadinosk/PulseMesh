@@ -65,6 +65,7 @@ fun SimpleCallVoiceScreen(
     onToggleSpeaker: () -> Unit,
     onStartPtt: () -> Unit,
     onStopPtt: () -> Unit,
+    appLanguage: String = "en",
     modifier: Modifier = Modifier,
     onStartGroupCall: () -> Unit = {},
     onToggleLiveMicrophone: () -> Unit = {},
@@ -217,7 +218,7 @@ fun SimpleCallVoiceScreen(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "1-TAP VOICE CALL",
+                            text = com.example.util.AppStrings.tr(appLanguage, "1-TAP VOICE CALL", "ΚΛΗΣΗ 1-ΠΑΤΗΜΑΤΟΣ"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelMedium.copy(
@@ -266,7 +267,7 @@ fun SimpleCallVoiceScreen(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "WALKIE-TALKIE PTT",
+                            text = com.example.util.AppStrings.tr(appLanguage, "WALKIE-TALKIE PTT", "ΑΣΥΡΜΑΤΟΣ PTT"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelMedium.copy(
@@ -572,7 +573,7 @@ fun SimpleCallVoiceScreen(
                                         Icon(Icons.Default.CallEnd, contentDescription = "Decline", modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "DECLINE",
+                                            text = com.example.util.AppStrings.tr(appLanguage, "DECLINE", "ΑΠΟΡΡΙΨΗ"),
                                             fontWeight = FontWeight.ExtraBold,
                                             fontFamily = FontFamily.Monospace,
                                             maxLines = 1,
@@ -602,7 +603,7 @@ fun SimpleCallVoiceScreen(
                                         Icon(Icons.Default.Call, contentDescription = "Accept", modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "ACCEPT",
+                                            text = com.example.util.AppStrings.tr(appLanguage, "ACCEPT", "ΑΠΟΔΟΧΗ"),
                                             fontWeight = FontWeight.ExtraBold,
                                             fontFamily = FontFamily.Monospace,
                                             maxLines = 1,
@@ -640,7 +641,7 @@ fun SimpleCallVoiceScreen(
                                 Icons.Default.PhoneInTalk
                             }
                             duplexCallState.isMuted -> {
-                                floorStateLabel = "MIC MUTED — RX LISTENING ONLY"
+                                floorStateLabel = com.example.util.AppStrings.tr(appLanguage, "MIC MUTED — RX LISTENING ONLY", "ΜΙΚΡΟΦΩΝΟ ΣΕ ΣΙΓΑΣΗ — ΜΟΝΟ ΑΚΡΟΑΣΗ")
                                 floorStateColor = p.red
                                 floorStateBg = p.redDim
                                 Icons.Default.MicOff
@@ -1113,7 +1114,7 @@ fun SimpleCallVoiceScreen(
                                                 )
                                                 Spacer(modifier = Modifier.height(if (isCompactHeight) 2.dp else 4.dp))
                                                 Text(
-                                                    text = if (duplexCallState.isMuted) "MUTED" else "MUTE",
+                                                    text = if (duplexCallState.isMuted) com.example.util.AppStrings.tr(appLanguage, "MUTED", "ΣΙΓΑΣΗ") else com.example.util.AppStrings.tr(appLanguage, "MUTE", "ΣΙΓΑΣΗ"),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     fontWeight = FontWeight.ExtraBold,
@@ -1148,7 +1149,7 @@ fun SimpleCallVoiceScreen(
                                                 )
                                                 Spacer(modifier = Modifier.height(if (isCompactHeight) 2.dp else 4.dp))
                                                 Text(
-                                                    text = if (duplexCallState.isSpeakerphoneOn) "SPEAKER ON" else "EARPIECE",
+                                                    text = if (duplexCallState.isSpeakerphoneOn) com.example.util.AppStrings.tr(appLanguage, "SPEAKER ON", "ΗΧΕΙΟ ON") else com.example.util.AppStrings.tr(appLanguage, "EARPIECE", "ΑΚΟΥΣΤΙΚΟ"),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     fontWeight = FontWeight.ExtraBold,
@@ -1206,9 +1207,9 @@ fun SimpleCallVoiceScreen(
                                                     Spacer(modifier = Modifier.width(5.dp))
                                                     Text(
                                                         text = if (duplexCallState.isPushToOverrideActive) {
-                                                            "OVER-TALKING"
+                                                            com.example.util.AppStrings.tr(appLanguage, "OVER-TALKING", "ΥΠΕΡΙΣΧΥΣΗ")
                                                         } else {
-                                                            "HOLD OVERRIDE"
+                                                            com.example.util.AppStrings.tr(appLanguage, "HOLD OVERRIDE", "ΚΡΑΤΗΣΗ ΟΜΙΛΙΑΣ")
                                                         },
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis,
@@ -1250,7 +1251,7 @@ fun SimpleCallVoiceScreen(
                                                     text = if (isReplayingCallRx) {
                                                         "PLAYING..."
                                                     } else {
-                                                        "SAY AGAIN (${(cachedCallRxReplayFrames * 160) / 1000}s)"
+                                                        com.example.util.AppStrings.tr(appLanguage, "SAY AGAIN (${(cachedCallRxReplayFrames * 160) / 1000}s)", "ΕΠΑΝΑΛΗΨΗ (${(cachedCallRxReplayFrames * 160) / 1000}δ)")
                                                     },
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
@@ -1291,7 +1292,7 @@ fun SimpleCallVoiceScreen(
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                            text = if (isVoicemailMode) "HANG UP & SEND MESSAGE" else "END CALL",
+                                            text = if (isVoicemailMode) com.example.util.AppStrings.tr(appLanguage, "HANG UP & SEND MESSAGE", "ΤΕΡΜΑΤΙΣΜΟΣ & ΑΠΟΣΤΟΛΗ") else com.example.util.AppStrings.tr(appLanguage, "END CALL", "ΤΕΡΜΑΤΙΣΜΟΣ"),
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = if (isCompactHeight) 14.sp else 16.sp,
                                             fontFamily = FontFamily.Monospace
@@ -1328,7 +1329,7 @@ fun SimpleCallVoiceScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "GROUP MESH CALL (ALL PEERS)",
+                                text = com.example.util.AppStrings.tr(appLanguage, "GROUP MESH CALL (ALL PEERS)", "ΟΜΑΔΙΚΗ ΚΛΗΣΗ MESH (ΟΛΟΙ ΟΙ ΚΟΜΒΟΙ)"),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = if (p.isLight || p.isAero) Color.White else Color.Black,
@@ -1338,7 +1339,7 @@ fun SimpleCallVoiceScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "DISCOVERED PEERS (${discoveredPeers.size})",
+                            text = "${com.example.util.AppStrings.tr(appLanguage, "DISCOVERED PEERS", "ΕΝΤΟΠΙΣΜΕΝΟΙ ΚΟΜΒΟΙ")} (${discoveredPeers.size})",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = p.textMuted,
                                 fontWeight = FontWeight.Bold,
@@ -1637,7 +1638,7 @@ fun SimpleCallVoiceScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (totalVoiceRx > 0) "SPEAKER RX ($totalVoiceRx)" else "SPEAKER READY",
+                                        text = if (totalVoiceRx > 0) "${com.example.util.AppStrings.tr(appLanguage, "SPEAKER RX", "ΛΗΨΗ ΗΧΕΙΟΥ")} ($totalVoiceRx)" else com.example.util.AppStrings.tr(appLanguage, "SPEAKER READY", "ΗΧΕΙΟ ΕΤΟΙΜΟ"),
                                         maxLines = 1,
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             color = if (totalVoiceRx > 0) p.emerald else p.textMuted,
@@ -1865,7 +1866,7 @@ fun SimpleCallVoiceScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = if (isPttRecording) "RELEASE TO SEND" else "HOLD TO TALK",
+                                    text = if (isPttRecording) com.example.util.AppStrings.tr(appLanguage, "RELEASE TO SEND", "ΑΦΗΣΤΕ ΓΙΑ ΑΠΟΣΤΟΛΗ") else com.example.util.AppStrings.tr(appLanguage, "HOLD TO TALK", "ΚΡΑΤΗΣΤΕ ΓΙΑ ΟΜΙΛΙΑ"),
                                     textAlign = TextAlign.Center,
                                     style = MaterialTheme.typography.titleSmall.copy(
                                         color = orbForeground,
@@ -1905,7 +1906,7 @@ fun SimpleCallVoiceScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isPttRecording) "TAP TO STOP TALKING" else "1-TAP LATCH TO TALK",
+                            text = if (isPttRecording) com.example.util.AppStrings.tr(appLanguage, "TAP TO STOP TALKING", "ΠΑΤΗΣΤΕ ΓΙΑ ΠΑΥΣΗ") else com.example.util.AppStrings.tr(appLanguage, "1-TAP LATCH TO TALK", "1-ΠΑΤΗΜΑ ΣΥΝΕΧΗΣ ΟΜΙΛΙΑ"),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.ExtraBold,
@@ -1942,9 +1943,9 @@ fun SimpleCallVoiceScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (isReplayingPttRx) {
-                                "REPLAYING PTT RX..."
+                                com.example.util.AppStrings.tr(appLanguage, "REPLAYING PTT RX...", "ΕΠΑΝΑΛΗΨΗ ΛΗΨΗΣ PTT...")
                             } else {
-                                "REPLAY LAST WALKIE RX (${(cachedPttRxReplayFrames * 160) / 1000}s)"
+                                com.example.util.AppStrings.tr(appLanguage, "REPLAY LAST WALKIE RX (${(cachedPttRxReplayFrames * 160) / 1000}s)", "ΕΠΑΝΑΛΗΨΗ ΤΕΛΕΥΤΑΙΑΣ ΛΗΨΗΣ (${(cachedPttRxReplayFrames * 160) / 1000}δ)")
                             },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

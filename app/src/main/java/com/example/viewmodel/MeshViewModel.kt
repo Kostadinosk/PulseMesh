@@ -224,11 +224,11 @@ data class MeshUiState(
     val hasDuressPin: Boolean = false,
     val p2pTileSyncStatus: String = "Ready to beam cached map tiles over local mesh",
 
-    // PulseMesh v1.2.5 Wi-Fi Direct Embedded Web Portal & High-Visibility SOS State
+    // Wi-Fi Direct Embedded Web Portal & High-Visibility SOS State
     val webPortalStatus: com.example.service.WebPortalStatus = com.example.service.WebPortalStatus(),
     val incomingSosAlert: String = "",
 
-    // PulseMesh v1.3.0 Flagship Upgrades State
+    // PulseMesh Field Upgrades State
     val appLanguage: String = "en",
     val sharedFiles: List<SharedMeshFile> = emptyList(),
     val quickStatusVoiceEnabled: Boolean = true,
@@ -358,6 +358,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     // Tracks delivery ACKs for outgoing CHAT and E2EE_DM messages (packetId -> acked)
     val pendingChatAcks = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val lastDuplicateAckSentMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     val audioService = TacticalAudioService(
         context = application,
@@ -610,7 +611,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // 2. Wire adaptive VOICE_STREAM pipeline, foreground mic gates & Hotspot Autoconnect engine
         val fastLinkDetector: () -> Boolean = {
             autoHotspotNegotiator.hasHighSpeedLink() ||
-                _uiState.value.isInternetEnabled
+                _uiState.value.isInternetEnabled ||
+                (pulseMeshWebServer.isRunning() && _uiState.value.webPortalStatus.activeClientCount > 0)
         }
         audioService.isHighSpeedLinkActive = fastLinkDetector
         tacticalCallService.isHighSpeedLinkActive = fastLinkDetector
@@ -1396,7 +1398,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun hostHotspotExplicitly() {
         hotspotWebPortalRequested = true
         pulseMeshWebServer.start(com.example.service.AutoHotspotNegotiator.LOCAL_HOTSPOT_IP)
-        // v1.2.8: Standard SoftAP (LocalOnlyHotspot / active System Hotspot) FIRST for 100% iPhone/Android/browser TCP compatibility;
+        // Standard SoftAP (LocalOnlyHotspot / active System Hotspot) FIRST for 100% iPhone/Android/browser TCP compatibility;
         // LocalHotspotManager automatically falls back to Wi-Fi Direct P2P if LocalOnlyHotspot is unavailable.
         hotspotManager.startLocalHotspot()
         val liveBtn = if (hotspotManager.hotspotState.value.isActive) {
@@ -3417,7 +3419,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         if (text.isBlank()) return
         val state = _uiState.value
         val trimmed = text.trim()
-        val pktId = "PKT#${Random.nextInt(1000, 9999)}"
+        val pktId = "PKT#${(System.currentTimeMillis() and 0xFFFFFL).toString(16).uppercase()}${Random.nextInt(100, 999)}"
 
         val isPrimary = threadId == "channel_primary"
         val isEncChannel = threadId == "channel_encrypted"
@@ -3683,6 +3685,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             val (realOutboundTransport, realOutboundRssi) = resolveActiveOutboundTransportAndRssi(
                 peersBackingMap[normalizeId(targetDest)]
             )
+            val refreshedBadge = when {
+                isGroupChat -> "[${packet.id} | ${state.localNodeId}->$targetDest | GROUP AES-256-GCM]"
+                isDm -> "[${packet.id} | ${state.localNodeId}->$targetDest | ECDH P-256 + AES-256-GCM]"
+                threadId == "channel_encrypted" -> "[${packet.id} | ${state.localNodeId}->$targetDest | E2EE: AES-256-GCM]"
+                else -> "[${packet.id} | ${state.localNodeId}->ALL | $realOutboundTransport]"
+            }
+            if (persistentChatManager.updatePacketTransportBadge(threadId, packet.id, realOutboundTransport, refreshedBadge)) {
+                refreshConversationsList()
+            }
             val recipientClaim = if (isDm) prefs.findUsernameClaimByNodeId(targetDest) else null
             val wirePkt = com.example.service.WireMeshPacket(
                 packetId = packet.id,
@@ -3721,6 +3732,26 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         triggerHaptic(45)
+    }
+
+    /**
+     * Automatically flushes queued direct messages that were awaiting a peer's ECDH public key
+     * as soon as the peer's public key is learned via KEY_ANNOUNCE, presence, or Web Portal registration.
+     */
+    private fun flushPendingKeyExchangeDmsForPeer(peerNodeId: String) {
+        val normPeer = normalizeId(peerNodeId)
+        if (normPeer.isBlank() || normPeer == normalizeId(_uiState.value.localNodeId)) return
+        val matchingThread = persistentChatManager.getAllThreadIds().firstOrNull { tid ->
+            tid.startsWith("dm_") && normalizeId(tid.removePrefix("dm_")) == normPeer
+        } ?: "dm_0x$normPeer"
+        val pending = persistentChatManager.getPacketsForThread(matchingThread).filter { pkt ->
+            !pkt.isIncoming &&
+                !pkt.isDelivered &&
+                (pkt.transport == "ECDH KEY PENDING" || pkt.rawHexBadge.contains("KEY EXCHANGE PENDING"))
+        }
+        for (pkt in pending) {
+            retrySendChatPacket(pkt)
+        }
     }
 
     /**
@@ -3981,7 +4012,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
      * - Sends over Hybrid Internet (`ntfy.sh`) ONLY when `isInternetEnabled == true`
      * - Sends over primary BLE GATT (`0000CAFF`) via 1-slot `bleVoiceTxChannel` if Hotspot is not yet connected
      */
-    fun sendVoiceAudioPacket(packet: com.example.service.WireMeshPacket) {
+    fun sendVoiceAudioPacket(
+        packet: com.example.service.WireMeshPacket,
+        skipWebPortalNotify: Boolean = false
+    ) {
         val state = _uiState.value
         val unifiedJson = org.json.JSONObject().apply {
             put("id", packet.packetId)
@@ -3995,7 +4029,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }.toString()
 
         // 1. Local Hotspot UDP (45888): send zero-bloat raw binary "PA" frame for ADPCM8K payloads
-        if (pulseMeshWebServer.isRunning() && packet.payload.isNotBlank()) {
+        if (!skipWebPortalNotify && pulseMeshWebServer.isRunning() && packet.payload.isNotBlank()) {
             val vSeq = webVoiceSeqCounter.incrementAndGet()
             latestWebVoiceFrame = Triple(vSeq, packet.srcNodeId to packet.srcCallsign, packet.payload)
             pulseMeshWebServer.notifyVoiceFrame(
@@ -4366,6 +4400,40 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // Global 4000-ID deduplication across all radios to prevent multi-hop infinite loops
         if (packet.type != "HEARTBEAT" && packet.type != "GPS_BEACON") {
             if (!recordPacketIdIfNew(packet.packetId)) {
+                // Even when a retried CHAT / E2EE_DM / GROUP_CHAT arrives again, still return a rate-limited CHAT_ACK
+                // if we already received it so the sender doesn't get stuck on "NO ACK / RETRY"!
+                if (packet.packetId.isNotBlank() &&
+                    (packet.type == "CHAT" || packet.type == "E2EE_DM" || packet.type == "GROUP_CHAT")
+                ) {
+                    val isBroadcastMsg = packet.dstNodeId == "ALL" || packet.dstNodeId == "BROADCAST" || packet.dstNodeId == "ENC_TACNET"
+                    val isDmForMe = normalizeId(packet.dstNodeId) == normSelf
+                    val grpId = packet.groupId.ifBlank { packet.dstNodeId }.trim()
+                    val isGroupMember = packet.type == "GROUP_CHAT" && grpId.isNotBlank() &&
+                        (_uiState.value.meshGroups.any { it.groupId == grpId && it.memberIds.any { m -> normalizeId(m) == normSelf } })
+                    if (isBroadcastMsg || isDmForMe || isGroupMember) {
+                        val nowAck = System.currentTimeMillis()
+                        val lastSent = lastDuplicateAckSentMs[packet.packetId] ?: 0L
+                        if (nowAck - lastSent >= 800L) {
+                            lastDuplicateAckSentMs[packet.packetId] = nowAck
+                            val ackPkt = com.example.service.WireMeshPacket(
+                                packetId = "ack_${packet.packetId}_${state.localNodeId}_${nowAck and 0xFFFF}",
+                                srcNodeId = state.localNodeId,
+                                srcCallsign = state.operatorCallsign,
+                                dstNodeId = packet.srcNodeId,
+                                type = "CHAT_ACK",
+                                payload = packet.packetId,
+                                ttl = 5,
+                                hops = 0,
+                                srcUsername = state.claimedUsername,
+                                dstUsername = packet.srcUsername
+                            )
+                            sendMeshPacket(ackPkt)
+                            if (packet.srcUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
+                                meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
+                            }
+                        }
+                    }
+                }
                 return
             }
         }
@@ -4517,7 +4585,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val updatedNodes = buildMergedNodesList(_uiState.value.nodes)
         val peerCount = updatedNodes.count { !it.isSelf }
 
-        // Evaluate 1.5 Geofence perimeter breach if enabled and peer reported real GPS
+        // Evaluate Geofence perimeter breach if enabled and peer reported real GPS
         val curGeo = _uiState.value
         if (curGeo.geofenceEnabled && (curGeo.geofenceLat != 0.0 || curGeo.geofenceLng != 0.0) &&
             packet.lat != null && packet.lng != null && (packet.lat != 0.0 || packet.lng != 0.0)
@@ -4642,6 +4710,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     if (updated) {
                         refreshConversationsList()
                     }
+                    pulseMeshWebServer.notifyStateChanged()
                 }
             }
             "HOTSPOT_INFO", "HOTSPOT_AUTO_JOIN", "HOTSPOT_CREDENTIALS" -> {
@@ -4735,7 +4804,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (packet.packetId.isNotBlank()) {
                     val ackPkt = com.example.service.WireMeshPacket(
-                        packetId = "ack_${packet.packetId}_${state.localNodeId}",
+                        packetId = "ack_${packet.packetId}_${state.localNodeId}_${System.currentTimeMillis() and 0xFFFF}",
                         srcNodeId = state.localNodeId,
                         srcCallsign = state.operatorCallsign,
                         dstNodeId = packet.srcNodeId,
@@ -4747,7 +4816,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         dstUsername = packet.srcUsername
                     )
                     sendMeshPacket(ackPkt)
-                    if (packet.srcUsername.isNotBlank() && state.isInternetEnabled) {
+                    if (packet.srcUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
                         meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
                     }
                 }
@@ -4800,7 +4869,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     // Immediately send back a lightweight CHAT_ACK to the sender (multi-hop TTL=5 + direct inbox if online)
                     if (packet.packetId.isNotBlank()) {
                         val ackPkt = com.example.service.WireMeshPacket(
-                            packetId = "ack_${packet.packetId}_${state.localNodeId}",
+                            packetId = "ack_${packet.packetId}_${state.localNodeId}_${System.currentTimeMillis() and 0xFFFF}",
                             srcNodeId = state.localNodeId,
                             srcCallsign = state.operatorCallsign,
                             dstNodeId = packet.srcNodeId,
@@ -4812,7 +4881,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                             dstUsername = packet.srcUsername
                         )
                         sendMeshPacket(ackPkt)
-                        if (packet.srcUsername.isNotBlank() && state.isInternetEnabled) {
+                        if (packet.srcUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
                             meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
                         }
                     }
@@ -5497,14 +5566,21 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 triggerHaptic(35)
             }
             "REACTION" -> {
-                runCatching {
-                    val obj = org.json.JSONObject(packet.payload)
-                    val targetId = obj.optString("targetId").trim()
-                    val emoji = obj.optString("emoji").trim()
-                    if (targetId.isNotBlank() && emoji.isNotBlank()) {
-                        if (persistentChatManager.toggleReaction(targetId, emoji, effectiveCallsign)) {
-                            refreshConversationsList()
-                        }
+                var targetId = ""
+                var emoji = ""
+                val jsonObj = runCatching { org.json.JSONObject(packet.payload) }.getOrNull()
+                if (jsonObj != null) {
+                    targetId = jsonObj.optString("targetId").trim()
+                    emoji = jsonObj.optString("emoji").trim()
+                } else if (packet.payload.contains("|")) {
+                    val parts = packet.payload.split("|", limit = 2)
+                    targetId = parts[0].trim()
+                    emoji = parts.getOrElse(1) { "" }.trim()
+                }
+                if (targetId.isNotBlank() && emoji.isNotBlank()) {
+                    if (persistentChatManager.toggleReaction(targetId, emoji, effectiveCallsign)) {
+                        refreshConversationsList()
+                        pulseMeshWebServer.notifyStateChanged()
                     }
                 }
             }
@@ -5740,6 +5816,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(nodes = updatedNodes)
         }
         refreshConversationsList()
+        flushPendingKeyExchangeDmsForPeer(peerNodeId)
         return effectiveKey
     }
 
@@ -6825,7 +6902,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val pts = _uiState.value.breadcrumbs
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-        sb.append("<gpx version=\"1.1\" creator=\"PulseMesh v1.1\">\n")
+        sb.append("<gpx version=\"1.1\" creator=\"PulseMesh\">\n")
         sb.append("  <trk>\n    <name>PulseMesh Tactical Trail</name>\n    <trkseg>\n")
         for (pt in pts) {
             sb.append(
@@ -7076,7 +7153,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Permanently deletes ALL local account information associated with [targetUsername] (or the active account if blank).
-     * SECURITY RULE (v1.2.7): Deletion is ONLY permitted if:
+     * SECURITY RULE: Deletion is ONLY permitted if:
      *  1. The user is currently logged in to that exact account, OR
      *  2. The user provides BOTH the valid PIN AND the valid Recovery Key (`PMRK-...`) for that account.
      */
@@ -7203,7 +7280,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // =========================================================================
-    // PULSEMESH v1.3.0 FLAGSHIP FEATURES
+    // PULSEMESH FIELD FEATURES
     // =========================================================================
 
     private fun speakStatusAnnouncement(phrase: String) {
@@ -7227,7 +7304,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 3.4 Multi-Language Switcher (en / el)
+    // Multi-Language Switcher (en / el)
     fun setAppLanguage(langCode: String) {
         val clean = if (langCode.equals("el", ignoreCase = true)) "el" else "en"
         prefs.appLanguage = clean
@@ -7235,7 +7312,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(25)
     }
 
-    // 1.1 Offline File & Document Transfer (Hotspot HTTP/HTTPS Portal)
+    // Offline File & Document Transfer (Hotspot HTTP/HTTPS Portal)
     fun shareLocalFileToPortal(fileName: String, bytes: ByteArray): SharedMeshFile? {
         val st = _uiState.value
         val saved = pulseMeshWebServer.addLocalSharedFile(fileName, bytes, st.operatorCallsign)
@@ -7257,7 +7334,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(sharedFiles = pulseMeshWebServer.listSharedFiles()) }
     }
 
-    // 1.3 Tactical Quick-Status & One-Tap Check-Ins (Text + Voice)
+    // Tactical Quick-Status & One-Tap Check-Ins (Text + Voice)
     fun toggleQuickStatusVoice(enabled: Boolean? = null) {
         val next = enabled ?: !_uiState.value.quickStatusVoiceEnabled
         prefs.quickStatusVoiceEnabled = next
@@ -7321,7 +7398,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(40)
     }
 
-    // 1.4 Offline Emergency Medical / ICE Card + Dead-Man's Switch
+    // Offline Emergency Medical / ICE Card + Dead-Man's Switch
     fun saveIceMedicalCard(bloodType: String, allergies: String, notes: String, emergencyContact: String) {
         prefs.iceBloodType = bloodType
         prefs.iceAllergies = allergies
@@ -7376,7 +7453,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 1.5 Geofence / Perimeter Alerts
+    // Geofence / Perimeter Alerts
     fun configureGeofence(enabled: Boolean, lat: Double? = null, lng: Double? = null, radiusMeters: Int = _uiState.value.geofenceRadiusMeters) {
         val st = _uiState.value
         val targetLat = lat ?: st.userLatitude ?: st.geofenceLat
@@ -7402,7 +7479,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(geofenceAlertMessage = "") }
     }
 
-    // 2.2 Battery-Saver Duty-Cycle ("Expedition Mode")
+    // Battery-Saver Duty-Cycle ("Expedition Mode")
     fun toggleExpeditionMode(enabled: Boolean? = null) {
         val next = enabled ?: !_uiState.value.expeditionModeEnabled
         prefs.expeditionModeEnabled = next
@@ -7417,7 +7494,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(25)
     }
 
-    // 3.1 Message Reactions (lightweight 2-byte-style mesh reaction packets)
+    // Message Reactions (lightweight mesh reaction packets)
     fun sendReaction(packetId: String, emoji: String) {
         val st = _uiState.value
         if (packetId.isBlank() || emoji.isBlank()) return
@@ -7443,7 +7520,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(20)
     }
 
-    // 3.2 Message Search, Pinned Messages & Trip Log Export
+    // Message Search, Pinned Messages & Trip Log Export
     fun togglePinMessage(threadId: String, packetId: String) {
         if (persistentChatManager.togglePin(threadId, packetId)) {
             refreshConversationsList()
@@ -7459,7 +7536,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val st = _uiState.value
         val root = org.json.JSONObject().apply {
             put("app", "PulseMesh")
-            put("version", "1.3.0")
+            put("version", "1.3.1")
             put("exportedAt", System.currentTimeMillis())
             put("operator", st.operatorCallsign)
             put("nodeId", st.localNodeId)
@@ -7494,7 +7571,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         return root.toString(2)
     }
 
-    // 3.3 QR Contact & Group Instant Join
+    // QR Contact & Group Instant Join
     fun buildInstantJoinQrPayload(groupId: String? = null): String {
         val st = _uiState.value
         val sb = StringBuilder("pulsemesh://join?")
@@ -7584,14 +7661,14 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         return Pair(true, "Verified & added $peerCs ($peerId)$joinedGroupNote.")
     }
 
-    // 4.1 Per-Chat Disappearing Burn Timers
+    // Per-Chat Disappearing Burn Timers
     fun setThreadBurnTtl(threadId: String, ttlSeconds: Int) {
         prefs.setPerThreadBurnTtl(threadId, ttlSeconds)
         _uiState.update { it.copy(perThreadBurnTtlMap = prefs.getPerThreadBurnTtlMap()) }
         triggerHaptic(20)
     }
 
-    // 4.2 Decoy / Panic Mode Profile
+    // Decoy / Panic Mode Profile
     private fun hashDecoyPin(cleanPin: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256")
             .digest("PULSEMESH_DECOY_V13:$cleanPin".toByteArray(Charsets.UTF_8))
@@ -7631,8 +7708,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         return org.json.JSONObject().apply {
             put("pulsemeshHost", true)
-            put("version", "1.3.0")
+            put("version", "1.3.1")
             put("sslEnabled", state.webPortalStatus.sslEnabled)
+            put("httpsSelfTestPassed", state.webPortalStatus.httpsSelfTestPassed)
             put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)
             put("sharedFilesCount", state.webPortalStatus.sharedFilesCount)
             put("hostNodeId", state.localNodeId)
@@ -7742,6 +7820,18 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 put("hops", p.hops)
                 put("transport", p.transport)
                 put("timestamp", p.timestamp)
+                put("isDelivered", p.isDelivered)
+                if (p.ackedByCallsign.isNotBlank()) put("ackedByCallsign", p.ackedByCallsign)
+                if (p.isPinned) put("isPinned", true)
+                if (p.reactions.isNotEmpty()) {
+                    val rObj = org.json.JSONObject()
+                    for ((em, actors) in p.reactions) {
+                        val rArr = org.json.JSONArray()
+                        actors.forEach { rArr.put(it) }
+                        rObj.put(em, rArr)
+                    }
+                    put("reactions", rObj)
+                }
             })
         }
 
@@ -7752,6 +7842,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             put("waypoints", wpArr)
             put("packets", pktsArr)
             put("isSosActive", state.isSosActive)
+            put("recentCallSignals", pulseMeshWebServer.getRecentCallSignalsJson())
         }
         latestWebVoiceFrame?.let { (seq, who, b64) ->
             root.put("recentVoice", org.json.JSONObject().apply {
@@ -7797,6 +7888,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 cur.copy(nodes = mergedNodes, activePeerCount = mergedNodes.count { !it.isSelf })
             }
             refreshConversationsList()
+            flushPendingKeyExchangeDmsForPeer(cleanId)
 
             // Announce web peer presence to the rest of the BLE / Wi-Fi / Relay mesh
             val presencePkt = com.example.service.WireMeshPacket(
@@ -7848,7 +7940,48 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     val b64 = submitted.payload.trim()
                     if (b64.isBlank()) return@launch
                     val isCall = submitted.type == "CALL_AUDIO"
-                    runCatching { audioService.playAudioBase64(b64, isCallAudio = isCall) }
+                    runCatching {
+                        audioService.playAudioBase64(b64, isCallAudio = isCall)
+                        if (isCall) {
+                            tacticalCallService.recordIncomingFramePlayed()
+                        }
+                    }
+                    // If Host was ringing out to Web Peer and Web Peer starts sending live CALL_AUDIO,
+                    // auto-transition Host cleanly to IN_CALL_ACTIVE matching native BLE/Hotspot call handling.
+                    if (isCall) {
+                        val curUi = _uiState.value
+                        if (curUi.duplexCallState.signalingState == com.example.service.CallSignalingState.RINGING_OUTGOING ||
+                            curUi.callState == com.example.service.CallSignalingState.RINGING_OUTGOING
+                        ) {
+                            ringSignalRepeatJob?.cancel()
+                            ringSignalRepeatJob = null
+                            callAcceptConfirmedByPeer = true
+                            tacticalCallService.acceptCall(startMicDelayMs = 0L)
+                            tacticalCallService.markCallAcceptAcked()
+                            val webNode = peersBackingMap[normalizeId(srcId)] ?: MeshNode(
+                                id = srcId,
+                                callsign = srcCallsign,
+                                isSelf = false
+                            )
+                            _uiState.update {
+                                it.copy(
+                                    callState = com.example.service.CallSignalingState.IN_CALL_ACTIVE,
+                                    remoteCallerId = webNode.id,
+                                    remoteCallerName = webNode.callsign,
+                                    isPrivateCallActive = true,
+                                    activePrivateCallNode = webNode,
+                                    incomingPrivateCall = null,
+                                    callAckConfirmed = true
+                                )
+                            }
+                        } else if (!callAcceptConfirmedByPeer && tacticalCallService.callState.value.isInCall) {
+                            callAcceptConfirmedByPeer = true
+                            acceptSignalRetryJob?.cancel()
+                            acceptSignalRetryJob = null
+                            tacticalCallService.markCallAcceptAcked()
+                            _uiState.update { it.copy(callAckConfirmed = true) }
+                        }
+                    }
                     val vSeq = webVoiceSeqCounter.incrementAndGet()
                     latestWebVoiceFrame = Triple(vSeq, srcId to srcCallsign, b64)
                     val wire = com.example.service.WireMeshPacket(
@@ -7862,7 +7995,80 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         hops = 1,
                         timestamp = now
                     )
-                    sendVoiceAudioPacket(wire)
+                    // skipWebPortalNotify = true because PulseMeshWebServer.handleClientSocket already notified SSE
+                    sendVoiceAudioPacket(wire, skipWebPortalNotify = true)
+                }
+                "CHAT_ACK" -> {
+                    val ackedId = submitted.payload.ifBlank { submitted.text }.trim()
+                    if (ackedId.isNotBlank()) {
+                        val wire = com.example.service.WireMeshPacket(
+                            packetId = submitted.packetId,
+                            srcNodeId = srcId,
+                            srcCallsign = srcCallsign,
+                            dstNodeId = submitted.dstNodeId.ifBlank { _uiState.value.localNodeId },
+                            type = "CHAT_ACK",
+                            payload = ackedId,
+                            ttl = 5,
+                            hops = 1,
+                            sourceTransport = "WEB PORTAL",
+                            timestamp = now
+                        )
+                        handleIncomingPacket(wire)
+                        val targetDstNorm = normalizeId(submitted.dstNodeId)
+                        if (targetDstNorm.isNotBlank() && targetDstNorm != normalizeId(_uiState.value.localNodeId)) {
+                            sendOmniPacket(wire)
+                        }
+                    }
+                }
+                "SOS_CLEAR" -> {
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = "ALL",
+                        type = "SOS_CLEAR",
+                        payload = submitted.text.ifBlank { "SOS CANCELLED by $srcCallsign" },
+                        ttl = 7,
+                        hops = 1,
+                        sourceTransport = "WEB PORTAL",
+                        timestamp = now
+                    )
+                    handleIncomingPacket(wire)
+                    sendOmniPacket(wire)
+                }
+                "QUICK_STATUS" -> {
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = "ALL",
+                        type = "QUICK_STATUS",
+                        payload = submitted.payload.ifBlank { submitted.text },
+                        ttl = 7,
+                        hops = 1,
+                        lat = submitted.lat,
+                        lng = submitted.lng,
+                        sourceTransport = "WEB PORTAL",
+                        timestamp = now
+                    )
+                    handleIncomingPacket(wire)
+                    sendOmniPacket(wire)
+                }
+                "REACTION" -> {
+                    val wire = com.example.service.WireMeshPacket(
+                        packetId = submitted.packetId,
+                        srcNodeId = srcId,
+                        srcCallsign = srcCallsign,
+                        dstNodeId = "ALL",
+                        type = "REACTION",
+                        payload = submitted.payload.ifBlank { submitted.text },
+                        ttl = 5,
+                        hops = 1,
+                        sourceTransport = "WEB PORTAL",
+                        timestamp = now
+                    )
+                    handleIncomingPacket(wire)
+                    sendOmniPacket(wire)
                 }
                 "WAYPOINT" -> {
                     val lat = submitted.waypointLat ?: submitted.lat ?: return@launch
@@ -7983,6 +8189,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     val isDmToHost = isDm && normalizeId(dstNodeId) == normalizeId(_uiState.value.localNodeId)
                     val effectiveThreadId = if (isDmToHost) "dm_$srcId" else tid
+                    val hostCallsign = _uiState.value.operatorCallsign
                     val meshPkt = MeshPacket(
                         id = submitted.packetId,
                         sourceId = srcId,
@@ -7995,7 +8202,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         transport = "WEB PORTAL",
                         rawHexBadge = "[${submitted.packetId} | $srcId->$dstNodeId | WEB PORTAL]",
                         isIncoming = true,
-                        timestamp = now
+                        timestamp = now,
+                        isDelivered = isDmToHost,
+                        ackedByCallsign = if (isDmToHost) hostCallsign else ""
                     )
                     _uiState.update { it.copy(packets = listOf(meshPkt) + it.packets) }
                     persistentChatManager.savePacket(effectiveThreadId, meshPkt)
@@ -8007,25 +8216,32 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                             isGroup -> "GROUP_CHAT"
                             else -> "CHAT"
                         }
+                        val peerPub = if (isDm) {
+                            prefs.getPeerPublicKey(dstNodeId) ?: peersBackingMap[normalizeId(dstNodeId)]?.publicKeyBase64
+                        } else null
                         val wirePayload = when {
+                            isDm && !peerPub.isNullOrBlank() ->
+                                TacticalE2eeManager.encryptDmWithEcdh(text, prefs.x25519PrivateKey, peerPub) ?: "PLAINTEXT:$text"
                             isDm -> "PLAINTEXT:$text"
                             else -> text
                         }
-                        sendOmniPacket(
-                            com.example.service.WireMeshPacket(
-                                packetId = submitted.packetId,
-                                srcNodeId = srcId,
-                                srcCallsign = srcCallsign,
-                                dstNodeId = dstNodeId,
-                                type = wireType,
-                                payload = wirePayload,
-                                ttl = 7,
-                                hops = 1,
-                                groupId = if (isGroup) dstNodeId else "",
-                                senderPubKey = submitted.publicKeyBase64,
-                                timestamp = now
-                            )
+                        val relayedWire = com.example.service.WireMeshPacket(
+                            packetId = submitted.packetId,
+                            srcNodeId = srcId,
+                            srcCallsign = srcCallsign,
+                            dstNodeId = dstNodeId,
+                            type = wireType,
+                            payload = wirePayload,
+                            ttl = 7,
+                            hops = 1,
+                            groupId = if (isGroup) dstNodeId else "",
+                            senderPubKey = submitted.publicKeyBase64.ifBlank { prefs.x25519PublicKey },
+                            timestamp = now
                         )
+                        enqueueDtnPacket(relayedWire)
+                        sendOmniPacket(relayedWire)
+                    } else {
+                        pulseMeshWebServer.notifyStateChanged()
                     }
                 }
             }
