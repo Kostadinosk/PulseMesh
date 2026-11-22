@@ -1758,8 +1758,7 @@
     async function decryptDmEcdh(payload, peerPubB64) {
       const trimmed = (payload || "").trim();
       if (!trimmed) return "";
-      if (trimmed.startsWith("PLAINTEXT:")) return trimmed.slice(10);
-      if (!trimmed.startsWith(DM_PREFIX_ECDH)) return trimmed;
+      if (!trimmed.startsWith(DM_PREFIX_ECDH)) return "[Encrypted / Key Verification Failed]";
       if (!hasSubtle || !state.privKeyB64 || !peerPubB64) return "[E2EE DM — Key Exchange Pending]";
       try {
         const key = await deriveEcdhAesKey(state.privKeyB64, peerPubB64);
@@ -2366,7 +2365,7 @@
           const peer = state.nodes.get(normId(peerId));
           const peerPub = pkt.pk || (peer && peer.publicKeyBase64) || "";
           if (displayText.startsWith(DM_PREFIX_ECDH)) displayText = await decryptDmEcdh(displayText, peerPub);
-          else if (displayText.startsWith("PLAINTEXT:")) displayText = displayText.slice(10);
+          else displayText = "[Encrypted / Key Verification Failed]";
         } else if (type === "GROUP_CHAT" && pkt.groupId) {
           threadId = "group_" + pkt.groupId;
           if (!state.groups.some((g) => g.groupId === pkt.groupId)) {
@@ -2623,7 +2622,12 @@
           resolvedDst = threadId.slice(3); wireType = "E2EE_DM";
           if (normId(resolvedDst) === normId(state.nodeId)) return;
           const peer = state.nodes.get(normId(resolvedDst));
-          wirePayload = (peer && peer.publicKeyBase64) ? (await encryptDmEcdh(text, peer.publicKeyBase64) || ("PLAINTEXT:" + text)) : ("PLAINTEXT:" + text);
+          const encryptedPayload = (peer && peer.publicKeyBase64) ? await encryptDmEcdh(text, peer.publicKeyBase64) : null;
+          if (!encryptedPayload) {
+            console.warn("PulseMesh zero-trust: peer E2EE public key required for DM");
+            return;
+          }
+          wirePayload = encryptedPayload;
         } else if (threadId.startsWith("group_")) {
           groupId = threadId.slice(6); resolvedDst = groupId; wireType = "GROUP_CHAT";
         }

@@ -1,32 +1,61 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.ksp)
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.kostadinosk.pulsemesh"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
     applicationId = "com.KostadinosK.pulsemesh"
     minSdk = 24
     targetSdk = 36
-    versionCode = 18
-    versionName = "1.4.7"
+    versionCode = 19
+    versionName = "1.5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  val releaseKeystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "$rootDir/my-upload-key.jks")
+  flavorDimensions += "tier"
+  productFlavors {
+    create("lite") {
+      dimension = "tier"
+      buildConfigField("boolean", "IS_FULL_FLAVOR", "false")
+      buildConfigField("String", "FLAVOR_TIER", "\"lite\"")
+    }
+    create("full") {
+      dimension = "tier"
+      buildConfigField("boolean", "IS_FULL_FLAVOR", "true")
+      buildConfigField("String", "FLAVOR_TIER", "\"full\"")
+    }
+  }
+
+  val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+  }
+  val releaseKeystorePath = System.getenv("KEYSTORE_PATH") ?: localProps.getProperty("KEYSTORE_PATH")
+  val releaseStorePassword = System.getenv("STORE_PASSWORD") ?: localProps.getProperty("STORE_PASSWORD")
+  val releaseKeyAlias = System.getenv("KEY_ALIAS") ?: localProps.getProperty("KEY_ALIAS") ?: "upload"
+  val releaseKeyPassword = System.getenv("KEY_PASSWORD") ?: localProps.getProperty("KEY_PASSWORD")
+  val releaseKeystoreFile = releaseKeystorePath?.let { file(it) }
+  val hasReleaseSigning = releaseKeystoreFile != null &&
+    releaseKeystoreFile.exists() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
   val debugKeystoreFile = file("$rootDir/debug.keystore")
 
   signingConfigs {
-    if (releaseKeystoreFile.exists()) {
+    if (hasReleaseSigning) {
       create("release") {
         storeFile = releaseKeystoreFile
-        storePassword = System.getenv("STORE_PASSWORD") ?: "pulsemesh2026"
-        keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD") ?: "pulsemesh2026"
+        storePassword = releaseStorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeyPassword
       }
     }
     if (debugKeystoreFile.exists()) {
@@ -46,7 +75,7 @@ android {
       isShrinkResources = true
       isDebuggable = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      if (releaseKeystoreFile.exists()) {
+      if (hasReleaseSigning) {
         signingConfig = signingConfigs.getByName("release")
       }
     }
@@ -103,6 +132,13 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.room.ktx)
+  ksp(libs.androidx.room.compiler)
+  implementation(libs.androidx.sqlite)
+  implementation(libs.androidx.biometric)
+  "fullImplementation"(libs.sqlcipher.android)
+  "fullImplementation"(libs.stream.webrtc.android)
   testImplementation(platform(libs.androidx.compose.bom))
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

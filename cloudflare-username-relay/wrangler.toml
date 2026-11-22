@@ -6,3 +6,15 @@ compatibility_date = "2025-01-01"
 binding = "DB"
 database_name = "pulsemesh_registry"
 database_id = "831739ba-b5b5-46e4-aaff-2cfa62607026"
+
+[[durable_objects.bindings]]
+name = "REALTIME_HUB"
+class_name = "PulseMeshRealtimeHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PulseMeshRealtimeHub"]
+
+# Optional Cloudflare Calls TURN secrets (set via `npx wrangler secret put`):
+# - CF_CALLS_TURN_TOKEN_ID
+# - CF_CALLS_TURN_API_TOKEN
