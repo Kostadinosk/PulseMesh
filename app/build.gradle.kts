@@ -14,8 +14,8 @@ android {
     applicationId = "com.KostadinosK.pulsemesh"
     minSdk = 24
     targetSdk = 36
-    versionCode = 19
-    versionName = "1.5.0"
+    versionCode = 20
+    versionName = "1.5.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

@@ -21,17 +21,25 @@
 
 # Keep Room & SQLCipher
 -keep class * extends androidx.room.RoomDatabase { *; }
--keep class net.zetetic.database.sqlcipher.** { *; }
--dontwarn net.zetetic.database.sqlcipher.**
+-keep,includedescriptorclasses class net.zetetic.database.** { *; }
+-keep,includedescriptorclasses interface net.zetetic.database.** { *; }
+-dontwarn net.zetetic.database.**
 
-# Keep WebRTC core classes & JNI hooks (full flavor)
--keep class org.webrtc.** { *; }
+# Keep WebRTC core classes, Chromium jni_zero runtime & JNI hooks (full flavor)
+-keep,includedescriptorclasses class org.jni_zero.** { *; }
+-keep,includedescriptorclasses interface org.jni_zero.** { *; }
+-dontwarn org.jni_zero.**
+-keep,includedescriptorclasses class org.webrtc.** { *; }
+-keep,includedescriptorclasses interface org.webrtc.** { *; }
 -dontwarn org.webrtc.**
--keepclasseswithmembernames class * {
+-keepclasseswithmembernames,includedescriptorclasses class * {
     native <methods>;
 }
--keepclassmembers class org.webrtc.RendererCommon { *; }
--keepclassmembers class org.webrtc.PeerConnectionFactory { *; }
+-keepclassmembers,includedescriptorclasses class * {
+    @org.jni_zero.CalledByNative *;
+    @org.jni_zero.AccessedByNative *;
+    @org.webrtc.CalledByNative *;
+}
 -keep class io.getstream.webrtc.android.** { *; }
 -dontwarn io.getstream.webrtc.android.**
 

@@ -73,8 +73,9 @@ class WebRtcVoiceEngine(context: Context) : VoiceTransportEngine {
     @Volatile
     private var muted: Boolean = false
 
-    init {
-        initWebRtcFactoryIfSupported()
+    companion object {
+        @Volatile
+        private var globalWebRtcInitialized: Boolean = false
     }
 
     private fun isRobolectric(): Boolean {
@@ -94,20 +95,32 @@ class WebRtcVoiceEngine(context: Context) : VoiceTransportEngine {
             return
         }
         val ok = runCatching {
-            PeerConnectionFactory.initialize(
-                PeerConnectionFactory.InitializationOptions.builder(appContext)
-                    .setEnableInternalTracer(false)
-                    .createInitializationOptions()
-            )
+            if (!globalWebRtcInitialized) {
+                synchronized(WebRtcVoiceEngine::class.java) {
+                    if (!globalWebRtcInitialized) {
+                        PeerConnectionFactory.initialize(
+                            PeerConnectionFactory.InitializationOptions.builder(appContext)
+                                .setEnableInternalTracer(false)
+                                .createInitializationOptions()
+                        )
+                        globalWebRtcInitialized = true
+                    }
+                }
+            }
             val attrs = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()
+            val hasHwAec = runCatching { android.media.audiofx.AcousticEchoCanceler.isAvailable() }.getOrDefault(false)
+            val hasHwNs = runCatching { android.media.audiofx.NoiseSuppressor.isAvailable() }.getOrDefault(false)
+            val hasLowLatency = runCatching {
+                appContext.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_LOW_LATENCY)
+            }.getOrDefault(false)
             val adm = JavaAudioDeviceModule.builder(appContext)
                 .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-                .setUseHardwareAcousticEchoCanceler(true)
-                .setUseHardwareNoiseSuppressor(true)
-                .setUseLowLatency(true)
+                .setUseHardwareAcousticEchoCanceler(hasHwAec)
+                .setUseHardwareNoiseSuppressor(hasHwNs)
+                .setUseLowLatency(hasLowLatency)
                 .setAudioAttributes(attrs)
                 .createAudioDeviceModule()
             audioDeviceModule = adm
@@ -141,6 +154,7 @@ class WebRtcVoiceEngine(context: Context) : VoiceTransportEngine {
     ) {
         stopCall()
         jitterBuffer.reset()
+        initWebRtcFactoryIfSupported()
 
         val pcf = factory
         if (!nativeReady || pcf == null) {

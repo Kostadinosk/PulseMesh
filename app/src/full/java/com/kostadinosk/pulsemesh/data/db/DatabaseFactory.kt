@@ -49,24 +49,60 @@ object DatabaseFactory {
             Build.MODEL.contains("robolectric", ignoreCase = true)
         val dbName = if (isRobolectric) "pulsemesh_v15_full_${identity}.db" else DB_NAME
 
-        val builder = Room.databaseBuilder(appCtx, PulseMeshDatabase::class.java, dbName)
-            .allowMainThreadQueries()
-
         if (!isRobolectric) {
-            val loaded = runCatching {
+            val cipherLibLoaded = runCatching {
                 System.loadLibrary("sqlcipher")
-                val passphrase = KeystoreMasterKeyManager.getOrCreateDatabasePassphrase(appCtx)
-                builder.openHelperFactory(SupportOpenHelperFactory(passphrase))
                 true
             }.getOrDefault(false)
-            sqlCipherActive = loaded
-        } else {
-            sqlCipherActive = false
+
+            if (cipherLibLoaded) {
+                val firstDb = openAndProbeSqlCipherDb(appCtx, dbName, KeystoreMasterKeyManager.getOrCreateDatabasePassphrase(appCtx))
+                if (firstDb != null) {
+                    sqlCipherActive = true
+                    instance = firstDb
+                    cachedContextIdentity = identity
+                    return firstDb
+                }
+
+                // Recover once from corrupt/incompatible database or invalidated Keystore key
+                runCatching { appCtx.deleteDatabase(dbName) }
+                val freshPassphrase = KeystoreMasterKeyManager.resetDatabasePassphrase(appCtx)
+                val recoveredDb = openAndProbeSqlCipherDb(appCtx, dbName, freshPassphrase)
+                if (recoveredDb != null) {
+                    sqlCipherActive = true
+                    instance = recoveredDb
+                    cachedContextIdentity = identity
+                    return recoveredDb
+                }
+            }
         }
 
-        return builder.build().also {
-            instance = it
-            cachedContextIdentity = identity
+        sqlCipherActive = false
+        return Room.databaseBuilder(appCtx, PulseMeshDatabase::class.java, dbName)
+            .allowMainThreadQueries()
+            .build()
+            .also {
+                instance = it
+                cachedContextIdentity = identity
+            }
+    }
+
+    private fun openAndProbeSqlCipherDb(
+        appCtx: Context,
+        dbName: String,
+        passphrase: ByteArray
+    ): PulseMeshDatabase? {
+        var db: PulseMeshDatabase? = null
+        return try {
+            db = Room.databaseBuilder(appCtx, PulseMeshDatabase::class.java, dbName)
+                .allowMainThreadQueries()
+                .openHelperFactory(SupportOpenHelperFactory(passphrase))
+                .build()
+            db.openHelper.readableDatabase
+            db
+        } catch (_: Throwable) {
+            runCatching { db?.close() }
+            null
         }
     }
 }
