@@ -1,1 +1,1 @@
-Off-grid tactical BLE & Wi-Fi mesh chat, E2EE groups, voice & offline maps.
+Off-grid E2EE mesh chat, WebRTC voice, LoRa bridge, Acoustic 2.0 & offline map.

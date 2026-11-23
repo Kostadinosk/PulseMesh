@@ -14,8 +14,8 @@ android {
     applicationId = "com.KostadinosK.pulsemesh"
     minSdk = 24
     targetSdk = 36
-    versionCode = 20
-    versionName = "1.5.1"
+    versionCode = 21
+    versionName = "1.5.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -137,8 +137,14 @@ dependencies {
   ksp(libs.androidx.room.compiler)
   implementation(libs.androidx.sqlite)
   implementation(libs.androidx.biometric)
+  implementation(libs.zxing.core)
   "fullImplementation"(libs.sqlcipher.android)
   "fullImplementation"(libs.stream.webrtc.android)
+  "fullImplementation"(libs.maplibre.android)
+  "fullImplementation"(libs.androidx.camera.core)
+  "fullImplementation"(libs.androidx.camera.camera2)
+  "fullImplementation"(libs.androidx.camera.lifecycle)
+  "fullImplementation"(libs.androidx.camera.view)
   testImplementation(platform(libs.androidx.compose.bom))
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

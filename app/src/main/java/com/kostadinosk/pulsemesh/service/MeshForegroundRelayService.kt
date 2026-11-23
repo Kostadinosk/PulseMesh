@@ -3,6 +3,7 @@
 
 package com.kostadinosk.pulsemesh.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,12 +11,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.kostadinosk.pulsemesh.MainActivity
 import com.kostadinosk.pulsemesh.model.BatteryPowerProfile
 
@@ -49,6 +52,47 @@ class MeshForegroundRelayService : Service() {
         var isVoiceFgsActive: Boolean = false
             private set
 
+        private fun isPermGranted(context: Context, permission: String): Boolean {
+            return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+
+        fun computeAllowedFgsTypes(context: Context, activeVoiceCall: Boolean): Int {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
+            var fgsTypes = 0
+            val canConnectedDevice = when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                    isPermGranted(context, Manifest.permission.BLUETOOTH_SCAN) ||
+                        isPermGranted(context, Manifest.permission.BLUETOOTH_CONNECT) ||
+                        isPermGranted(context, Manifest.permission.BLUETOOTH_ADVERTISE) ||
+                        isPermGranted(context, Manifest.permission.NEARBY_WIFI_DEVICES)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                    isPermGranted(context, Manifest.permission.BLUETOOTH_SCAN) ||
+                        isPermGranted(context, Manifest.permission.BLUETOOTH_CONNECT) ||
+                        isPermGranted(context, Manifest.permission.BLUETOOTH_ADVERTISE)
+                else ->
+                    isPermGranted(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
+                        isPermGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION) ||
+                        isPermGranted(context, Manifest.permission.BLUETOOTH)
+            }
+            if (canConnectedDevice) {
+                fgsTypes = fgsTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            }
+            if (activeVoiceCall && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (isPermGranted(context, Manifest.permission.RECORD_AUDIO)) {
+                    fgsTypes = fgsTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                if (isPermGranted(context, Manifest.permission.MANAGE_OWN_CALLS)) {
+                    fgsTypes = fgsTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                }
+            }
+            return fgsTypes
+        }
+
+        fun hasAnyPermittedFgsType(context: Context, activeVoiceCall: Boolean): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+            return computeAllowedFgsTypes(context, activeVoiceCall) != 0
+        }
+
         fun startOrUpdate(
             context: Context,
             peerCount: Int,
@@ -57,6 +101,7 @@ class MeshForegroundRelayService : Service() {
             batteryProfile: BatteryPowerProfile = BatteryPowerProfile.BALANCED,
             activeVoiceCall: Boolean = false
         ) {
+            if (!hasAnyPermittedFgsType(context, activeVoiceCall)) return
             runCatching {
                 val intent = Intent(context, MeshForegroundRelayService::class.java).apply {
                     action = ACTION_START_OR_UPDATE
@@ -90,7 +135,6 @@ class MeshForegroundRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -111,23 +155,35 @@ class MeshForegroundRelayService : Service() {
             ?.ifBlank { "Mesh Relay (${profile.label})" }
             ?: "Mesh Relay (${profile.label})"
 
-        applyPowerProfileLocks(profile, activeVoice)
+        val allowedTypes = computeAllowedFgsTypes(this, activeVoice)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && allowedTypes == 0) {
+            releaseLocks()
+            isRunning = false
+            isVoiceFgsActive = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val notification = buildNotification(peerCount, dtnCount, summary, activeVoice)
-        runCatching {
+        try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                var fgsTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                if (activeVoice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    fgsTypes = fgsTypes or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-                }
-                startForeground(NOTIFICATION_ID, notification, fgsTypes)
+                startForeground(NOTIFICATION_ID, notification, allowedTypes)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            applyPowerProfileLocks(profile, activeVoice)
             isRunning = true
-            isVoiceFgsActive = activeVoice
+            isVoiceFgsActive = activeVoice && (
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+                    (allowedTypes and (ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)) != 0
+                )
+        } catch (_: Throwable) {
+            releaseLocks()
+            isRunning = false
+            isVoiceFgsActive = false
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+            stopSelf()
+            return START_NOT_STICKY
         }
         return START_STICKY
     }

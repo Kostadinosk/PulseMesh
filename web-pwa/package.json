@@ -1,0 +1,18 @@
+{
+  "name": "pulsemesh-web-pwa",
+  "version": "1.5.5",
+  "private": true,
+  "type": "module",
+  "description": "Official modular Vite single-file Web & iPhone PWA client for PulseMesh",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:sync": "vite build && node scripts/sync-targets.mjs",
+    "test": "node scripts/test-web-pwa.mjs"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0",
+    "vite-plugin-singlefile": "^2.2.0"
+  }
+}

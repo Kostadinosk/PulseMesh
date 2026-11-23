@@ -482,8 +482,8 @@ private fun ConversationListView(
                             Text(
                                 text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
                                     state.appLanguage,
-                                    "Nearby Android phones appear automatically over BLE & Wi-Fi Aware. Connect an iPhone/laptop via local Web Portal or add a distant @username friend:",
-                                    "Κοντινά Android εμφανίζονται αυτόματα μέσω BLE & Wi-Fi Aware. Συνδέστε iPhone/laptop μέσω τοπικής Πύλης Web ή προσθέστε φίλο με @username:"
+                                    "Nearby Android phones connect over BLE & Wi-Fi Aware automatically with no account needed. Optionally connect an iPhone/laptop via Web Portal or add a distant @username (recommended for Hybrid Relay):",
+                                    "Κοντινά Android συνδέονται αυτόματα μέσω BLE & Wi-Fi Aware χωρίς λογαριασμό. Προαιρετικά συνδέστε iPhone/laptop μέσω Πύλης Web ή προσθέστε @username (προτείνεται για Hybrid Relay):"
                                 ),
                                 color = p.textSecondary,
                                 fontSize = 12.sp
@@ -1066,9 +1066,9 @@ private fun ConversationListView(
                 ) {
                     Text(
                         text = if (state.isInternetEnabled) {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Enter your friend's reserved @username to open a direct E2EE chat over Hybrid Relay or local mesh.", "Πληκτρολογήστε το @username του φίλου σας για άμεση κρυπτογραφημένη συνομιλία E2EE μέσω Hybrid Relay ή τοπικού mesh.")
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Local off-grid chats work without an account. Enter a friend's optional @username (recommended for Hybrid Relay) to open an E2EE chat or enable cross-device recovery.", "Οι τοπικές συνομιλίες εκτός δικτύου λειτουργούν χωρίς λογαριασμό. Εισάγετε @username φίλου (προτείνεται για Hybrid Relay) για άμεση E2EE συνομιλία.")
                         } else {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Enter a friend's @username. Note: Enable Hybrid (+Internet) in Settings or the top bar to reach distant friends outside BLE/Wi-Fi range.", "Πληκτρολογήστε το @username ενός φίλου. Σημείωση: Ενεργοποιήστε το Hybrid (+Internet) στις Ρυθμίσεις ή την επάνω μπάρα για μακρινούς φίλους εκτός εμβέλειας BLE/Wi-Fi.")
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Local off-grid chats work with no @username. Optional @username (recommended): enable Hybrid (+Internet) in Settings or the top bar to reach distant friends.", "Οι τοπικές συνομιλίες λειτουργούν χωρίς @username. Προαιρετικά (προτείνεται): ενεργοποιήστε το Hybrid (+Internet) στις Ρυθμίσεις για μακρινούς φίλους.")
                         },
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = p.textSecondary,

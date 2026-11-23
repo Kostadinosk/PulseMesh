@@ -1,0 +1,20 @@
+{
+  "name": "PulseMesh v1.5.5 - Off-Grid & Hybrid Mesh Node",
+  "short_name": "PulseMesh",
+  "description": "Off-grid tactical mesh chat, Double Ratchet E2EE groups & DMs, WebRTC Voice Hub, Acoustic 2.0 RS-FEC, and offline EPSG:3857 map for iPhone, iPad, Android, and desktop.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#041320",
+  "theme_color": "#041320",
+  "categories": ["communication", "navigation", "utilities"],
+  "icons": [
+    {
+      "src": "../assets/pulsemesh-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

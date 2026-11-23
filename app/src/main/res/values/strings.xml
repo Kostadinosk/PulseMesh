@@ -5,6 +5,7 @@
     <string name="tab_chats">Chats</string>
     <string name="tab_voice">Voice</string>
     <string name="tab_settings">Settings</string>
+
     <string name="status_all_ok">ALL OK</string>
     <string name="status_low_battery">LOW BATTERY</string>
     <string name="status_need_water">NEED WATER</string>
@@ -15,4 +16,72 @@
     <string name="geofence_perimeter">Geofence Perimeter Alert</string>
     <string name="hotspot_portal">Hotspot Web Portal</string>
     <string name="delete_account">Delete Account Information</string>
+
+    <!-- Verified Updater & Release Banner -->
+    <string name="update_available_title">PulseMesh v%1$s available</string>
+    <string name="update_banner_button">UPDATE</string>
+    <string name="update_verified_install">INSTALL VERIFIED v%1$s</string>
+    <string name="update_github_fallback">GITHUB</string>
+    <string name="update_checking">CHECKING...</string>
+    <string name="update_check_button">CHECK FOR UPDATES</string>
+    <string name="update_verifying_sha256">Verifying SHA-256 &amp; signing certificate...</string>
+    <string name="update_cert_verified">Verified SHA-256 &amp; signature. Launching installer...</string>
+
+    <!-- Tactical Map 2.0 -->
+    <string name="map_layer_prefix">LAYER: %1$s</string>
+    <string name="map_layer_dark">Dark</string>
+    <string name="map_layer_topo">Topo</string>
+    <string name="map_layer_satellite">Satellite</string>
+    <string name="map_layer_radar">Radar</string>
+    <string name="map_ruler_on">RULER ON</string>
+    <string name="map_ruler_off">RULER</string>
+    <string name="map_compass_hdg_up">HDG UP</string>
+    <string name="map_compass_north_up">N UP</string>
+    <string name="map_export_gpx">GPX</string>
+    <string name="map_import_gpx_kml">IMPORT GPX/KML</string>
+    <string name="map_import_pack">MAP PACK</string>
+    <string name="map_cot_on">ATAK COT ON</string>
+    <string name="map_cot_off">COT</string>
+    <string name="map_drop_pin">DROP SHARED TACTICAL PIN</string>
+    <string name="map_set_manual_gps">SET MANUAL GPS OVERRIDE</string>
+    <string name="map_set_ruler_point">SET RULER POINT</string>
+    <string name="map_broadcast_pin">BROADCAST PIN</string>
+    <string name="map_close">CLOSE</string>
+
+    <!-- Camera QR Scanner, NFC Tap-to-Pair & Offline APK Beaming -->
+    <string name="qr_scanner_title_full">CAMERAX + ZXING QR SCANNER</string>
+    <string name="qr_scanner_title_lite">PAIR BY QR CODE (LITE)</string>
+    <string name="qr_scan_button">SCAN QR (CAMERA / IMAGE)</string>
+    <string name="qr_enable_camera">ENABLE CAMERA FOR LIVE QR SCAN</string>
+    <string name="qr_pick_image">DECODE FROM GALLERY IMAGE</string>
+    <string name="qr_manual_hint">Paste QR URI / Wi-Fi / Invite JSON</string>
+    <string name="qr_apply_button">APPLY</string>
+    <string name="qr_cancel_button">CANCEL</string>
+    <string name="qr_decode_image_error">Could not find a valid PulseMesh QR code in selected image.</string>
+    <string name="qr_invalid_format">Unrecognized PulseMesh or Wi-Fi QR format.</string>
+    <string name="nfc_tap_to_pair_ready">NFC Tap-to-Pair Ready (HCE AID F050554C53454D455348)</string>
+    <string name="apk_beaming_title">OFFLINE P2P APK BEAMING</string>
+    <string name="apk_beaming_subtitle">Share PulseMesh directly over Hotspot with zero internet (SHA-256 verified):</string>
+    <string name="apk_beaming_copy">COPY APK URL</string>
+
+    <!-- External LoRa Radios & Acoustic Modem 2.0 -->
+    <string name="lora_bridge_title">LoRa / Meshtastic / MeshCore Companion Bridge</string>
+    <string name="lora_bridge_subtitle">Connect external USB-OTG serial or paired BLE LoRa nodes for multi-kilometer off-grid hops.</string>
+    <string name="lora_connect_usb_ble">CONNECT USB-OTG / BLE</string>
+    <string name="lora_disconnect">DISCONNECT LORA</string>
+    <string name="lora_rescan">RESCAN</string>
+    <string name="acoustic_v2_title">Acoustic Modem 2.0 (RS-FEC + E2EE)</string>
+    <string name="acoustic_v2_encrypted_badge">BELL 202 V2 (RS-FEC + AES-256-GCM)</string>
+
+    <!-- Settings Hub & @username Optionality -->
+    <string name="settings_search_hint">Search settings (App Lock, Battery, Material 3, LoRa, PTT...)</string>
+    <string name="settings_cat_identity">Identity &amp; Account</string>
+    <string name="settings_cat_security">Security &amp; Privacy</string>
+    <string name="settings_cat_voice">Voice &amp; Audio</string>
+    <string name="settings_cat_network">Network &amp; Mesh</string>
+    <string name="settings_cat_appearance">Appearance &amp; Layout</string>
+    <string name="settings_cat_diagnostics">Diagnostics &amp; Storage</string>
+    <string name="username_optional_recommended">Optional (Recommended): Reserve or Sign In with @username</string>
+    <string name="radio_diagnostics_tab">RADIO DIAGNOSTICS</string>
+    <string name="settings_tab_upper">SETTINGS</string>
 </resources>

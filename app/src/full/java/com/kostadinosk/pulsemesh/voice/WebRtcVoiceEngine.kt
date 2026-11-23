@@ -94,6 +94,19 @@ class WebRtcVoiceEngine(context: Context) : VoiceTransportEngine {
             )
             return
         }
+        val hasMicPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+            appContext,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasMicPerm) {
+            _stats.value = _stats.value.copy(
+                mode = VoiceEngineMode.ADPCM_FALLBACK,
+                codecName = "IMA-ADPCM 16k/8k (Mic Perm Pending)",
+                iceState = "MIC_PERMISSION_NEEDED"
+            )
+            nativeReady = false
+            return
+        }
         val ok = runCatching {
             if (!globalWebRtcInitialized) {
                 synchronized(WebRtcVoiceEngine::class.java) {

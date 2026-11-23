@@ -17,3 +17,5 @@ debug.keystore
 .antigravity/
 .aistudio/
 *.zip
+web-pwa/node_modules/
+web-pwa/dist/

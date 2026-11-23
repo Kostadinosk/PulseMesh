@@ -140,7 +140,8 @@ class TacticalSensorService(context: Context) : SensorEventListener {
 
     var onStepDetected: ((headingDeg: Float) -> Unit)? = null
 
-    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+    private val appContext = context.applicationContext
+    private val sensorManager = appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val rotationVectorSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val accelSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
@@ -178,8 +179,15 @@ class TacticalSensorService(context: Context) : SensorEventListener {
             pressureSensor?.let {
                 mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
             }
-            stepDetectorSensor?.let {
-                mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            val canStepRecognition = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    appContext,
+                    android.Manifest.permission.ACTIVITY_RECOGNITION
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (canStepRecognition) {
+                stepDetectorSensor?.let {
+                    mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+                }
             }
             if (stepDetectorSensor == null && rotationVectorSensor != null) {
                 accelSensor?.let { mgr.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }

@@ -1331,7 +1331,7 @@ class PulseMeshWebServer(
                         }
                     }
 
-                    (method == "GET" || isHead) && path == "/api/ca.mobileconfig" -> {
+                    (method == "GET" || isHead) && (path == "/api/ca.mobileconfig" || path == "/ca.mobileconfig") -> {
                         val profileBytes = LocalSelfSignedTlsFactory.buildIosMobileConfigXml(
                             context,
                             _status.value.hostIp.ifBlank { "192.168.43.1" }
@@ -1349,6 +1349,62 @@ class PulseMeshWebServer(
                             )
                         } else {
                             writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && path == "/api/apk/info" -> {
+                        val infoJson = buildInstalledApkInfoJson()
+                        writeJson(output, 200, infoJson.toString(), headOnly = isHead, keepAlive = keepAlive)
+                    }
+
+                    (method == "GET" || isHead) && path == "/download/pulsemesh.apk.sha256" -> {
+                        val apkFile = resolveInstalledApkFile()
+                        if (apkFile != null && apkFile.exists() && apkFile.canRead()) {
+                            val sha = computeFileSha256(apkFile)
+                            val name = "PulseMesh-v${com.kostadinosk.pulsemesh.BuildConfig.VERSION_NAME}-${com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER}.apk"
+                            val body = "$sha  $name\n".toByteArray(Charsets.UTF_8)
+                            writeResponse(output, 200, "OK", "text/plain; charset=utf-8", body, headOnly = isHead, keepAlive = keepAlive)
+                        } else {
+                            writeResponse(output, 404, "Not Found", "text/plain", ByteArray(0), headOnly = isHead, keepAlive = keepAlive)
+                        }
+                    }
+
+                    (method == "GET" || isHead) && path == "/download/pulsemesh.apk" -> {
+                        val apkFile = resolveInstalledApkFile()
+                        if (apkFile != null && apkFile.exists() && apkFile.canRead()) {
+                            val sha = computeFileSha256(apkFile)
+                            val name = "PulseMesh-v${com.kostadinosk.pulsemesh.BuildConfig.VERSION_NAME}-${com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER}.apk"
+                            val header = buildString {
+                                append("HTTP/1.1 200 OK\r\n")
+                                append("Content-Type: application/vnd.android.package-archive\r\n")
+                                append("Content-Disposition: attachment; filename=\"$name\"\r\n")
+                                append("X-PulseMesh-SHA256: $sha\r\n")
+                                append("Content-Length: ${apkFile.length()}\r\n")
+                                append("Access-Control-Allow-Origin: *\r\n")
+                                append("Connection: ${if (keepAlive) "keep-alive" else "close"}\r\n\r\n")
+                            }
+                            output.write(header.toByteArray(Charsets.UTF_8))
+                            if (!isHead) {
+                                apkFile.inputStream().use { ins ->
+                                    val buf = ByteArray(32_768)
+                                    while (true) {
+                                        val read = ins.read(buf)
+                                        if (read <= 0) break
+                                        output.write(buf, 0, read)
+                                    }
+                                }
+                            }
+                            output.flush()
+                        } else {
+                            writeResponse(
+                                output = output,
+                                code = 404,
+                                reason = "Not Found",
+                                contentType = "text/plain; charset=utf-8",
+                                body = "APK binary unavailable on host runtime.".toByteArray(Charsets.UTF_8),
+                                headOnly = isHead,
+                                keepAlive = keepAlive
+                            )
                         }
                     }
 
@@ -1691,6 +1747,49 @@ class PulseMeshWebServer(
             if (listener != null) {
                 nsdManager?.unregisterService(listener)
             }
+        }
+    }
+
+    private fun resolveInstalledApkFile(): File? {
+        val src = runCatching { context.applicationInfo?.sourceDir }.getOrNull()?.trim().orEmpty()
+        if (src.isBlank()) return null
+        val f = File(src)
+        return if (f.exists() && f.isFile && f.canRead()) f else null
+    }
+
+    private fun computeFileSha256(file: File): String {
+        return runCatching {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            val buf = ByteArray(32_768)
+            file.inputStream().use { ins ->
+                while (true) {
+                    val read = ins.read(buf)
+                    if (read <= 0) break
+                    md.update(buf, 0, read)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        }.getOrDefault("")
+    }
+
+    private fun buildInstalledApkInfoJson(): JSONObject {
+        val apkFile = resolveInstalledApkFile()
+        val sha = if (apkFile != null) computeFileSha256(apkFile) else ""
+        val sizeBytes = apkFile?.length() ?: 0L
+        val flavor = com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER
+        val versionName = com.kostadinosk.pulsemesh.BuildConfig.VERSION_NAME
+        val versionCode = com.kostadinosk.pulsemesh.BuildConfig.VERSION_CODE
+        val fileName = "PulseMesh-v$versionName-$flavor.apk"
+        return JSONObject().apply {
+            put("available", apkFile != null && sizeBytes > 0L)
+            put("versionName", versionName)
+            put("versionCode", versionCode)
+            put("flavor", flavor)
+            put("fileName", fileName)
+            put("sizeBytes", sizeBytes)
+            put("sha256", sha)
+            put("downloadUrl", "/download/pulsemesh.apk")
+            put("sha256Url", "/download/pulsemesh.apk.sha256")
         }
     }
 }

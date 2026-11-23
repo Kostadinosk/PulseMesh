@@ -1,15 +1,15 @@
-PulseMesh is a free, open-source, zero-infrastructure peer-to-peer communication app for Android devices operating where cellular and internet networks are unavailable, degraded, or untrusted.
+PulseMesh is a 100% FOSS, zero-infrastructure peer-to-peer communication app for Android and iPhone/Web PWA operating where cellular and internet networks are unavailable, degraded, or untrusted.
 
-It uses the radios already built into standard Android hardware: Bluetooth Low Energy (BLE 1M and Coded PHY), Classic Bluetooth RFCOMM, Wi-Fi Direct and local hotspot/LAN UDP subnets, USB/Ethernet tethering, and an Acoustic AFSK audio modem to discover nearby nodes, route multi-hop encrypted messages and voice traffic, and share locations on an offline map.
+Shipped in two GPL-3.0 flavors:
+• Full Edition: Native FOSS WebRTC (Opus + AEC3), SQLCipher encrypted Room database, MapLibre Native offline vector maps, and CameraX + ZXing QR scanner.
+• Lite Edition: Ultra-compact pure-AOSP build with Android Keystore encryption, MediaCodec Opus/ADPCM voice, Canvas tactical map, and gallery/URI QR pairing.
 
-Key Features:
-• Multi-Hop BLE & UDP Mesh Routing: Broadcast channels, multi-mesh group chats, and direct messages with TTL-7 flood routing, packet deduplication, delivery ACKs, and a Delay-Tolerant Networking (DTN) store-and-forward outbox.
-• End-to-End Encryption (E2EE): ECDH P-256 / X25519 key agreement, HKDF-SHA256 ratcheting, AES-256-GCM authenticated encryption, safety number verification, and encrypted @username key vaults.
-• Voice & Walkie-Talkie (PTT): 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice/PTT over local Wi-Fi/Hotspot UDP or BLE GATT, plus half-duplex echo ducking and voicemail capture.
-• Offline OpenStreetMap Tactical Map (EPSG:3857): Regional OpenStreetMap Web Mercator tile downloader with local disk caching, shared tactical pins (RALLY, HAZARD, SUPPLY, SOS), live compass bearing HUD, and barometric altitude tracking.
-• 3-State Location Privacy: Per-contact and mesh location sharing modes (OFF, APPROXIMATE grid fuzzing, PRECISE GPS) so coordinates are never broadcast unintentionally.
-• Acoustic AFSK Audio Modem: Air-gapped data transmission over phone speakers and microphones (1200 / 2200 Hz Bell 202 tones) with Reed-Solomon forward error correction.
-• Official iPhone / iOS PWA & Wi-Fi Direct Web Portal: Automatically hosts a self-contained offline PulseMesh Web Node over Wi-Fi Direct (192.168.49.1:8080) and Local Hotspot (192.168.43.1:8080) with built-in 2-step QR codes (Wi-Fi + Portal URL) so iPhones, iPads, and laptops join the live mesh, cached offline map tiles, waypoints, and PTT audio with zero internet.
-• Strict Off-Grid Mode & 100% FOSS: Hard-blocks external HTTP connections when Off-Grid Mode is enabled, with zero Google Play Services, Firebase, or analytics SDKs.
+Key Features in v1.5.5:
+• Offline Tactical Map 2.0: MapLibre vector & raster offline maps, MBTiles/PMTiles pack import, bearing/distance ruler, breadcrumbs, GPX/KML import-export, and ATAK Cursor-on-Target (CoT) UDP multicast bridge.
+• Camera QR Scanner, NFC Tap-to-Pair & Offline APK Beaming: 1-scan contact add, safety-number verification, group invites, Wi-Fi Hotspot auto-join, NFC HCE pairing, and zero-internet P2P APK beaming with SHA-256 verification.
+• LoRa & Acoustic Modem 2.0: USB-OTG serial & BLE GATT companion bridge for Meshtastic and MeshCore radios, plus Bell 202 Acoustic 2.0 with Reed-Solomon GF(2^8) FEC and AES-256-GCM encryption.
+• Signal Double Ratchet E2EE & Voice Hub: Forward-secret PMDR2 messaging, zero plaintext downgrades, Android Telecom ConnectionService calling, Zello-style PTT channels, and Biometric/PIN App Lock.
+• Modular Web & iPhone PWA: Unified 4-tab UI, Double Ratchet E2EE, Cloudflare Durable Objects WebSocket + TURN, iOS 16.4+ VAPID Web Push, and guided 1-tap iOS .mobileconfig Root CA setup.
+• Verified Updater & EN/EL Localization: Fail-closed SHA-256 and signing-certificate verified in-app APK updater with PackageInstaller, plus standard Android strings.xml bilingual EN/EL support.
 
-Licensed under GNU GPL-3.0-only (see LICENSE and TRADEMARK.md). PulseMesh (com.KostadinosK.pulsemesh) is an independent open-source project by Konstantinos Kourtis and is not affiliated with pulsemesh.io or any commercial entity.
+Licensed under GNU GPL-3.0-only (see LICENSE and TRADEMARK.md). Zero Google Play Services, Firebase, or analytics SDKs.

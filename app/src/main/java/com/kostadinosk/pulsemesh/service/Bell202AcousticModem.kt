@@ -18,12 +18,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Audible Bell 202 Acoustic AFSK Air-Gap Modem (PulseMesh v1.4.1).
+ * Audible Bell 202 Acoustic AFSK Air-Gap Modem (PulseMesh v1.4.1 -> v1.5.5 Acoustic 2.0).
  *
  * Byte-for-byte compatible with the PulseMesh Web/iPhone PWA Web Audio API Bell 202 modem so
  * Android phones, iPhones, laptops, and handheld FM radios can exchange short UTF-8 messages
@@ -36,20 +41,25 @@ import kotlin.math.sin
  *   - Preamble pilot: 1650 Hz (4 symbols = 80 ms)
  *   - Mark (bit 1):   1200 Hz (Bell 202 standard)
  *   - Space (bit 0):  2200 Hz (Bell 202 standard)
- * - Frame bytes (MSB-first per byte):
+ * - Legacy v1 Frame (`"PM"`):
  *   `[0x50, 0x4D, typeByte, srcHi, srcLo, payloadLen, ...utf8Payload, crcHi, crcLo]`
- *   where `CRC-16/CCITT-FALSE` (poly `0x1021`, init `0xFFFF`) covers `[typeByte .. payloadEnd]`.
+ * - Acoustic Modem 2.0 Frame (`"P2"` = Reed-Solomon GF(2^8) + AES-256-GCM):
+ *   `[0x50, 0x32, codewordLen, (codewordLen xor 0xFF), ...rsCodeword(payloadBlock + 8 ECC bytes)]`
+ *   where `payloadBlock = [flagsByte, srcHi, srcLo, nonce8(8B), aesGcmCiphertext+16BTag]`.
  */
 class Bell202AcousticModem(
     private val context: Context,
     private val scope: CoroutineScope,
     private val isVoiceMicBusy: () -> Boolean,
-    private val onBell202FrameDecoded: (frame: DecodedBell202Frame) -> Unit
+    private val onBell202FrameDecoded: (frame: DecodedBell202Frame) -> Unit,
+    private val channelPassphraseProvider: () -> String = { "pulsemesh-tactical" }
 ) {
     data class DecodedBell202Frame(
         val typeByte: Int,
         val srcNodeIdHex: String,
-        val text: String
+        val text: String,
+        val isEncrypted: Boolean = false,
+        val fecCorrectedBytes: Int = 0
     )
 
     companion object {
@@ -66,10 +76,140 @@ class Bell202AcousticModem(
         const val SYNC_1: Byte = 0x4D // 'M'
         const val MAX_PAYLOAD_BYTES = 96
 
+        const val SYNC_V2_0: Byte = 0x50 // 'P'
+        const val SYNC_V2_1: Byte = 0x32 // '2'
+        const val FLAG_ENCRYPTED: Int = 0x80
+        const val V2_ECC_BYTES = ReedSolomonFec.DEFAULT_ECC_BYTES
+        const val MAX_V2_PLAIN_BYTES = 72
+        const val MAX_V2_CODEWORD_BYTES = 240
+        private const val MIN_V2_CODEWORD_BYTES = 1 + 2 + 8 + 16 + V2_ECC_BYTES // 35 bytes
+
         const val TYPE_CHAT = 0x01
         const val TYPE_SOS = 0x02
         const val TYPE_CALL_RING = 0x03
         const val TYPE_KEY_VERIFY = 0x04
+
+        private val acousticRandom = SecureRandom()
+
+        fun deriveAcousticV2Key(passphrase: String): ByteArray {
+            val clean = passphrase.trim().ifBlank { "pulsemesh-tactical" }
+            return MessageDigest.getInstance("SHA-256")
+                .digest("PULSEMESH_ACOUSTIC_V2:$clean".toByteArray(Charsets.UTF_8))
+        }
+
+        private fun buildV2GcmIv(nonce8: ByteArray): ByteArray = byteArrayOf(
+            0x50, 0x4D, 0x41, 0x32,
+            nonce8[0], nonce8[1], nonce8[2], nonce8[3],
+            nonce8[4], nonce8[5], nonce8[6], nonce8[7]
+        )
+
+        private fun buildV2Aad(flagsByte: Int, srcHi: Int, srcLo: Int): ByteArray = byteArrayOf(
+            SYNC_V2_0,
+            SYNC_V2_1,
+            (flagsByte and 0xFF).toByte(),
+            (srcHi and 0xFF).toByte(),
+            (srcLo and 0xFF).toByte()
+        )
+
+        /**
+         * Encodes an Acoustic Modem 2.0 frame (`"P2"`): AES-256-GCM authenticated ciphertext
+         * protected by systematic RS(n, k) parity bytes (t = 4 byte error correction).
+         */
+        fun encodeV2EncryptedFrameBytes(
+            typeByte: Int,
+            srcNodeIdHex: String,
+            text: String,
+            passphrase: String = "pulsemesh-tactical",
+            nonceOverride: ByteArray? = null
+        ): ByteArray {
+            val rawPlain = text.toByteArray(Charsets.UTF_8)
+            val plain = if (rawPlain.size > MAX_V2_PLAIN_BYTES) rawPlain.copyOf(MAX_V2_PLAIN_BYTES) else rawPlain
+            val srcShort = OffGridBleMeshEngine.normalizeId(srcNodeIdHex).toIntOrNull(16) ?: 0x0001
+            val srcHi = (srcShort ushr 8) and 0xFF
+            val srcLo = srcShort and 0xFF
+            val flagsByte = FLAG_ENCRYPTED or (typeByte and 0x0F)
+
+            val nonce8 = if (nonceOverride != null && nonceOverride.size >= 8) {
+                nonceOverride.copyOf(8)
+            } else {
+                ByteArray(8).also { acousticRandom.nextBytes(it) }
+            }
+
+            val keySpec = SecretKeySpec(deriveAcousticV2Key(passphrase), "AES")
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, keySpec, GCMParameterSpec(128, buildV2GcmIv(nonce8)))
+            cipher.updateAAD(buildV2Aad(flagsByte, srcHi, srcLo))
+            val ciphertext = cipher.doFinal(plain)
+
+            val payloadBlock = ByteArray(1 + 2 + 8 + ciphertext.size)
+            payloadBlock[0] = (flagsByte and 0xFF).toByte()
+            payloadBlock[1] = srcHi.toByte()
+            payloadBlock[2] = srcLo.toByte()
+            System.arraycopy(nonce8, 0, payloadBlock, 3, 8)
+            System.arraycopy(ciphertext, 0, payloadBlock, 11, ciphertext.size)
+
+            val codeword = ReedSolomonFec.encode(payloadBlock, V2_ECC_BYTES)
+            val cwLen = codeword.size
+            val out = ByteArray(4 + cwLen)
+            out[0] = SYNC_V2_0
+            out[1] = SYNC_V2_1
+            out[2] = (cwLen and 0xFF).toByte()
+            out[3] = ((cwLen xor 0xFF) and 0xFF).toByte()
+            System.arraycopy(codeword, 0, out, 4, cwLen)
+            return out
+        }
+
+        /**
+         * Decodes and verifies an Acoustic Modem 2.0 `"P2"` frame: repairs up to 4 corrupted bytes
+         * inside the RS codeword (and single-byte length header corruption), then enforces AES-256-GCM.
+         */
+        fun decodeV2EncryptedFrameBytes(
+            frame: ByteArray,
+            passphrase: String = "pulsemesh-tactical"
+        ): DecodedBell202Frame? {
+            if (frame.size < 4 + MIN_V2_CODEWORD_BYTES) return null
+            if (frame[0] != SYNC_V2_0 || frame[1] != SYNC_V2_1) return null
+
+            val lenA = frame[2].toInt() and 0xFF
+            val lenB = (frame[3].toInt() and 0xFF) xor 0xFF
+            val candidates = listOf(lenA, lenB)
+                .distinct()
+                .filter { it in MIN_V2_CODEWORD_BYTES..MAX_V2_CODEWORD_BYTES && 4 + it <= frame.size }
+            if (candidates.isEmpty()) return null
+
+            val keySpec = SecretKeySpec(deriveAcousticV2Key(passphrase), "AES")
+            for (cwLen in candidates) {
+                val codeword = frame.copyOfRange(4, 4 + cwLen)
+                val rs = ReedSolomonFec.decodeWithStats(codeword, V2_ECC_BYTES) ?: continue
+                val block = rs.data
+                if (block.size < 1 + 2 + 8 + 16) continue
+
+                val flagsByte = block[0].toInt() and 0xFF
+                if ((flagsByte and FLAG_ENCRYPTED) == 0) continue
+
+                val srcHi = block[1].toInt() and 0xFF
+                val srcLo = block[2].toInt() and 0xFF
+                val srcShort = (srcHi shl 8) or srcLo
+                val nonce8 = block.copyOfRange(3, 11)
+                val ciphertext = block.copyOfRange(11, block.size)
+
+                val plain = runCatching {
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(128, buildV2GcmIv(nonce8)))
+                    cipher.updateAAD(buildV2Aad(flagsByte, srcHi, srcLo))
+                    cipher.doFinal(ciphertext)
+                }.getOrNull() ?: continue
+
+                return DecodedBell202Frame(
+                    typeByte = flagsByte and 0x0F,
+                    srcNodeIdHex = "0x%04X".format(srcShort),
+                    text = String(plain, Charsets.UTF_8),
+                    isEncrypted = true,
+                    fecCorrectedBytes = rs.correctedErrors
+                )
+            }
+            return null
+        }
 
         fun crc16Ccitt(data: ByteArray, offset: Int = 0, length: Int = data.size - offset): Int {
             var crc = 0xFFFF
@@ -169,8 +309,13 @@ class Bell202AcousticModem(
 
         /**
          * Offline/unit-testable Goertzel matched-filter demodulator over a full PCM buffer.
+         * Supports both legacy `"PM"` frames and Acoustic Modem 2.0 `"P2"` (RS FEC + AES-256-GCM) frames.
          */
-        fun demodulatePcm(samples: ShortArray, sampleRate: Int = SAMPLE_RATE): DecodedBell202Frame? {
+        fun demodulatePcm(
+            samples: ShortArray,
+            sampleRate: Int = SAMPLE_RATE,
+            passphrase: String = "pulsemesh-tactical"
+        ): DecodedBell202Frame? {
             val symSamples = (sampleRate * SYMBOL_DURATION_MS) / 1000
             if (samples.size < symSamples * (PREAMBLE_SYMBOLS + 64)) return null
 
@@ -221,20 +366,64 @@ class Bell202AcousticModem(
                 return b and 0xFF
             }
 
-            // Read 6-byte header: [0x50, 0x4D, type, srcHi, srcLo, payloadLen]
-            val header = ByteArray(6)
             var cursor = offset
-            for (i in 0 until 6) {
-                val v = readByteAt(cursor) ?: return null
-                header[i] = v.toByte()
+            val sync0 = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
+            val sync1 = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
+            if (sync0 != (SYNC_0.toInt() and 0xFF)) return null
+
+            if (sync1 == (SYNC_V2_1.toInt() and 0xFF)) {
+                val lenRaw = readByteAt(cursor) ?: return null
                 cursor += symSamples * 8
+                val lenInv = readByteAt(cursor) ?: return null
+                cursor += symSamples * 8
+                val lenAlt = lenInv xor 0xFF
+                val cwCandidates = listOf(lenRaw, lenAlt)
+                    .distinct()
+                    .filter { it in MIN_V2_CODEWORD_BYTES..MAX_V2_CODEWORD_BYTES }
+                for (cwLen in cwCandidates) {
+                    val full = ByteArray(4 + cwLen)
+                    full[0] = SYNC_V2_0
+                    full[1] = SYNC_V2_1
+                    full[2] = cwLen.toByte()
+                    full[3] = (cwLen xor 0xFF).toByte()
+                    var c = cursor
+                    var ok = true
+                    for (i in 0 until cwLen) {
+                        val v = readByteAt(c)
+                        if (v == null) {
+                            ok = false
+                            break
+                        }
+                        full[4 + i] = v.toByte()
+                        c += symSamples * 8
+                    }
+                    if (ok) {
+                        decodeV2EncryptedFrameBytes(full, passphrase)?.let { return it }
+                    }
+                }
+                return null
             }
-            if (header[0] != SYNC_0 || header[1] != SYNC_1) return null
-            val payloadLen = header[5].toInt() and 0xFF
+
+            if (sync1 != (SYNC_1.toInt() and 0xFF)) return null
+            val typeByte = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
+            val srcHi = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
+            val srcLo = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
+            val payloadLen = readByteAt(cursor) ?: return null
+            cursor += symSamples * 8
             if (payloadLen > MAX_PAYLOAD_BYTES) return null
 
             val full = ByteArray(6 + payloadLen + 2)
-            System.arraycopy(header, 0, full, 0, 6)
+            full[0] = SYNC_0
+            full[1] = SYNC_1
+            full[2] = typeByte.toByte()
+            full[3] = srcHi.toByte()
+            full[4] = srcLo.toByte()
+            full[5] = payloadLen.toByte()
             for (i in 0 until (payloadLen + 2)) {
                 val v = readByteAt(cursor) ?: return null
                 full[6 + i] = v.toByte()
@@ -255,10 +444,28 @@ class Bell202AcousticModem(
         if (enabled) startListeningLoop() else stopListeningLoop()
     }
 
-    fun transmitMessage(typeByte: Int, srcNodeIdHex: String, text: String) {
+    fun transmitMessage(typeByte: Int, srcNodeIdHex: String, text: String, encryptedV2: Boolean = true) {
+        val frame = if (encryptedV2) {
+            encodeV2EncryptedFrameBytes(typeByte, srcNodeIdHex, text, channelPassphraseProvider())
+        } else {
+            encodeFrameBytes(typeByte, srcNodeIdHex, text)
+        }
+        playFrameAsync(frame)
+    }
+
+    fun transmitEncryptedMessage(
+        typeByte: Int,
+        srcNodeIdHex: String,
+        text: String,
+        passphrase: String = channelPassphraseProvider()
+    ) {
+        val frame = encodeV2EncryptedFrameBytes(typeByte, srcNodeIdHex, text, passphrase)
+        playFrameAsync(frame)
+    }
+
+    private fun playFrameAsync(frame: ByteArray) {
         scope.launch(Dispatchers.IO) {
             runCatching {
-                val frame = encodeFrameBytes(typeByte, srcNodeIdHex, text)
                 val pcm = modulateFrameToPcm(frame, SAMPLE_RATE)
                 val track = AudioTrack.Builder()
                     .setAudioAttributes(
@@ -397,7 +604,36 @@ class Bell202AcousticModem(
 
                                 if (firstByte == (SYNC_0.toInt() and 0xFF)) {
                                     val sync1 = readByte()
-                                    if (sync1 == (SYNC_1.toInt() and 0xFF)) {
+                                    if (sync1 == (SYNC_V2_1.toInt() and 0xFF)) {
+                                        val lenRaw = readByte() ?: continue
+                                        val lenInv = readByte() ?: continue
+                                        val cwLen = if (lenRaw == (lenInv xor 0xFF)) {
+                                            lenRaw
+                                        } else if (lenRaw in MIN_V2_CODEWORD_BYTES..MAX_V2_CODEWORD_BYTES) {
+                                            lenRaw
+                                        } else {
+                                            lenInv xor 0xFF
+                                        }
+                                        if (cwLen in MIN_V2_CODEWORD_BYTES..MAX_V2_CODEWORD_BYTES) {
+                                            val full = ByteArray(4 + cwLen)
+                                            full[0] = SYNC_V2_0
+                                            full[1] = SYNC_V2_1
+                                            full[2] = cwLen.toByte()
+                                            full[3] = (cwLen xor 0xFF).toByte()
+                                            var ok = true
+                                            for (i in 0 until cwLen) {
+                                                val v = readByte()
+                                                if (v == null) {
+                                                    ok = false
+                                                    break
+                                                }
+                                                full[4 + i] = v.toByte()
+                                            }
+                                            if (ok) {
+                                                decodeV2EncryptedFrameBytes(full, channelPassphraseProvider())?.let(onBell202FrameDecoded)
+                                            }
+                                        }
+                                    } else if (sync1 == (SYNC_1.toInt() and 0xFF)) {
                                         val typeB = readByte() ?: continue
                                         val srcHi = readByte() ?: continue
                                         val srcLo = readByte() ?: continue

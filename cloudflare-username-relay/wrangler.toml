@@ -15,6 +15,8 @@ class_name = "PulseMeshRealtimeHub"
 tag = "v1"
 new_sqlite_classes = ["PulseMeshRealtimeHub"]
 
-# Optional Cloudflare Calls TURN secrets (set via `npx wrangler secret put`):
+# Optional Cloudflare Calls TURN & Web Push VAPID secrets (set via `npx wrangler secret put`):
 # - CF_CALLS_TURN_TOKEN_ID
 # - CF_CALLS_TURN_API_TOKEN
+# - VAPID_PUBLIC_KEY
+# - VAPID_PRIVATE_KEY

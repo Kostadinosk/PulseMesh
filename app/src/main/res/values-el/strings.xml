@@ -3,8 +3,9 @@
     <string name="app_name">PulseMesh</string>
     <string name="tab_map">Χάρτης</string>
     <string name="tab_chats">Μηνύματα</string>
-    <string name="tab_voice">Φωνή &amp; Κλήσεις</string>
+    <string name="tab_voice">Φωνή</string>
     <string name="tab_settings">Ρυθμίσεις</string>
+
     <string name="status_all_ok">Όλα καλά</string>
     <string name="status_low_battery">Χαμηλή μπαταρία</string>
     <string name="status_need_water">Χρειάζομαι νερό</string>
@@ -15,4 +16,72 @@
     <string name="geofence_perimeter">Ειδοποίηση Γεω-Περιμέτρου</string>
     <string name="hotspot_portal">Πύλη Hotspot Web</string>
     <string name="delete_account">Διαγραφή Στοιχείων Λογαριασμού</string>
+
+    <!-- Verified Updater & Release Banner -->
+    <string name="update_available_title">Διαθέσιμο PulseMesh v%1$s</string>
+    <string name="update_banner_button">ΑΝΑΒΑΘΜΙΣΗ</string>
+    <string name="update_verified_install">ΕΠΙΒΕΒΑΙΩΜΕΝΗ ΕΓΚΑΤΑΣΤΑΣΗ v%1$s</string>
+    <string name="update_github_fallback">GITHUB</string>
+    <string name="update_checking">ΕΛΕΓΧΟΣ...</string>
+    <string name="update_check_button">ΕΛΕΓΧΟΣ ΕΝΗΜΕΡΩΣΕΩΝ</string>
+    <string name="update_verifying_sha256">Επαλήθευση SHA-256 &amp; πιστοποιητικού υπογραφής...</string>
+    <string name="update_cert_verified">Επαληθεύτηκαν SHA-256 &amp; υπογραφή. Εκκίνηση εγκατάστασης...</string>
+
+    <!-- Tactical Map 2.0 -->
+    <string name="map_layer_prefix">ΕΠΙΠΕΔΟ: %1$s</string>
+    <string name="map_layer_dark">Σκοτεινό</string>
+    <string name="map_layer_topo">Τοπογραφικό</string>
+    <string name="map_layer_satellite">Δορυφόρος</string>
+    <string name="map_layer_radar">Ραντάρ</string>
+    <string name="map_ruler_on">ΧΑΡΑΚΑΣ ON</string>
+    <string name="map_ruler_off">ΧΑΡΑΚΑΣ</string>
+    <string name="map_compass_hdg_up">ΚΑΤΕΥΘΥΝΣΗ</string>
+    <string name="map_compass_north_up">ΒΟΡΡΑΣ</string>
+    <string name="map_export_gpx">GPX</string>
+    <string name="map_import_gpx_kml">ΕΙΣΑΓΩΓΗ GPX/KML</string>
+    <string name="map_import_pack">ΠΑΚΕΤΟ ΧΑΡΤΗ</string>
+    <string name="map_cot_on">ATAK COT ON</string>
+    <string name="map_cot_off">COT</string>
+    <string name="map_drop_pin">ΠΡΟΣΘΗΚΗ ΚΟΙΝΟΧΡΗΣΤΗΣ ΠΙΝΕΖΑΣ</string>
+    <string name="map_set_manual_gps">ΟΡΙΣΜΟΣ ΧΕΙΡΟΚΙΝΗΤΟΥ GPS</string>
+    <string name="map_set_ruler_point">ΣΗΜΕΙΟ ΧΑΡΑΚΑ</string>
+    <string name="map_broadcast_pin">ΑΠΟΣΤΟΛΗ ΣΗΜΕΙΟΥ</string>
+    <string name="map_close">ΚΛΕΙΣΙΜΟ</string>
+
+    <!-- Camera QR Scanner, NFC Tap-to-Pair & Offline APK Beaming -->
+    <string name="qr_scanner_title_full">ΣΑΡΩΤΗΣ QR CAMERAX + ZXING</string>
+    <string name="qr_scanner_title_lite">ΖΕΥΞΗ ΜΕ ΚΩΔΙΚΑ QR (LITE)</string>
+    <string name="qr_scan_button">ΣΑΡΩΣΗ QR (ΚΑΜΕΡΑ / ΕΙΚΟΝΑ)</string>
+    <string name="qr_enable_camera">ΕΝΕΡΓΟΠΟΙΗΣΗ ΚΑΜΕΡΑΣ ΓΙΑ ΖΩΝΤΑΝΗ ΣΑΡΩΣΗ QR</string>
+    <string name="qr_pick_image">ΑΠΟΚΩΔΙΚΟΠΟΙΗΣΗ ΑΠΟ ΕΙΚΟΝΑ</string>
+    <string name="qr_manual_hint">Επικόλληση QR URI / Wi-Fi / Invite JSON</string>
+    <string name="qr_apply_button">ΕΦΑΡΜΟΓΗ</string>
+    <string name="qr_cancel_button">ΑΚΥΡΩΣΗ</string>
+    <string name="qr_decode_image_error">Δεν βρέθηκε έγκυρος κωδικός QR PulseMesh στην εικόνα.</string>
+    <string name="qr_invalid_format">Μη αναγνωρίσιμη μορφή QR PulseMesh ή Wi-Fi.</string>
+    <string name="nfc_tap_to_pair_ready">Έτοιμο για NFC Tap-to-Pair (HCE AID F050554C53454D455348)</string>
+    <string name="apk_beaming_title">ΑΠΟΣΤΟΛΗ APK ΕΚΤΟΣ ΣΥΝΔΕΣΗΣ (P2P)</string>
+    <string name="apk_beaming_subtitle">Μοιραστείτε το PulseMesh μέσω Hotspot χωρίς internet (με έλεγχο SHA-256):</string>
+    <string name="apk_beaming_copy">ΑΝΤΙΓΡΑΦΗ URL APK</string>
+
+    <!-- External LoRa Radios & Acoustic Modem 2.0 -->
+    <string name="lora_bridge_title">Γέφυρα LoRa / Meshtastic / MeshCore</string>
+    <string name="lora_bridge_subtitle">Συνδέστε εξωτερικό πομποδέκτη USB-OTG ή BLE LoRa για αναμετάδοση μεγάλων αποστάσεων.</string>
+    <string name="lora_connect_usb_ble">ΣΥΝΔΕΣΗ USB-OTG / BLE</string>
+    <string name="lora_disconnect">ΑΠΟΣΥΝΔΕΣΗ LORA</string>
+    <string name="lora_rescan">ΕΠΑΝΑΣΑΡΩΣΗ</string>
+    <string name="acoustic_v2_title">Ακουστικό Μόντεμ 2.0 (RS-FEC + E2EE)</string>
+    <string name="acoustic_v2_encrypted_badge">BELL 202 V2 (RS-FEC + AES-256-GCM)</string>
+
+    <!-- Settings Hub & @username Optionality -->
+    <string name="settings_search_hint">Αναζήτηση ρυθμίσεων (Κλείδωμα, Μπαταρία, Material 3, LoRa, PTT...)</string>
+    <string name="settings_cat_identity">Ταυτότητα &amp; Λογαριασμός</string>
+    <string name="settings_cat_security">Ασφάλεια &amp; Απόρρητο</string>
+    <string name="settings_cat_voice">Φωνή &amp; Ήχος</string>
+    <string name="settings_cat_network">Δίκτυο &amp; Mesh</string>
+    <string name="settings_cat_appearance">Εμφάνιση &amp; Διάταξη</string>
+    <string name="settings_cat_diagnostics">Διαγνωστικά &amp; Αποθήκευση</string>
+    <string name="username_optional_recommended">Προαιρετικό (Προτείνεται): Κατοχύρωση ή Σύνδεση @username</string>
+    <string name="radio_diagnostics_tab">ΔΙΑΓΝΩΣΤΙΚΑ ΡΑΔΙΟΥ</string>
+    <string name="settings_tab_upper">ΡΥΘΜΙΣΕΙΣ</string>
 </resources>

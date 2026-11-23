@@ -43,6 +43,8 @@ import com.kostadinosk.pulsemesh.model.WaypointType
 import com.kostadinosk.pulsemesh.service.LiveMeshNetworkService
 import com.kostadinosk.pulsemesh.service.TacticalSensorService
 import com.kostadinosk.pulsemesh.ui.theme.*
+import com.kostadinosk.pulsemesh.R
+import com.kostadinosk.pulsemesh.util.AppStrings
 import com.kostadinosk.pulsemesh.util.NativeTileMapManager
 import com.kostadinosk.pulsemesh.util.OfflineRegionDownloader
 import kotlin.math.*
@@ -86,6 +88,11 @@ fun TacticalMap(
     weatherTrendLabel: String = "",
     isStormAlertActive: Boolean = false,
     appLanguage: String = "en",
+    onExportGpx: () -> String = { "" },
+    onToggleCotBridge: (Boolean) -> Unit = {},
+    isCotBridgeEnabled: Boolean = false,
+    onImportMapPack: () -> Unit = {},
+    onImportGpxKml: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -108,6 +115,12 @@ fun TacticalMap(
     var pendingPinCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var selectedPinType by remember { mutableStateOf(WaypointType.RALLY) }
     var customPinTitle by remember { mutableStateOf("") }
+    var selectedLayerStyle by remember { mutableStateOf(com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
+    var compassRotateEnabled by remember { mutableStateOf(false) }
+    var isRulerMode by remember { mutableStateOf(false) }
+    var rulerPointA by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var rulerPointB by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var gpxStatusBanner by remember { mutableStateOf("") }
 
     val downloadProgress by OfflineRegionDownloader.downloadState.collectAsState()
     var cacheStats by remember { mutableStateOf(OfflineRegionDownloader.getDiskCacheStats(context)) }
@@ -126,6 +139,17 @@ fun TacticalMap(
             .background(TacticalBlack)
             .testTag("slippy_street_map_container")
     ) {
+        com.kostadinosk.pulsemesh.map.FlavorTacticalMapSurface(
+            centerLat = centerLat,
+            centerLon = centerLon,
+            zoomLevel = zoomLevel,
+            bearingDeg = deviceHeadingDeg,
+            compassRotateEnabled = compassRotateEnabled,
+            layerStyle = selectedLayerStyle,
+            isInternetEnabled = isInternetEnabled,
+            modifier = Modifier.fillMaxSize()
+        )
+
         // -----------------------------------------------------------------
         // SLIPPY STREET MAP CANVAS
         // -----------------------------------------------------------------
@@ -143,7 +167,7 @@ fun TacticalMap(
                         centerLon = centerLon.coerceIn(-180.0, 180.0)
                     }
                 }
-                .pointerInput(nodes, centerLat, centerLon, zoomLevel) {
+                .pointerInput(nodes, centerLat, centerLon, zoomLevel, isRulerMode) {
                     detectTapGestures(
                         onTap = { tapOffset ->
                             val intZoom = zoomLevel.toInt()
@@ -167,14 +191,25 @@ fun TacticalMap(
                             onSelectNode(null)
                         },
                         onLongPress = { longPressOffset ->
-                            val n = 2.0.pow(zoomLevel.toDouble())
-                            val degreesPerPixel = 360.0 / (256.0 * n)
                             val dx = longPressOffset.x - (size.width / 2f)
                             val dy = longPressOffset.y - (size.height / 2f)
-                            val tappedLon = (centerLon + dx * degreesPerPixel).coerceIn(-180.0, 180.0)
-                            val tappedLat = (centerLat - (dy * degreesPerPixel) / cos(Math.toRadians(centerLat))).coerceIn(-85.0, 85.0)
-                            onSetManualLocation(tappedLat, tappedLon)
-                            pendingPinCoords = Pair(tappedLat, tappedLon)
+                            val (tappedLat, tappedLon) = com.kostadinosk.pulsemesh.map.MapCoordinateMath.pixelOffsetToLatLon(
+                                centerLat = centerLat,
+                                centerLon = centerLon,
+                                zoomLevel = zoomLevel,
+                                dxPx = dx,
+                                dyPx = dy
+                            )
+                            if (isRulerMode) {
+                                if (rulerPointA == null || rulerPointB != null) {
+                                    rulerPointA = Pair(tappedLat, tappedLon)
+                                    rulerPointB = null
+                                } else {
+                                    rulerPointB = Pair(tappedLat, tappedLon)
+                                }
+                            } else {
+                                pendingPinCoords = Pair(tappedLat, tappedLon)
+                            }
                         }
                     )
                 }
@@ -226,14 +261,16 @@ fun TacticalMap(
                             style = Stroke(width = 1f)
                         )
                     } else {
-                        // Render clean dark cartographic coordinate grid tile when offline / uncached
+                        // Subtle coordinate tile outline so underlying FlavorTacticalMapSurface (MapLibre/Radar) stays visible
+                        if (!isInternetEnabled && selectedLayerStyle != com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR) {
+                            drawRect(
+                                color = Color(0xFF141A24).copy(alpha = 0.25f),
+                                topLeft = Offset(tileLeft, tileTop),
+                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx)
+                            )
+                        }
                         drawRect(
-                            color = Color(0xFF141A24),
-                            topLeft = Offset(tileLeft, tileTop),
-                            size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx)
-                        )
-                        drawRect(
-                            color = Color(0xFF222D3D),
+                            color = Color(0xFF222D3D).copy(alpha = 0.35f),
                             topLeft = Offset(tileLeft, tileTop),
                             size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
                             style = Stroke(width = 1f)
@@ -496,6 +533,29 @@ fun TacticalMap(
                         px + 18f,
                         py + 18f,
                         paintSub
+                    )
+                }
+            }
+
+            // 4. Bearing & Distance Ruler Overlay
+            rulerPointA?.let { (latA, lonA) ->
+                val (aTileX, aTileY) = NativeTileMapManager.latLonToTileCoords(latA, lonA, intZoom)
+                val aPx = viewCenterX + ((aTileX - curTileX) * tileSizePx).toFloat()
+                val aPy = viewCenterY + ((aTileY - curTileY) * tileSizePx).toFloat()
+                drawCircle(color = AmberRootBoost, radius = 9f, center = Offset(aPx, aPy))
+
+                val endCoords = rulerPointB ?: if (userLat != null && userLon != null) Pair(userLat, userLon) else null
+                endCoords?.let { (latB, lonB) ->
+                    val (bTileX, bTileY) = NativeTileMapManager.latLonToTileCoords(latB, lonB, intZoom)
+                    val bPx = viewCenterX + ((bTileX - curTileX) * tileSizePx).toFloat()
+                    val bPy = viewCenterY + ((bTileY - curTileY) * tileSizePx).toFloat()
+                    drawCircle(color = CyanGateway, radius = 9f, center = Offset(bPx, bPy))
+                    drawLine(
+                        color = AmberRootBoost,
+                        start = Offset(aPx, aPy),
+                        end = Offset(bPx, bPy),
+                        strokeWidth = 3.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
                     )
                 }
             }
@@ -794,10 +854,225 @@ fun TacticalMap(
                     }
                 }
             }
+
+            // Tactical Map 2.0 Quick Action Strip: Layer / Ruler / Compass Rotate / GPX / ATAK CoT
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .clickable {
+                            val entries = com.kostadinosk.pulsemesh.map.MapLayerStyle.entries
+                            selectedLayerStyle = entries[(selectedLayerStyle.ordinal + 1) % entries.size]
+                        }
+                        .testTag("map_layer_selector")
+                ) {
+                    val layerRes = when (selectedLayerStyle) {
+                        com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK -> R.string.map_layer_dark
+                        com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO -> R.string.map_layer_topo
+                        com.kostadinosk.pulsemesh.map.MapLayerStyle.SATELLITE -> R.string.map_layer_satellite
+                        com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR -> R.string.map_layer_radar
+                    }
+                    val layerName = AppStrings.resolve(context, appLanguage, layerRes).uppercase()
+                    Text(
+                        text = AppStrings.resolve(context, appLanguage, R.string.map_layer_prefix, layerName),
+                        color = CyanGateway,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (isRulerMode) AmberRootBoost else DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AmberRootBoost.copy(alpha = 0.8f)),
+                    modifier = Modifier
+                        .clickable {
+                            isRulerMode = !isRulerMode
+                            if (!isRulerMode) {
+                                rulerPointA = null
+                                rulerPointB = null
+                            }
+                        }
+                        .testTag("map_ruler_toggle")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(
+                            context,
+                            appLanguage,
+                            if (isRulerMode) R.string.map_ruler_on else R.string.map_ruler_off
+                        ),
+                        color = if (isRulerMode) Color.Black else AmberRootBoost,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (compassRotateEnabled) EmeraldMesh else DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldMesh.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .clickable { compassRotateEnabled = !compassRotateEnabled }
+                        .testTag("map_compass_rotate_toggle")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(
+                            context,
+                            appLanguage,
+                            if (compassRotateEnabled) R.string.map_compass_hdg_up else R.string.map_compass_north_up
+                        ),
+                        color = if (compassRotateEnabled) Color.Black else EmeraldMesh,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                    modifier = Modifier
+                        .clickable {
+                            val custom = onExportGpx()
+                            val gpxXml = custom.ifBlank {
+                                com.kostadinosk.pulsemesh.map.GpxKmlInterop.exportGpx(
+                                    waypoints = waypoints,
+                                    tracks = mapOf("SelfTrack" to breadcrumbs)
+                                )
+                            }
+                            runCatching {
+                                val outDir = java.io.File(context.filesDir, "exports").apply { mkdirs() }
+                                java.io.File(outDir, "pulsemesh_tactical.gpx").writeText(gpxXml)
+                            }
+                            gpxStatusBanner = "GPX exported (${waypoints.size} pins, ${breadcrumbs.size} pts)"
+                        }
+                        .testTag("map_gpx_export_btn")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(context, appLanguage, R.string.map_export_gpx),
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                    modifier = Modifier
+                        .clickable { onImportGpxKml() }
+                        .testTag("map_import_gpx_btn")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(context, appLanguage, R.string.map_import_gpx_kml),
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldMesh.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .clickable { onImportMapPack() }
+                        .testTag("map_import_pack_btn")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(context, appLanguage, R.string.map_import_pack),
+                        color = EmeraldMesh,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (isCotBridgeEnabled) CyanGateway else DeepCarbon.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .clickable { onToggleCotBridge(!isCotBridgeEnabled) }
+                        .testTag("map_cot_toggle")
+                ) {
+                    Text(
+                        text = AppStrings.resolve(
+                            context,
+                            appLanguage,
+                            if (isCotBridgeEnabled) R.string.map_cot_on else R.string.map_cot_off
+                        ),
+                        color = if (isCotBridgeEnabled) Color.Black else CyanGateway,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            if (gpxStatusBanner.isNotBlank()) {
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldMesh.copy(alpha = 0.6f)),
+                    modifier = Modifier.clickable { gpxStatusBanner = "" }
+                ) {
+                    Text(
+                        text = gpxStatusBanner,
+                        color = EmeraldMesh,
+                        fontSize = 9.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            val rulerEnd = rulerPointB ?: if (userLat != null && userLon != null) Pair(userLat, userLon) else null
+            if (rulerPointA != null && rulerEnd != null) {
+                val (latA, lonA) = rulerPointA!!
+                val (latB, lonB) = rulerEnd
+                val distM = com.kostadinosk.pulsemesh.map.MapCoordinateMath.haversineDistanceMeters(latA, lonA, latB, lonB)
+                val brg = com.kostadinosk.pulsemesh.map.MapCoordinateMath.initialBearingDegrees(latA, lonA, latB, lonB)
+                val card = com.kostadinosk.pulsemesh.map.MapCoordinateMath.cardinalDirection(brg)
+                val distStr = if (distM >= 1000.0) "%.2f km".format(distM / 1000.0) else "${distM.toInt()} m"
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AmberRootBoost),
+                    modifier = Modifier.testTag("map_ruler_readout")
+                ) {
+                    Text(
+                        text = "RULER: $distStr • ${brg.toInt()}° $card",
+                        color = AmberRootBoost,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
         }
 
         // -----------------------------------------------------------------
-        // SHARED TACTICAL WAYPOINT DROP MODAL (LONG-PRESS OR PIN BUTTON)
+        // SHARED TACTICAL WAYPOINT DROP / MANUAL GPS / RULER MODAL
         // -----------------------------------------------------------------
         pendingPinCoords?.let { (pinLat, pinLon) ->
             AlertDialog(
@@ -805,7 +1080,7 @@ fun TacticalMap(
                 containerColor = DeepCarbon,
                 title = {
                     Text(
-                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "DROP SHARED TACTICAL PIN", "ΠΡΟΣΘΗΚΗ ΚΟΙΝΟΧΡΗΣΤΗΣ ΠΙΝΕΖΑΣ"),
+                        text = AppStrings.resolve(context, appLanguage, R.string.map_drop_pin),
                         color = CyanGateway,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -851,6 +1126,35 @@ fun TacticalMap(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    onSetManualLocation(pinLat, pinLon)
+                                    pendingPinCoords = null
+                                },
+                                modifier = Modifier.weight(1f).testTag("map_set_manual_gps_btn")
+                            ) {
+                                Text(AppStrings.resolve(context, appLanguage, R.string.map_set_manual_gps), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    if (rulerPointA == null || rulerPointB != null) {
+                                        rulerPointA = Pair(pinLat, pinLon)
+                                        rulerPointB = null
+                                    } else {
+                                        rulerPointB = Pair(pinLat, pinLon)
+                                    }
+                                    isRulerMode = true
+                                    pendingPinCoords = null
+                                },
+                                modifier = Modifier.weight(1f).testTag("map_set_ruler_point_btn")
+                            ) {
+                                Text(AppStrings.resolve(context, appLanguage, R.string.map_set_ruler_point), fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 },
                 confirmButton = {

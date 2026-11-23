@@ -6,16 +6,16 @@
 
 **Off-Grid Peer-to-Peer Android Mesh Messenger, Full-Duplex Voice Communicator & Tactical Offline Map**
 
-[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.4.7)
-[![Platform](https://img.shields.io/badge/Android%20%2B%20iPhone%20PWA-API%2024--36%20%7C%20iOS%20Safari-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.4.7)
+[![Release](https://img.shields.io/github/v/release/Kostadinosk/PulseMesh?style=flat-square&logo=github&label=Release&color=19E68C)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.5.5)
+[![Platform](https://img.shields.io/badge/Android%20%2B%20iPhone%20PWA-API%2024--36%20%7C%20iOS%20Safari-38CFFF?style=flat-square&logo=android&logoColor=white)](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.5.5)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://github.com/Kostadinosk/PulseMesh)
-[![Encryption](https://img.shields.io/badge/Crypto-ECDH%20P--256%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
+[![Encryption](https://img.shields.io/badge/Crypto-Double%20Ratchet%20%2B%20AES--256--GCM-FFB02E?style=flat-square)](https://github.com/Kostadinosk/PulseMesh#cryptography--username-vaults)
 [![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-0088E6?style=flat-square)](LICENSE)
 
 [**Live Website**](https://kostadinosk.github.io/PulseMesh/) &bull;
 [**iPhone PWA & Web Node**](https://kostadinosk.github.io/PulseMesh/web/) &bull;
-[**Download Release APK (v1.4.7)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.4.7/app-release.apk) &bull;
-[**Download Debug APK (v1.4.7)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.4.7/app-debug.apk) &bull;
+[**Download Full APK (v1.5.5)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.5.5/app-full-release.apk) &bull;
+[**Download Lite APK (v1.5.5)**](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.5.5/app-lite-release.apk) &bull;
 [**Contact & Field Reports**](https://kostadinosk.github.io/PulseMesh/contact.html) &bull;
 [**Report an Issue**](https://github.com/Kostadinosk/PulseMesh/issues)
 
@@ -25,85 +25,87 @@
 
 ## Overview
 
-**PulseMesh** (`com.KostadinosK.pulsemesh`) is a zero-infrastructure communication suite for Android devices operating where cellular and internet networks are unavailable, degraded, or untrusted. By combining the radios already built into standard smartphones—**Bluetooth Low Energy (`0xCAFE`/`0xCAFF`)**, **Wi-Fi Direct & Auto-Hotspot subnets**, **USB/Ethernet tethering**, and an **Acoustic AFSK modem**—PulseMesh discovers nearby nodes in under a second, routes multi-hop encrypted text and live voice streams, and synchronizes GPS waypoints on an offline Web Mercator tile map.
+**PulseMesh** (`com.KostadinosK.pulsemesh`) is a 100% FOSS, zero-infrastructure communication suite for Android and iOS/Web devices operating where cellular and internet networks are unavailable, degraded, or untrusted. By combining smartphone radios (**Bluetooth Low Energy `0xCAFE`/`0xCAFF` & L2CAP**, **Wi-Fi Direct & Auto-Hotspot subnets**, **USB/Ethernet tethering**, **LoRa / Meshtastic / MeshCore USB-OTG & BLE companions**, and an **Acoustic Modem 2.0**), PulseMesh discovers nearby nodes rapidly, routes multi-hop encrypted text and live voice streams, and synchronizes GPS waypoints on an offline tactical map.
+
+## Two 100% FOSS Android Flavors
+
+| Edition | APK Asset | Included FOSS Stack | Best For |
+| :--- | :--- | :--- | :--- |
+| **Full** | `app-full-release.apk` | Native FOSS WebRTC (Opus + AEC3 + NetEQ), SQLCipher encrypted Room DB, MapLibre Native offline vector maps, CameraX + ZXing live QR scanner | Daily drivers & flagship tactical deployments |
+| **Lite** | `app-lite-release.apk` | Pure-AOSP lightweight build (Android Keystore field encryption, MediaCodec Opus / ADPCM voice, Canvas raster + radar map, ZXing gallery/URI pairing) | Low-end devices, minimal storage, fast offline APK beaming |
 
 ---
 
-## Key Features
+## Key Features (v1.5.0 & v1.5.5)
 
 | Module | Highlights |
 | :--- | :--- |
-| **Wi-Fi Direct Web Portal & Browser Node** | Embedded pure-Kotlin HTTP (`:8080`) + HTTPS SSL (`:8443`) + SSE server auto-hosted on Wi-Fi Direct (`192.168.49.1`) and Local Hotspot (`192.168.43.1`) subnets so iPhones, laptops, and browsers join the live BLE/Wi-Fi mesh, cached offline map tiles, waypoints, and browser mic voice calls & G.711 μ-law PTT with zero internet. Also available online at [`/web/`](https://kostadinosk.github.io/PulseMesh/web/). |
-| **Multi-Hop DTN Messaging** | Broadcast channels, ECDH group chats, and direct messages with `TTL=7` flood routing, packet deduplication, delivery ACKs, and a persistent Delay-Tolerant Networking (DTN) outbox. |
-| **Encrypted `@username` Accounts (`PMU2` / `PMB1`)** | Free cryptographic `@username` handles signed with ECDSA P-256 keys, PBKDF2-HMAC-SHA256 encrypted key vaults, and full-device migration (chats, contacts, keys) via PIN or one-time Recovery Key. |
-| **Full-Duplex Voice & Walkie-Talkie (PTT)** | Adaptive 8 kHz G.711 μ-law and 4-bit IMA-ADPCM voice streaming over local Wi-Fi/Hotspot UDP or pure BLE GATT, with half-duplex echo ducking, lock-screen call controls, mini call bar, and voicemail capture. |
-| **Offline Tactical Map (`EPSG:3857`)** | Regional Web Mercator tile pyramid downloader with local disk caching, shared tactical pins (`RALLY`, `HAZARD`, `SUPPLY`, `SOS`), live compass bearing HUD, and granular GPS privacy (`EXACT`, `COARSE`, `OFF`). |
-| **Hardware & Root Pro Telemetry** | Auto-detection for **75+ phone profiles** (Snapdragon, Dimensity, Exynos, Tensor), live BLE TX/RX diagnostic panels, Pro RSSI charts, and optional root (`su`) radio power-save overrides in **Dark & Daylight Frutiger Aero** themes. |
+| **Offline Tactical Map 2.0** | MapLibre Native vector maps (`full`) + fixed Canvas raster/radar map (`lite`), `.mbtiles`/`.pmtiles` offline pack import, custom region downloader, Dark/Topo/Satellite/Radar layers, compass rotation, bearing/distance ruler, live breadcrumbs, GPX 1.1 & KML 2.2 import/export, and ATAK Cursor-on-Target (CoT) UDP multicast bridge (`239.2.3.1:6969`). |
+| **Camera QR, NFC & Offline APK Beaming** | CameraX + ZXing live QR scanner (`full`) and gallery/URI decoder (`lite`) for 1-scan contact add, safety-number verification, group invites, and Wi-Fi Hotspot join; NFC Tap-to-Pair HCE (`AID F050554C53454D455348`) & Reader Mode; Offline P2P APK Beaming via built-in Hotspot Portal (`/download/pulsemesh.apk` + `.sha256`). |
+| **External LoRa & Acoustic Modem 2.0** | Pure-AOSP USB-OTG serial & BLE GATT companion bridge for **Meshtastic** and **MeshCore** radios; **Bell 202 Acoustic Modem 2.0** (`"P2"` frames) with systematic **Reed-Solomon GF(2^8) FEC** (repairs up to 4 corrupted bytes per frame) and **AES-256-GCM** encryption, byte-compatible between Android and Web/iPhone PWA. |
+| **Next-Gen Voice Hub & Calling** | Native WebRTC Opus + AEC3 (`full`) and MediaCodec Opus (`lite`), Android Telecom `ConnectionService`, lock-screen call cover, Bluetooth/headset/speaker route picker, Zello-style Tactical PTT channels with floor control, small-group conference mixing, and hardware volume-button PTT. |
+| **Modular Vite Web & iPhone PWA** | Single-file Vite pipeline (`web-pwa/`) auto-synced to both Android Hotspot (`app/src/main/assets/pulsemesh_web.html`) and GitHub Pages (`docs/web/index.html`) with unified 4-tab UI, Signal Double Ratchet (`PMDR2:`), Cloudflare Durable Objects WebSocket + TURN, VAPID Web Push for iOS 16.4+ Home Screen PWAs, guided 1-tap iOS `.mobileconfig` Root CA trust, and EN/EL localization. |
+| **Verified Updater & Security** | Zero-trust E2EE (Double Ratchet `PMDR2:`, ECDH P-256 + HKDF-SHA256, zero plaintext downgrades), Biometric/PIN App Lock, Android 14-16 (`targetSdk 36`) permission-gated Foreground Services, optional (recommended) `@username` `PV2:` vaults (600,000 PBKDF2 iterations), and fail-closed **SHA-256 + signing-certificate verified in-app APK updater** (`PackageInstaller`). |
 
 ---
 
-## 8-Layer Multi-Transport Architecture
-
-PulseMesh continuously negotiates the highest-bandwidth physical link between peers while deduplicating frames across all active transports:
+## Multi-Transport Architecture
 
 | Layer | Transport | Protocol / Interface | Primary Role |
 | :---: | :--- | :--- | :--- |
-| **1** | **BLE Advertising Beacons** | `0xCAFE` (12/14B) + `0xCAFF` Scan Response | Sub-second peer discovery, `1e-7` micro-degree GPS beacons, and swarm role election. |
-| **2** | **BLE GATT Mesh** | Service `0x0000CAFF` (160B serialized chunks) | Bi-directional multi-hop text, key exchange, and pure-BLE voice bursts with deterministic role staggering. |
-| **3** | **BLE L2CAP CoC** | Connection-Oriented Channels | High-throughput BLE streaming between compatible Android 10+ devices. |
-| **4** | **Wi-Fi Direct & Auto-Hotspot** | `UDP 45888` / `TCP 45889` / mDNS `_pulsemesh._udp.` | Zero-config local subnet multicast, full-duplex voice calls, and rapid media transfer. |
-| **5** | **IPv6 Link-Local** | `ff02::1` Multicast | Zero-DHCP peer-to-peer frame routing across ad-hoc wireless interfaces. |
-| **6** | **USB-C & Ethernet Bridge** | `usb0` / `rndis0` / `eth0` | Zero-RF wired tactical tethering between phones or field routers. |
-| **7** | **Acoustic AFSK Modem** | Bell 202 (`1200/2200 Hz`) + Reed-Solomon FEC | Air-gapped audio transmission over phone speakers/microphones or 3.5mm audio cables. |
-| **8** | **Hybrid Encrypted Relay** | Cloudflare D1 / `ntfy` (`PM2` & `PMU2` AES-GCM) | Optional encrypted bridge across distant mesh islands; hard-blocked at the socket layer in Off-Grid Mode. |
+| **1** | **BLE Advertising Beacons** | `0xCAFE` + `0xCAFF` Scan Response | Sub-second peer discovery, micro-degree GPS beacons, and swarm election. |
+| **2** | **BLE GATT & L2CAP CoC** | Service `0x0000CAFF` + L2CAP CoC | Bi-directional multi-hop text, file chunks, key exchange, and pure-BLE voice bursts. |
+| **3** | **Wi-Fi Direct & Auto-Hotspot** | `UDP 45888` / `TCP 45889` / mDNS / Portal `:8080` & SSL `:8443` | High-bandwidth local subnet routing, full-duplex voice, iPhone PWA portal, and offline APK beaming. |
+| **4** | **IPv6 Link-Local & USB/Eth** | `ff02::1` / `usb0` / `rndis0` / `eth0` | Zero-DHCP ad-hoc wireless and zero-RF wired tactical tethering. |
+| **5** | **LoRa Hardware Companion** | Meshtastic (`0x94 0xC3` Protobuf / BLE) & MeshCore (`<`/`>` / NUS) | Multi-kilometer off-grid hops via external USB-OTG or BLE LoRa transceivers. |
+| **6** | **Acoustic Modem 2.0** | Bell 202 (`1200/2200 Hz`) + RS(255,k) FEC + AES-256-GCM | Air-gapped encrypted data across phone speakers/mics or handheld FM radios. |
+| **7** | **Cloudflare Realtime Relay** | Durable Objects WebSocket + Cloudflare Calls TURN (`PM2`/`PMDR2`) | Optional encrypted internet bridge & iOS 16.4+ VAPID Web Push; hard-blocked in Off-Grid Mode. |
 
 ---
 
 ## Cryptography & `@username` Vaults
 
-- **Direct & Group E2EE**: ECDH P-256 key agreement with HKDF-SHA256 derivation, fresh 96-bit random IVs per message, AES-256-GCM authenticated encryption, and Trust-On-First-Use (TOFU) safety fingerprint verification.
-- **Self-Sovereign `@username` Claims**: Usernames are claimed with an ECDSA P-256 signature (`SHA256withECDSA`) over the owner's public keys and timestamp, preventing impersonation without a traditional account server.
-- **Zero-Knowledge Device Migration (`PMB1:`)**: Account backups are compressed with GZIP and sealed with AES-256-GCM using a key derived via 120,000-iteration PBKDF2-HMAC-SHA256 from your PIN or Recovery Key.
+- **Forward-Secret Direct & Group E2EE**: Signal-style Double Ratchet (`PMDR2:`) and ECDH P-256 + RFC 5869 HKDF-SHA256 + AES-256-GCM with AEAD AAD binding and zero plaintext downgrade.
+- **Optional (Recommended) `@username` Accounts**: PulseMesh works 100% anonymously offline. Claiming an optional `@username` signs the claim with ECDSA P-256 (`PM_CLAIM_V2`), protects key vaults (`PV2:`) with 600,000-iteration PBKDF2-HMAC-SHA256 + 128-bit Recovery Key (`PMRK-`), and enforces server-side challenge-response / lockout-protected vault unlock.
+- **Verified Software Updates**: Every release ships `.sha256` checksums; the in-app updater verifies both SHA-256 digest and Android signing certificate match before invoking `PackageInstaller`.
 
 ---
 
-## Quick Start & Building from Source
+## Building from Source
 
-### Install Pre-Built APK
-Grab [`app-release.apk`](https://github.com/Kostadinosk/PulseMesh/releases/download/v1.3.1/app-release.apk) from the [**v1.3.1 Release**](https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.3.1) and install on two or more physical Android devices (Android 7.0 / API 24+).
-
-### Build Locally with Gradle
-
-- **Prerequisites**: Android Studio (Ladybug or newer), JDK 17+, Android SDK 36 (`minSdk = 24`).
+- **Prerequisites**: Android Studio (Ladybug or newer), JDK 21, Android SDK 36 (`minSdk = 24`), Node.js 22+ (for `web-pwa`).
 
 ```bash
 git clone https://github.com/Kostadinosk/PulseMesh.git
 cd PulseMesh
 
-# Build debug APK
-./gradlew :app:assembleDebug
+# Build & sync the modular Vite Web/iPhone PWA into Android assets + docs/web/
+npm --prefix web-pwa ci
+npm --prefix web-pwa run build:sync
+npm --prefix web-pwa test
 
-# Run unit & Robolectric test suites
-./gradlew :app:testDebugUnitTest
+# Run Lite and Full Android unit test suites sequentially
+./gradlew :app:testLiteDebugUnitTest --no-daemon
+./gradlew :app:testFullDebugUnitTest --no-daemon
+
+# Build Lite and Full release APKs
+./gradlew :app:assembleLiteRelease :app:assembleFullRelease --no-daemon
 ```
-
-> **Note:** Physical Android hardware is recommended for testing BLE `0xCAFE` advertising, GATT role staggering, and Wi-Fi Direct / Auto-Hotspot negotiation.
 
 ---
 
 ## Permissions
 
-PulseMesh requests runtime permissions strictly for active radio and voice transports:
-- `BLUETOOTH_SCAN`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT` — BLE mesh discovery and GATT transport
-- `ACCESS_FINE_LOCATION` — Required by Android OS for BLE scanning, Wi-Fi Direct, and optional tactical map GPS pins
-- `NEARBY_WIFI_DEVICES`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` — Local hotspot & subnet discovery
-- `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` — Full-duplex voice calls, PTT walkie-talkie, and acoustic AFSK modem
+PulseMesh requests runtime permissions strictly per active capability and gates Foreground Service types cleanly on Android 14-16 (`targetSdk 36`):
+- `BLUETOOTH_SCAN`, `BLUETOOTH_ADVERTISE`, `BLUETOOTH_CONNECT`: BLE mesh discovery, GATT/L2CAP transport, and BLE LoRa companions
+- `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`: BLE/Wi-Fi Direct discovery and optional tactical map GPS pins
+- `NEARBY_WIFI_DEVICES`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`: Local hotspot, Web Portal, and ATAK CoT multicast
+- `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`: Full-duplex voice calls, PTT walkie-talkie, and Acoustic Modem 2.0
+- `CAMERA`, `NFC`, `REQUEST_INSTALL_PACKAGES`: Optional QR scanning, NFC Tap-to-Pair HCE, and verified in-app APK updates
 
 ---
 
 ## Bug Reports, Field Tests & Contact
-
-Tested PulseMesh on a new phone model, custom ROM, or long-range environment? Share your results or get in touch:
 
 - **Website Contact & Report Builder**: [kostadinosk.github.io/PulseMesh/contact.html](https://kostadinosk.github.io/PulseMesh/contact.html)
 - **GitHub Issues**: [github.com/Kostadinosk/PulseMesh/issues](https://github.com/Kostadinosk/PulseMesh/issues)
@@ -116,12 +118,10 @@ Tested PulseMesh on a new phone model, custom ROM, or long-range environment? Sh
 
 This software is provided strictly for educational, experimental, and research purposes. It is distributed **"AS IS"**, without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, reliability, or security.
 
-- **Not for Life-Safety Use**: Do not rely on PulseMesh as a primary means of communication in life-safety, search-and-rescue, medical, or critical emergency situations. Radio range, packet delivery, and device compatibility vary significantly across hardware and environments.
+- **Not for Life-Safety Use**: Do not rely on PulseMesh as a primary means of communication in life-safety, search-and-rescue, medical, or critical emergency situations.
 - **Root & Hardware Modifications**: Features that execute privileged (`su`) commands or alter radio power-management parameters are used entirely at the user's own risk.
 - **Regulatory Compliance**: Users are solely responsible for ensuring that their use of this software, encryption, and radio transmissions complies with all applicable local laws and telecommunications regulations.
-- **Non-Affiliation Notice**: PulseMesh (`com.KostadinosK.pulsemesh`) is an independent open-source off-grid mesh networking project by Konstantinos Kourtis (`@Kostadinosk`) and is not affiliated with, endorsed by, or connected to `pulsemesh.io` (synchronized event/light-show audio streaming) or any other commercial entity.
-
-In no event shall the author or contributors be held liable for any direct, indirect, incidental, special, exemplary, or consequential damages arising in any way out of the use or inability to use this software.
+- **Non-Affiliation Notice**: PulseMesh (`com.KostadinosK.pulsemesh`) is an independent open-source off-grid mesh networking project by Konstantinos Kourtis (`@Kostadinosk`) and is not affiliated with, endorsed by, or connected to `pulsemesh.io` or any other commercial entity.
 
 ---
 
@@ -129,4 +129,4 @@ In no event shall the author or contributors be held liable for any direct, indi
 
 Released under the **[GNU General Public License v3.0 (`GPL-3.0-only`)](LICENSE)**.
 
-Pursuant to **GPL-3.0 Section 7(e)**, the **PulseMesh** name, custom app icon, and branding remain the exclusive property of Konstantinos Kourtis. See **[TRADEMARK.md](TRADEMARK.md)** for full brand reservation terms (any public fork or modified distribution must use a different app name, package ID, and icon).
+Pursuant to **GPL-3.0 Section 7(e)**, the **PulseMesh** name, custom app icon, and branding remain the exclusive property of Konstantinos Kourtis. See **[TRADEMARK.md](TRADEMARK.md)** for full brand reservation terms.

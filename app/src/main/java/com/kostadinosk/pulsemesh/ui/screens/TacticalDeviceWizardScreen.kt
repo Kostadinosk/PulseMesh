@@ -285,12 +285,17 @@ fun TacticalDeviceWizardScreen(
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text(
-                                        text = if (showAccountSection) "▾ Hide Optional @username Account" else "▸ Optional: Claim or Restore @username Account",
+                                        text = if (showAccountSection) "▾ Hide Optional (Recommended) @username" else "▸ Optional (Recommended): Claim or Restore @username",
                                         color = p.cyan,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
+                                Text(
+                                    text = "Local off-grid mesh works without one. Claiming @username enables encrypted cross-device backup & distant Hybrid Relay messaging.",
+                                    color = p.textMuted,
+                                    fontSize = 10.sp
+                                )
 
                                 if (showAccountSection) {
                                     OutlinedTextField(

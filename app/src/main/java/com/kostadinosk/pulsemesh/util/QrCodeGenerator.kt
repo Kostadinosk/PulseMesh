@@ -106,7 +106,20 @@ object QrCodeGenerator {
     fun encodeMatrix(text: String): Array<BooleanArray>? {
         val payload = text.toByteArray(Charsets.UTF_8)
         // Byte mode header is 4 bits mode (0100) + 8 bits length = 12 bits -> takes 2 bytes overhead
-        val spec = SPECS.firstOrNull { payload.size + 2 <= it.totalDataCodewords } ?: return null
+        val spec = SPECS.firstOrNull { payload.size + 2 <= it.totalDataCodewords }
+        if (spec == null) {
+            return runCatching {
+                val bitMatrix = com.google.zxing.qrcode.QRCodeWriter().encode(
+                    text,
+                    com.google.zxing.BarcodeFormat.QR_CODE,
+                    0,
+                    0
+                )
+                Array(bitMatrix.height) { r ->
+                    BooleanArray(bitMatrix.width) { c -> bitMatrix.get(c, r) }
+                }
+            }.getOrNull()
+        }
 
         // Build bit buffer
         val bits = ArrayList<Int>(spec.totalDataCodewords * 8)

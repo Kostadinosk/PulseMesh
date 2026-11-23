@@ -1,0 +1,8 @@
+PulseMesh v1.5.5:
+- Offline Tactical Map 2.0 (MapLibre vector/MBTiles/PMTiles in Full, ruler, GPX/KML, ATAK CoT)
+- CameraX + ZXing QR Scanner, NFC Tap-to-Pair HCE, and Offline P2P APK Beaming
+- LoRa / Meshtastic / MeshCore USB-OTG & BLE companion bridge
+- Acoustic Modem 2.0 (Reed-Solomon FEC + AES-256-GCM)
+- Modular Vite Web/iPhone PWA + VAPID Web Push + guided iOS .mobileconfig Root CA
+- SHA-256 & signing-cert verified in-app APK updater
+- Android 14-16 FGS permission fix & EN/EL strings.xml

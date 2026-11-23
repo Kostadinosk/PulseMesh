@@ -7,6 +7,8 @@ import android.Manifest
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.nfc.NfcAdapter
+import android.nfc.tech.IsoDep
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -56,7 +58,9 @@ import com.kostadinosk.pulsemesh.ui.components.PulseMeshTopBar
 import com.kostadinosk.pulsemesh.ui.components.TacticalMap
 import com.kostadinosk.pulsemesh.ui.components.TelemetryHudCard
 import com.kostadinosk.pulsemesh.ui.screens.*
+import androidx.compose.ui.window.Dialog
 import com.kostadinosk.pulsemesh.ui.theme.*
+import com.kostadinosk.pulsemesh.util.AppStrings
 import com.kostadinosk.pulsemesh.viewmodel.MeshViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -93,6 +97,47 @@ class MainActivity : FragmentActivity() {
 
             PulseMeshTheme(appTheme = state.appTheme) {
                 val p = LocalPulsePalette.current
+                var showQrScannerDialog by remember { mutableStateOf(false) }
+
+                val mapPackPicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        val resolvedName = runCatching {
+                            contentResolver.query(
+                                uri,
+                                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                                null,
+                                null,
+                                null
+                            )?.use { cur ->
+                                if (cur.moveToFirst()) cur.getString(0) else null
+                            }
+                        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/').orEmpty()
+                        val pack = com.kostadinosk.pulsemesh.map.OfflineMapPackManager.importPackFromUri(
+                            this@MainActivity,
+                            uri,
+                            resolvedName
+                        )
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            if (pack != null) "Imported map pack ${pack.fileName}" else "Invalid .mbtiles / .pmtiles map pack",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+
+                val gpxKmlPicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        val raw = runCatching {
+                            contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        }.getOrNull().orEmpty()
+                        val (_, msg) = viewModel.importGpxOrKmlContent(raw)
+                        android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
 
                 // Permission Request Launcher for Audio, Location, Notifications & BLE/Wi-Fi Radios
                 val permissionsToRequest = remember {
@@ -115,18 +160,24 @@ class MainActivity : FragmentActivity() {
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions(),
                 ) { results ->
-                    val allGranted = results.values.all { it }
-                    viewModel.onPermissionsResult(allGranted)
-                    if (allGranted) {
-                        viewModel.requestGpsUpdates()
-                    }
+                    viewModel.onPermissionsResult(results)
                 }
 
                 LaunchedEffect(Unit) {
                     if (!isKeyguardCurrentlyLocked()) {
                         permissionLauncher.launch(permissionsToRequest)
                     }
-                    viewModel.requestGpsUpdates()
+                    val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (hasFine || hasCoarse) {
+                        viewModel.requestGpsUpdates()
+                    }
                 }
 
                 // Android 14-17 Microphone FGS Safety: Only permit AudioRecord capture while app is foregrounded
@@ -233,13 +284,13 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                // Clean 4-Tab structure: Map, Chats, Voice, Settings (localized EN/EL)
+                // Clean 4-Tab structure: Map, Chats, Voice, Settings (localized EN/EL via strings.xml)
                 val tabs = remember(state.appLanguage) {
                     listOf(
-                        NavTabItem(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Map", "Χάρτης"), Icons.Default.Map),
-                        NavTabItem(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Chats", "Μηνύματα"), Icons.AutoMirrored.Filled.Chat),
-                        NavTabItem(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Voice", "Φωνή"), Icons.Default.Radio),
-                        NavTabItem(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Settings", "Ρυθμίσεις"), Icons.Default.Settings),
+                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_map), Icons.Default.Map),
+                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_chats), Icons.AutoMirrored.Filled.Chat),
+                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_voice), Icons.Default.Radio),
+                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_settings), Icons.Default.Settings),
                     )
                 }
 
@@ -281,14 +332,22 @@ class MainActivity : FragmentActivity() {
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "PulseMesh v${upd.latestVersion} available",
+                                                text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.update_available_title, upd.latestVersion),
                                                 color = p.emerald,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp
                                             )
-                                            if (upd.releaseNotesSnippet.isNotBlank()) {
+                                            val bannerSubtitle = if (
+                                                state.apkUpdateInstallState.stage != com.kostadinosk.pulsemesh.service.ApkInstallStage.IDLE &&
+                                                state.apkUpdateInstallState.message.isNotBlank()
+                                            ) {
+                                                state.apkUpdateInstallState.message
+                                            } else {
+                                                upd.releaseNotesSnippet
+                                            }
+                                            if (bannerSubtitle.isNotBlank()) {
                                                 Text(
-                                                    text = upd.releaseNotesSnippet,
+                                                    text = bannerSubtitle,
                                                     color = p.textSecondary,
                                                     fontSize = 10.sp,
                                                     maxLines = 1,
@@ -298,16 +357,7 @@ class MainActivity : FragmentActivity() {
                                         }
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Button(
-                                            onClick = {
-                                                runCatching {
-                                                    startActivity(
-                                                        android.content.Intent(
-                                                            android.content.Intent.ACTION_VIEW,
-                                                            android.net.Uri.parse(upd.apkDownloadUrl)
-                                                        )
-                                                    )
-                                                }
-                                            },
+                                            onClick = { viewModel.downloadAndInstallVerifiedUpdate() },
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = p.emerald,
                                                 contentColor = Color.Black
@@ -315,7 +365,11 @@ class MainActivity : FragmentActivity() {
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                             modifier = Modifier.height(30.dp)
                                         ) {
-                                            Text("UPDATE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.update_banner_button),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                         IconButton(
                                             onClick = { viewModel.dismissAvailableUpdate() },
@@ -428,16 +482,8 @@ class MainActivity : FragmentActivity() {
                                             }
                                         },
                                         label = {
-                                            val displayTitle = if (state.appLanguage == "el") {
-                                                when (index) {
-                                                    0 -> "Χάρτης"
-                                                    1 -> "Μηνύματα"
-                                                    2 -> "Φωνή"
-                                                    else -> "Ρυθμίσεις"
-                                                }
-                                            } else title
                                             Text(
-                                                text = displayTitle,
+                                                text = title,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 style = MaterialTheme.typography.labelSmall.copy(
@@ -530,6 +576,11 @@ class MainActivity : FragmentActivity() {
                                     weatherTrendLabel = state.weatherTrendLabel,
                                     isStormAlertActive = state.isStormAlertActive,
                                     appLanguage = state.appLanguage,
+                                    onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
+                                    onToggleCotBridge = { enabled -> viewModel.setCotBridgeEnabled(enabled) },
+                                    isCotBridgeEnabled = state.isCotBridgeEnabled,
+                                    onImportMapPack = { mapPackPicker.launch(arrayOf("*/*")) },
+                                    onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
                                 )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(
@@ -794,7 +845,7 @@ class MainActivity : FragmentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "SETTINGS", "ΡΥΘΜΙΣΕΙΣ"),
+                                                    text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.settings_tab_upper),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -829,7 +880,7 @@ class MainActivity : FragmentActivity() {
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "RADIO DIAGNOSTICS", "ΔΙΑΓΝΩΣΤΙΚΑ ΡΑΔΙΟΥ"),
+                                                    text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.radio_diagnostics_tab),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     fontFamily = FontFamily.Monospace,
@@ -926,6 +977,11 @@ class MainActivity : FragmentActivity() {
                                                 onSetAppLockPin = { viewModel.setAppLockPin(it) },
                                                 onSetBiometricUnlock = { viewModel.setBiometricUnlockEnabled(it) },
                                                 onClearAppLock = { viewModel.clearAppLock() },
+                                                onOpenQrScanner = { showQrScannerDialog = true },
+                                                onStartVerifiedUpdate = { viewModel.downloadAndInstallVerifiedUpdate() },
+                                                onToggleLoraBridge = { viewModel.toggleLoraBridge() },
+                                                onSelectLoraProtocol = { proto -> viewModel.selectLoraProtocol(proto) },
+                                                onScanLoraDevices = { viewModel.scanLoraDevices() },
                                             )
                                         } else {
                                             RootBoosterScreen(
@@ -1439,7 +1495,63 @@ class MainActivity : FragmentActivity() {
                         modifier = Modifier.testTag("username_hold_popup_dialog"),
                     )
                 }
+
+                if (showQrScannerDialog) {
+                    Dialog(onDismissRequest = { showQrScannerDialog = false }) {
+                        com.kostadinosk.pulsemesh.ui.qr.FlavorQrScannerSheet(
+                            onActionDecoded = { action ->
+                                val (ok, msg) = viewModel.handleQrPairingAction(action)
+                                android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                if (ok) showQrScannerDialog = false
+                            },
+                            onDismiss = { showQrScannerDialog = false },
+                            appLanguage = state.appLanguage
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.syncNfcPairingPayload()
+        runCatching {
+            val adapter = NfcAdapter.getDefaultAdapter(this) ?: return@runCatching
+            adapter.enableReaderMode(
+                this,
+                { tag ->
+                    runCatching {
+                        val isoDep = IsoDep.get(tag) ?: return@runCatching
+                        isoDep.connect()
+                        isoDep.timeout = 2_000
+                        val selResp = isoDep.transceive(
+                            com.kostadinosk.pulsemesh.service.NfcPairingProtocol.buildSelectAidCommand()
+                        )
+                        if (com.kostadinosk.pulsemesh.service.NfcPairingProtocol.extractPayloadIfOk(selResp) != null) {
+                            val idResp = isoDep.transceive(com.kostadinosk.pulsemesh.service.NfcPairingProtocol.CMD_GET_IDENTITY)
+                            val rawPayload = com.kostadinosk.pulsemesh.service.NfcPairingProtocol.extractPayloadIfOk(idResp)
+                            val action = rawPayload?.let { com.kostadinosk.pulsemesh.util.QrPairingRouter.parsePayload(it) }
+                            if (action != null) {
+                                runOnUiThread {
+                                    val (_, msg) = viewModel.handleQrPairingAction(action)
+                                    android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        runCatching { isoDep.close() }
+                    }
+                },
+                NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
+                null
+            )
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        runCatching {
+            NfcAdapter.getDefaultAdapter(this)?.disableReaderMode(this)
         }
     }
 

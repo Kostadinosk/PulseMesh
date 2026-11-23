@@ -43,6 +43,15 @@
 -keep class io.getstream.webrtc.android.** { *; }
 -dontwarn io.getstream.webrtc.android.**
 
+# Keep MapLibre Native JNI classes (full flavor), CameraX & ZXing
+-keep,includedescriptorclasses class org.maplibre.** { *; }
+-keep,includedescriptorclasses interface org.maplibre.** { *; }
+-dontwarn org.maplibre.**
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+
 # Keep Android org.json and coroutines classes used reflectively
 -keep class org.json.** { *; }
 -dontwarn kotlinx.coroutines.**

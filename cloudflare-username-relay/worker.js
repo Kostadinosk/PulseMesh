@@ -1002,6 +1002,103 @@ export default {
       });
     }
 
+    // GET /v1/push/vapid-public-key — Public Web Push VAPID key discovery for iOS 16.4+ / desktop PWAs
+    if (request.method === "GET" && path === "/v1/push/vapid-public-key") {
+      const vapidPublicKey = String(env.VAPID_PUBLIC_KEY || "").trim();
+      return jsonResponse({
+        ok: true,
+        enabled: Boolean(vapidPublicKey),
+        vapidPublicKey,
+      });
+    }
+
+    // POST & DELETE /v1/push/subscribe — Authenticated Web Push subscription management
+    if (path === "/v1/push/subscribe" && (request.method === "POST" || request.method === "DELETE")) {
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: "Invalid JSON" }, 400);
+      }
+
+      const username = normalizeUsername(
+        url.searchParams.get("username") || request.headers.get("X-PM-Username") || body.username || ""
+      );
+      if (!USERNAME_RE.test(username)) {
+        return jsonResponse({ error: "Invalid username" }, 400);
+      }
+
+      const userRow = await env.DB.prepare(
+        "SELECT public_key_b64, auth_verifier_hash FROM users WHERE username = ?"
+      )
+        .bind(username)
+        .first();
+      if (!userRow) return jsonResponse({ error: "Unauthorized" }, 401);
+
+      const authRes = await verifyUserRequestAuth(request, env, username, userRow, body);
+      if (!authRes.ok) {
+        return jsonResponse({ error: "Unauthorized push subscription access" }, 401);
+      }
+
+      const sub = body.subscription && typeof body.subscription === "object" ? body.subscription : body;
+      const endpoint = String(sub.endpoint || "").trim();
+
+      if (request.method === "DELETE") {
+        if (endpoint) {
+          await env.DB.prepare("DELETE FROM push_subscriptions WHERE username = ? AND endpoint = ?")
+            .bind(username, endpoint)
+            .run();
+        } else {
+          await env.DB.prepare("DELETE FROM push_subscriptions WHERE username = ?")
+            .bind(username)
+            .run();
+        }
+        return jsonResponse({ ok: true, unsubscribed: true });
+      }
+
+      const keys = sub.keys && typeof sub.keys === "object" ? sub.keys : {};
+      const p256dh = String(keys.p256dh || "").trim();
+      const auth = String(keys.auth || "").trim();
+      if (!endpoint.startsWith("https://") || endpoint.length > 2048 || !p256dh || !auth) {
+        return jsonResponse({ error: "Invalid Web Push subscription payload" }, 400);
+      }
+
+      const allowed = await checkRateLimit(env.DB, `push_sub:${username}:${clientIp}`, 30, 60 * 60 * 1000);
+      if (!allowed) return jsonResponse({ error: "Rate limit exceeded" }, 429);
+
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO push_subscriptions (username, endpoint, p256dh, auth, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           username = excluded.username,
+           p256dh = excluded.p256dh,
+           auth = excluded.auth,
+           updated_at = excluded.updated_at`
+      )
+        .bind(username, endpoint, p256dh, auth, now, now)
+        .run();
+
+      // FIFO cap at 5 push subscriptions per username
+      const cntRow = await env.DB.prepare(
+        "SELECT COUNT(*) AS cnt FROM push_subscriptions WHERE username = ?"
+      )
+        .bind(username)
+        .first();
+      const cnt = Number(cntRow?.cnt || 0);
+      if (cnt > 5) {
+        await env.DB.prepare(
+          `DELETE FROM push_subscriptions WHERE id IN (
+             SELECT id FROM push_subscriptions WHERE username = ? ORDER BY updated_at ASC LIMIT ?
+           )`
+        )
+          .bind(username, cnt - 5)
+          .run();
+      }
+
+      return jsonResponse({ ok: true, subscribed: true });
+    }
+
     return jsonResponse({ error: "Not found" }, 404);
   },
 };

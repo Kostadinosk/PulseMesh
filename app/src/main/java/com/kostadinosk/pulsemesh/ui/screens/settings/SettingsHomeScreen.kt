@@ -17,29 +17,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kostadinosk.pulsemesh.R
 import com.kostadinosk.pulsemesh.crypto.AppLockTimeout
 import com.kostadinosk.pulsemesh.model.BatteryPowerProfile
 import com.kostadinosk.pulsemesh.ui.theme.LocalPulsePalette
+import com.kostadinosk.pulsemesh.util.AppStrings
 import com.kostadinosk.pulsemesh.util.AppTheme
 import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 
 enum class SettingsCategory(
     val title: String,
+    val titleResId: Int,
     val subtitle: String,
     val keywords: String,
     val icon: ImageVector
 ) {
-    IDENTITY("Identity & Account", "Callsign, @username claim, cloud backup", "identity callsign username backup pin recovery", Icons.Default.Badge),
-    SECURITY("Security & Privacy", "App Lock, biometric, E2EE keys, Double Ratchet, duress", "security lock biometric pin e2ee ratchet key duress wipe", Icons.Default.Lock),
-    VOICE("Voice & Audio", "Hardware PTT, audio route, clarity DSP, Bell 202", "voice ptt bluetooth audio mic clarity bell202", Icons.Default.RecordVoiceOver),
-    NETWORK("Network & Mesh", "Battery profile, hotspot web portal, relay", "network mesh battery hotspot portal relay ble wifi", Icons.Default.Hub),
-    APPEARANCE("Appearance & Layout", "Material 3 Dynamic Color, themes, Tactical HUD", "theme material3 aero dark light hud layout simple pro", Icons.Default.Palette),
-    DIAGNOSTICS("Diagnostics & Storage", "Room DB, DTN store-and-forward, updates", "diagnostics storage dtn room updates logs", Icons.Default.Tune)
+    IDENTITY("Identity & Account", R.string.settings_cat_identity, "Callsign, optional @username (recommended), cloud backup", "identity callsign username backup pin recovery", Icons.Default.Badge),
+    SECURITY("Security & Privacy", R.string.settings_cat_security, "App Lock, biometric, E2EE keys, Double Ratchet, duress", "security lock biometric pin e2ee ratchet key duress wipe", Icons.Default.Lock),
+    VOICE("Voice & Audio", R.string.settings_cat_voice, "Hardware PTT, audio route, clarity DSP, Bell 202", "voice ptt bluetooth audio mic clarity bell202", Icons.Default.RecordVoiceOver),
+    NETWORK("Network & Mesh", R.string.settings_cat_network, "Battery profile, hotspot web portal, relay", "network mesh battery hotspot portal relay ble wifi", Icons.Default.Hub),
+    APPEARANCE("Appearance & Layout", R.string.settings_cat_appearance, "Material 3 Dynamic Color, themes, Tactical HUD", "theme material3 aero dark light hud layout simple pro", Icons.Default.Palette),
+    DIAGNOSTICS("Diagnostics & Storage", R.string.settings_cat_diagnostics, "Room DB, DTN store-and-forward, updates", "diagnostics storage dtn room updates logs", Icons.Default.Tune)
 }
 
 /**
@@ -63,15 +67,18 @@ fun SettingsHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     var newLockPin by remember { mutableStateOf("") }
 
-    val filteredCategories = remember(searchQuery) {
+    val filteredCategories = remember(searchQuery, state.appLanguage) {
         val q = searchQuery.trim().lowercase()
         if (q.isBlank()) SettingsCategory.entries
         else SettingsCategory.entries.filter {
+            val localizedTitle = AppStrings.resolve(context, state.appLanguage, it.titleResId).lowercase()
             it.title.lowercase().contains(q) ||
+                localizedTitle.contains(q) ||
                 it.subtitle.lowercase().contains(q) ||
                 it.keywords.contains(q)
         }
@@ -92,7 +99,7 @@ fun SettingsHomeScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search settings (App Lock, Battery, Material 3, PTT...)") },
+            placeholder = { Text(AppStrings.resolve(context, state.appLanguage, R.string.settings_search_hint)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -117,6 +124,7 @@ fun SettingsHomeScreen(
         ) {
             filteredCategories.forEach { cat ->
                 val isSelected = selectedCategory == cat
+                val localizedTitle = AppStrings.resolve(context, state.appLanguage, cat.titleResId)
                 Surface(
                     color = if (isSelected) p.emerald.copy(alpha = 0.2f) else p.surfaceVariant,
                     shape = RoundedCornerShape(50),
@@ -134,7 +142,7 @@ fun SettingsHomeScreen(
                     ) {
                         Icon(cat.icon, contentDescription = null, tint = if (isSelected) p.emerald else p.cyan, modifier = Modifier.size(14.dp))
                         Text(
-                            text = cat.title.substringBefore(" "),
+                            text = localizedTitle.substringBefore(" "),
                             color = if (isSelected) p.emerald else p.textPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -157,7 +165,8 @@ fun SettingsHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = selectedCategory?.title?.uppercase() ?: "PULSEMESH v1.5 CONTROLS",
+                        text = selectedCategory?.let { AppStrings.resolve(context, state.appLanguage, it.titleResId).uppercase() }
+                            ?: "PULSEMESH v1.5 CONTROLS",
                         color = p.cyan,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,

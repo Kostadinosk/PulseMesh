@@ -279,6 +279,13 @@ data class MeshUiState(
     val conferencePeers: List<ConferencePeerStatus> = emptyList(),
     val voiceCodecStats: com.kostadinosk.pulsemesh.voice.VoiceCodecStats = com.kostadinosk.pulsemesh.voice.VoiceCodecStats(),
 
+    // PulseMesh v1.5.5 Map 2.0 CoT, LoRa Hardware Bridge, Verified Updater & Acoustic 2.0 State
+    val isCotBridgeEnabled: Boolean = false,
+    val loraBridgeState: com.kostadinosk.pulsemesh.service.LoraBridgeState = com.kostadinosk.pulsemesh.service.LoraBridgeState(),
+    val apkUpdateInstallState: com.kostadinosk.pulsemesh.service.ApkUpdateInstallState = com.kostadinosk.pulsemesh.service.ApkUpdateInstallState(),
+    val lastQrPairingStatus: String = "",
+    val acousticV2EncryptedEnabled: Boolean = true,
+
     // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Settings)
     val selectedTabIndex: Int = 0
 )
@@ -532,6 +539,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_KEY_VERIFY -> "KEY_VERIFY"
                 else -> "CHAT"
             }
+            val transportLabel = if (frame.isEncrypted) {
+                if (frame.fecCorrectedBytes > 0) "ACOUSTIC 2.0 (E2EE+RS:${frame.fecCorrectedBytes}B)"
+                else "ACOUSTIC 2.0 (E2EE)"
+            } else {
+                "ACOUSTIC BELL202"
+            }
             val pkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
                 packetId = "b202_${frame.srcNodeIdHex}_${System.currentTimeMillis()}",
                 srcNodeId = frame.srcNodeIdHex,
@@ -539,14 +552,24 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 dstNodeId = "ALL",
                 type = pktType,
                 payload = frame.text.ifBlank { "Bell 202 AFSK Signal" },
-                sourceTransport = "ACOUSTIC BELL202",
+                sourceTransport = transportLabel,
                 rssiDbm = -48
             )
             viewModelScope.launch(Dispatchers.Main) {
                 handleIncomingPacket(pkt)
             }
-        }
+        },
+        channelPassphraseProvider = { _uiState.value.meshPassphrase }
     )
+
+    val loraBridge = com.kostadinosk.pulsemesh.service.LoraCompanionBridge(
+        context = application,
+        scope = viewModelScope,
+        onMessageReceived = { msg -> onLoraMessageReceived(msg) }
+    )
+
+    private var cotBridge: com.kostadinosk.pulsemesh.map.AtakCotUdpBridge? = null
+    private var lastNfcIdentityKey: String = ""
 
     private var ringSignalRepeatJob: Job? = null
     private var acceptSignalRetryJob: Job? = null
@@ -1342,6 +1365,28 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        // Sync LoRa Companion Bridge, Verified APK Updater state, and NFC Tap-to-Pair Identity Payload
+        viewModelScope.launch {
+            loraBridge.state.collect { lState ->
+                _uiState.update { it.copy(loraBridgeState = lState) }
+            }
+        }
+        viewModelScope.launch {
+            com.kostadinosk.pulsemesh.service.VerifiedApkUpdater.status.collect { uState ->
+                _uiState.update { it.copy(apkUpdateInstallState = uState) }
+            }
+        }
+        syncNfcPairingPayload()
+        viewModelScope.launch {
+            _uiState.collect { st ->
+                val fpKey = "${st.localNodeId}|${st.operatorCallsign}|${st.claimedUsername}|${st.x25519PublicKey}"
+                if (fpKey != lastNfcIdentityKey) {
+                    lastNfcIdentityKey = fpKey
+                    syncNfcPairingPayload()
+                }
+            }
+        }
     }
 
     private fun buildMergedNodesList(currentSelfNodes: List<MeshNode>): List<MeshNode> {
@@ -1998,6 +2043,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             timestamp = now
         )
         sendOmniPacket(wirePacket)
+        if (state.isCotBridgeEnabled) {
+            cotBridge?.sendCotXml(com.kostadinosk.pulsemesh.map.AtakCotInterop.encodeWaypointToCotXml(newWp))
+        }
         triggerHaptic(60)
     }
 
@@ -4318,6 +4366,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             if (state.isInternetEnabled) {
                 meshNetworkService.broadcastPacket(filteredPacket)
             }
+            if (loraBridge.state.value.isConnected && filteredPacket.payload.isNotBlank()) {
+                when {
+                    filteredPacket.type == "SOS" -> loraBridge.sendTextFrame(filteredPacket.payload.take(180))
+                    filteredPacket.type == "CHAT" && filteredPacket.payload.length <= 180 -> loraBridge.sendTextFrame(filteredPacket.payload)
+                }
+            }
         } else {
             // Directed DM / peer-specific packet: send on lowest-cost link first, escalate on ACK timeout
             val primaryTier = plan.orderedTiers.first()
@@ -4506,8 +4560,229 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_CHAT
         }
         val cleanText = text.trim().ifBlank { if (isSos) "SOS from ${st.operatorCallsign}" else "PulseMesh Bell202 Ping (${st.operatorCallsign})" }
-        bell202Modem.transmitMessage(typeByte, st.localNodeId, cleanText)
+        if (st.acousticV2EncryptedEnabled) {
+            bell202Modem.transmitEncryptedMessage(typeByte, st.localNodeId, cleanText, st.meshPassphrase)
+        } else {
+            bell202Modem.transmitMessage(typeByte, st.localNodeId, cleanText, encryptedV2 = false)
+        }
         triggerHaptic(50)
+    }
+
+    fun syncNfcPairingPayload() {
+        runCatching {
+            com.kostadinosk.pulsemesh.service.NfcPairingPayloadStore.activePairingPayload = buildInstantJoinQrPayload()
+        }
+    }
+
+    fun handleQrPairingAction(action: com.kostadinosk.pulsemesh.util.QrPairingAction): Pair<Boolean, String> {
+        val selfNorm = normalizeId(_uiState.value.localNodeId)
+        val result: Pair<Boolean, String> = when (action) {
+            is com.kostadinosk.pulsemesh.util.QrPairingAction.AddContact -> {
+                val peerId = action.nodeId.trim()
+                if (peerId.isBlank() || normalizeId(peerId) == selfNorm) {
+                    Pair(false, "Pairing payload does not contain a valid remote peer Node ID.")
+                } else {
+                    val peerCs = action.callsign.trim().ifBlank { peerId }
+                    val peerUser = TacticalE2eeManager.normalizeUsername(action.username)
+                    if (action.publicKeyBase64.isNotBlank() && TacticalE2eeManager.isValidEcPublicKeyBase64(action.publicKeyBase64)) {
+                        prefs.verifyOrTrustPeerPublicKey(peerId, action.publicKeyBase64)
+                    }
+                    if (peerUser.length >= 3) {
+                        prefs.saveUsernameClaim(
+                            com.kostadinosk.pulsemesh.crypto.UsernameClaimRecord(
+                                username = peerUser,
+                                displayName = peerCs,
+                                nodeId = peerId,
+                                publicKeyBase64 = action.publicKeyBase64,
+                                saltHex = "",
+                                pinHash = "",
+                                recoveryHash = "",
+                                claimedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    registerOrUpdatePeerInstant(
+                        peerNodeId = peerId,
+                        callsign = peerCs,
+                        sourceTransport = "QR / NFC TRUSTED",
+                        forceImmediateUiUpdate = true
+                    )
+                    refreshConversationsList()
+                    Pair(true, "Verified & paired peer $peerCs ($peerId)")
+                }
+            }
+            is com.kostadinosk.pulsemesh.util.QrPairingAction.VerifySafetyNumber -> {
+                val cleanExpected = action.expectedFingerprint.uppercase().replace(Regex("[^0-9A-F]"), "")
+                val storedKey = prefs.getPendingChangedPeerPublicKey(action.nodeId)
+                    ?: prefs.getPeerPublicKey(action.nodeId)
+                    .orEmpty()
+                if (cleanExpected.isBlank() || storedKey.isBlank()) {
+                    Pair(false, "No public key on record for ${action.nodeId} to verify.")
+                } else {
+                    val pairFp = TacticalE2eeManager.computePairwiseSafetyFingerprint(prefs.x25519PublicKey, storedKey)
+                        .uppercase().replace(Regex("[^0-9A-F]"), "")
+                    val rawFp = TacticalE2eeManager.deriveFingerprint(storedKey)
+                        .uppercase().replace(Regex("[^0-9A-F]"), "")
+                    if (cleanExpected == pairFp || cleanExpected == rawFp) {
+                        acceptChangedPeerKey(action.nodeId)
+                        Pair(true, "Safety number verified for ${action.nodeId}")
+                    } else {
+                        Pair(false, "Safety number mismatch for ${action.nodeId}!")
+                    }
+                }
+            }
+            is com.kostadinosk.pulsemesh.util.QrPairingAction.JoinGroup -> {
+                val gid = action.groupId.trim()
+                if (gid.isBlank()) {
+                    Pair(false, "Group invite QR missing group ID.")
+                } else {
+                    val inviterId = action.inviterNodeId.trim()
+                    if (inviterId.isNotBlank() && normalizeId(inviterId) != selfNorm) {
+                        if (action.inviterPublicKeyBase64.isNotBlank() &&
+                            TacticalE2eeManager.isValidEcPublicKeyBase64(action.inviterPublicKeyBase64)
+                        ) {
+                            prefs.verifyOrTrustPeerPublicKey(inviterId, action.inviterPublicKeyBase64)
+                        }
+                        registerOrUpdatePeerInstant(
+                            peerNodeId = inviterId,
+                            callsign = action.inviterCallsign.ifBlank { inviterId },
+                            sourceTransport = "QR / NFC GROUP INVITE",
+                            forceImmediateUiUpdate = true
+                        )
+                    }
+                    if (action.keyBase64.isNotBlank()) {
+                        prefs.saveGroupAesKey(gid, action.keyBase64)
+                    }
+                    val selfId = _uiState.value.localNodeId
+                    val existing = _uiState.value.meshGroups.firstOrNull { it.groupId == gid }
+                    val mergedMembers = ((existing?.memberIds ?: emptyList()) + action.memberIds + listOfNotNull(selfId, inviterId.takeIf { it.isNotBlank() })).distinct()
+                    val mergedGroup = MeshGroup(
+                        groupId = gid,
+                        groupName = action.groupName.ifBlank { "Group $gid" },
+                        memberIds = mergedMembers,
+                        groupKeyBase64 = action.keyBase64.ifBlank { existing?.groupKeyBase64.orEmpty() },
+                        keyEpoch = maxOf(existing?.keyEpoch ?: 1, action.keyEpoch)
+                    )
+                    val updatedGroups = _uiState.value.meshGroups.filterNot { it.groupId == gid } + mergedGroup
+                    prefs.saveMeshGroups(updatedGroups)
+                    _uiState.update { it.copy(meshGroups = updatedGroups) }
+                    refreshConversationsList()
+                    Pair(true, "Joined E2EE group \"${mergedGroup.groupName}\"")
+                }
+            }
+            is com.kostadinosk.pulsemesh.util.QrPairingAction.JoinWifiHotspot -> {
+                val portalNote = if (action.portalUrl.isNotBlank()) " -> Portal ${action.portalUrl}" else ""
+                Pair(true, "Hotspot QR decoded: SSID '${action.ssid}'$portalNote")
+            }
+        }
+        _uiState.update { it.copy(lastQrPairingStatus = result.second) }
+        if (result.first) triggerHaptic(45)
+        return result
+    }
+
+    fun setCotBridgeEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(isCotBridgeEnabled = enabled) }
+        if (enabled) {
+            val bridge = cotBridge ?: com.kostadinosk.pulsemesh.map.AtakCotUdpBridge(viewModelScope).also { cotBridge = it }
+            bridge.startListening { ev ->
+                val wpType = when {
+                    ev.type.startsWith("a-h", ignoreCase = true) -> WaypointType.HAZARD
+                    ev.type.startsWith("b-a", ignoreCase = true) -> WaypointType.SOS
+                    else -> WaypointType.RALLY
+                }
+                val wpId = "COT-${ev.uid.take(24)}"
+                val wp = TacticalWaypoint(
+                    id = wpId,
+                    title = ev.callsign.ifBlank { ev.uid },
+                    type = wpType,
+                    latitude = ev.lat,
+                    longitude = ev.lon,
+                    creatorCallsign = "ATAK CoT",
+                    timestamp = System.currentTimeMillis(),
+                    payloadHex = ev.type
+                )
+                viewModelScope.launch(Dispatchers.Main) {
+                    _uiState.update { cur ->
+                        cur.copy(waypoints = cur.waypoints.filterNot { it.id == wp.id } + wp)
+                    }
+                }
+            }
+        } else {
+            cotBridge?.stop()
+        }
+    }
+
+    fun onLoraMessageReceived(msg: com.kostadinosk.pulsemesh.service.LoraDecodedMessage) {
+        val raw = msg.text.trim()
+        if (raw.isEmpty()) return
+        if (raw.startsWith("{") || com.kostadinosk.pulsemesh.service.CompactMeshProtocol.isCompactLine(raw)) {
+            viewModelScope.launch(Dispatchers.Main) {
+                handleIncomingRawJson(raw, "LORA ${msg.protocol.name}", msg.rssiDbm)
+            }
+            return
+        }
+        val pkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
+            packetId = "lora_${msg.senderNodeHex}_${System.currentTimeMillis()}",
+            srcNodeId = msg.senderNodeHex,
+            srcCallsign = "LoRa-${msg.senderNodeHex}",
+            dstNodeId = "ALL",
+            type = if (raw.startsWith("SOS", ignoreCase = true)) "SOS" else "CHAT",
+            payload = raw,
+            sourceTransport = "LORA ${msg.protocol.name}",
+            rssiDbm = msg.rssiDbm ?: -95
+        )
+        viewModelScope.launch(Dispatchers.Main) {
+            handleIncomingPacket(pkt)
+        }
+    }
+
+    fun toggleLoraBridge() {
+        val st = loraBridge.state.value
+        if (st.isEnabled || st.isConnected) {
+            loraBridge.disconnect()
+        } else {
+            loraBridge.scanAndConnect()
+        }
+        triggerHaptic(30)
+    }
+
+    fun selectLoraProtocol(protocol: com.kostadinosk.pulsemesh.service.LoraProtocol) {
+        loraBridge.setProtocol(protocol)
+    }
+
+    fun scanLoraDevices() {
+        loraBridge.scanAndConnect()
+    }
+
+    fun downloadAndInstallVerifiedUpdate() {
+        val upd = _uiState.value.availableUpdate ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            com.kostadinosk.pulsemesh.service.VerifiedApkUpdater.downloadVerifyAndInstall(
+                context = getApplication(),
+                update = upd
+            )
+        }
+    }
+
+    fun importGpxOrKmlContent(rawXml: String): Pair<Boolean, String> {
+        val imported = com.kostadinosk.pulsemesh.map.GpxKmlInterop.parseGpxOrKml(rawXml)
+        if (imported.waypoints.isEmpty() && imported.trackPoints.isEmpty()) {
+            return Pair(false, "No GPX/KML waypoints or tracks found.")
+        }
+        val existingIds = _uiState.value.waypoints.map { it.id }.toSet()
+        val newWps = imported.waypoints.filterNot { it.id in existingIds }
+        val mergedBreadcrumbs = (_uiState.value.breadcrumbs + imported.trackPoints).takeLast(500)
+        if (imported.trackPoints.isNotEmpty()) {
+            prefs.saveBreadcrumbs(mergedBreadcrumbs)
+        }
+        _uiState.update { cur ->
+            cur.copy(
+                waypoints = cur.waypoints + newWps,
+                breadcrumbs = mergedBreadcrumbs
+            )
+        }
+        triggerHaptic(35)
+        return Pair(true, "Imported ${newWps.size} waypoints & ${imported.trackPoints.size} track points.")
     }
 
     /**
@@ -7402,6 +7677,50 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         triggerHaptic(25)
     }
 
+    fun onPermissionsResult(results: Map<String, Boolean>) {
+        val ctx: Context = getApplication()
+        fun isGranted(perm: String): Boolean =
+            results[perm] == true ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    ctx,
+                    perm
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val radiosGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            isGranted(android.Manifest.permission.BLUETOOTH_SCAN) ||
+                isGranted(android.Manifest.permission.BLUETOOTH_CONNECT) ||
+                isGranted(android.Manifest.permission.BLUETOOTH_ADVERTISE) ||
+                (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                    isGranted(android.Manifest.permission.NEARBY_WIFI_DEVICES))
+        } else {
+            true
+        }
+        val micGranted = isGranted(android.Manifest.permission.RECORD_AUDIO)
+        val locationGranted = isGranted(android.Manifest.permission.ACCESS_FINE_LOCATION) ||
+            isGranted(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        _uiState.update {
+            it.copy(
+                hasRequiredPermissions = radiosGranted && micGranted,
+                showPermissionsBanner = !(radiosGranted && micGranted)
+            )
+        }
+        if (radiosGranted) {
+            offGridBleEngine.initIfReady()
+            if (prefs.isBackgroundRelayServiceEnabled) {
+                syncBackgroundRelayService()
+            }
+        }
+        if (locationGranted) {
+            requestGpsUpdates()
+        }
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q ||
+            isGranted(android.Manifest.permission.ACTIVITY_RECOGNITION)
+        ) {
+            sensorService.start()
+        }
+    }
+
     fun onPermissionsResult(allGranted: Boolean) {
         _uiState.update {
             it.copy(
@@ -7411,6 +7730,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (allGranted) {
             offGridBleEngine.initIfReady()
+            if (prefs.isBackgroundRelayServiceEnabled) {
+                syncBackgroundRelayService()
+            }
+            requestGpsUpdates()
         }
     }
 
@@ -9192,6 +9515,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { statusTts?.stop(); statusTts?.shutdown() }
         statusTts = null
         ultrasonicModem.stopListeningLoop()
+        bell202Modem.setListening(false)
+        cotBridge?.stop()
+        loraBridge.disconnect()
         audioService.release()
         tacticalCallService.release()
         gpsService.stopWatchingLocation()

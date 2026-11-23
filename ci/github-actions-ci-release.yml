@@ -9,7 +9,7 @@ on:
 
 jobs:
   verify-and-build:
-    name: Test, FOSS Audit & Release Build
+    name: Test, FOSS Audit, Web PWA Sync & Dual-Flavor Release Build
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +22,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Audit zero proprietary dependencies (F-Droid Inclusion Policy)
         run: |
           if grep -iE "com\.google\.android\.gms|com\.google\.firebase|crashlytics|play-services" app/build.gradle.kts gradle/libs.versions.toml; then
@@ -31,24 +36,35 @@ jobs:
           grep -q "includeInApk = false" app/build.gradle.kts || (echo "ERROR: dependenciesInfo must be disabled for F-Droid" && exit 1)
           echo "FOSS & F-Droid dependency audit passed."
 
-      - name: Validate Web PWA & Cloudflare Worker JavaScript syntax
+      - name: Build, sync & test modular Vite Web/iPhone PWA
         run: |
+          npm --prefix web-pwa ci
+          npm --prefix web-pwa run build:sync
+          npm --prefix web-pwa test
+          diff -q app/src/main/assets/pulsemesh_web.html docs/web/index.html
           node --check docs/web/sw.js
           node --check cloudflare-username-relay/worker.js
-          python3 -c "import re; html=open('docs/web/index.html').read(); m=re.findall(r'<script>(.*?)</script>', html, re.S); open('/tmp/pm_web_ci.js','w').write('\n'.join(m))"
-          node --check /tmp/pm_web_ci.js
 
       - name: Grant Gradle wrapper execute permission
         run: chmod +x gradlew
 
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Run Lite and Full unit test suites sequentially
+        run: |
+          ./gradlew :app:testLiteDebugUnitTest --no-daemon
+          ./gradlew :app:testFullDebugUnitTest --no-daemon
 
-      - name: Build unsigned/signed F-Droid compatible Release APK
-        run: ./gradlew :app:assembleRelease --no-daemon
+      - name: Build F-Droid compatible Lite & Full Release APKs
+        run: ./gradlew :app:assembleLiteRelease :app:assembleFullRelease --no-daemon
 
-      - name: Upload Release APK artifact
+      - name: Generate SHA-256 checksums for verified in-app updater
+        run: |
+          sha256sum app/build/outputs/apk/lite/release/*.apk app/build/outputs/apk/full/release/*.apk | tee SHA256SUMS.txt
+
+      - name: Upload Release APK & Checksum artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pulsemesh-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: pulsemesh-release-apks
+          path: |
+            app/build/outputs/apk/lite/release/*.apk
+            app/build/outputs/apk/full/release/*.apk
+            SHA256SUMS.txt

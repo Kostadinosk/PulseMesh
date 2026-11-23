@@ -164,6 +164,20 @@ object NativeTileMapManager {
                     }
                 }
 
+                // Check installed offline .mbtiles packs before falling back to online/gateway fetches
+                val mbtilesBytes = com.kostadinosk.pulsemesh.map.OfflineMapPackManager.readFirstMatchingMbtilesTile(context, z, x, y)
+                if (mbtilesBytes != null && mbtilesBytes.isNotEmpty()) {
+                    val bmp = BitmapFactory.decodeByteArray(mbtilesBytes, 0, mbtilesBytes.size)
+                    if (bmp != null) {
+                        val imgBmp = bmp.asImageBitmap()
+                        tileCache.put(key, imgBmp)
+                        withContext(Dispatchers.Main) {
+                            onTileLoaded(z, x, y, imgBmp)
+                        }
+                        return@launch
+                    }
+                }
+
                 // If offline and not on disk, check whether an internet-connected Gateway Peer can proxy the tile
                 val gwProxyBase = if (!isInternetEnabled) gatewayTileProxyBaseUrl?.invoke()?.trimEnd('/') else null
                 if (!isInternetEnabled && gwProxyBase.isNullOrBlank()) {

@@ -15,7 +15,11 @@ data class AppUpdateInfo(
     val releaseTitle: String,
     val releaseNotesSnippet: String,
     val apkDownloadUrl: String,
-    val releasePageUrl: String
+    val releasePageUrl: String,
+    val apkFileName: String = "",
+    val sha256Url: String = "",
+    val expectedSha256Hex: String = "",
+    val flavorMatched: String = ""
 )
 
 /**
@@ -52,7 +56,10 @@ object AppUpdateChecker {
         return cleaned.split('.').mapNotNull { it.toIntOrNull() }
     }
 
-    suspend fun checkForUpdate(currentVersion: String): Result<AppUpdateInfo?> = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(
+        currentVersion: String,
+        flavorTier: String = com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER
+    ): Result<AppUpdateInfo?> = withContext(Dispatchers.IO) {
         runCatching {
             val conn = (URL(LATEST_RELEASE_API).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -67,14 +74,18 @@ object AppUpdateChecker {
                     throw IllegalStateException("GitHub API HTTP $code")
                 }
                 val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                parseReleaseJson(body, currentVersion)
+                parseReleaseJson(body, currentVersion, flavorTier)
             } finally {
                 runCatching { conn.disconnect() }
             }
         }
     }
 
-    internal fun parseReleaseJson(jsonBody: String, currentVersion: String): AppUpdateInfo? {
+    internal fun parseReleaseJson(
+        jsonBody: String,
+        currentVersion: String,
+        flavorTier: String = com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER
+    ): AppUpdateInfo? {
         val obj = JSONObject(jsonBody)
         val tag = obj.optString("tag_name").trim()
         if (tag.isBlank() || !isNewerVersion(tag, currentVersion)) return null
@@ -90,20 +101,66 @@ object AppUpdateChecker {
             .joinToString(" • ")
             .take(180)
 
+        val flavorNorm = flavorTier.trim().lowercase().ifBlank { "lite" }
         var apkUrl = htmlUrl
+        var apkFileName = ""
+        var bestApkRank = Int.MAX_VALUE
+
+        val shaCandidates = mutableListOf<Pair<String, String>>() // lowerName -> url
         val assets = obj.optJSONArray("assets")
         if (assets != null) {
             for (i in 0 until assets.length()) {
                 val a = assets.optJSONObject(i) ?: continue
-                val name = a.optString("name").lowercase()
-                val dl = a.optString("browser_download_url")
-                if (name == "app-release.apk" && dl.isNotBlank()) {
-                    apkUrl = dl
-                    break
-                } else if (name.endsWith(".apk") && !name.contains("debug") && dl.isNotBlank()) {
-                    apkUrl = dl
+                val origName = a.optString("name").trim()
+                val lowerName = origName.lowercase()
+                val dl = a.optString("browser_download_url").trim()
+                if (dl.isBlank()) continue
+
+                if (lowerName.endsWith(".apk") && !lowerName.contains("debug")) {
+                    val rank = when {
+                        lowerName.contains(flavorNorm) -> 0
+                        lowerName == "app-release.apk" -> 1
+                        else -> 2
+                    }
+                    if (rank < bestApkRank) {
+                        bestApkRank = rank
+                        apkUrl = dl
+                        apkFileName = origName
+                    }
+                } else if (
+                    lowerName.endsWith(".sha256") ||
+                    lowerName == "sha256sums.txt" ||
+                    lowerName == "checksums.txt" ||
+                    lowerName == "sha256sums"
+                ) {
+                    shaCandidates.add(Pair(lowerName, dl))
                 }
             }
+        }
+
+        val apkLower = apkFileName.lowercase()
+        val sha256Url = shaCandidates.firstOrNull { (n, _) ->
+            apkLower.isNotBlank() && n == "$apkLower.sha256"
+        }?.second
+            ?: shaCandidates.firstOrNull { (n, _) ->
+                n.endsWith(".sha256") && n.contains(flavorNorm)
+            }?.second
+            ?: shaCandidates.firstOrNull { (n, _) ->
+                n == "sha256sums.txt" || n == "checksums.txt" || n == "sha256sums"
+            }?.second
+            ?: shaCandidates.firstOrNull { (n, _) ->
+                n.endsWith(".sha256") && !n.contains("debug")
+            }?.second
+            ?: ""
+
+        val inlineSha = if (apkFileName.isNotBlank()) {
+            VerifiedApkUpdater.parseExpectedSha256ForAsset(
+                checksumText = rawNotes,
+                assetFileName = apkFileName,
+                requireFilenameMatch = true
+            ).orEmpty()
+        } else {
+            ""
         }
 
         return AppUpdateInfo(
@@ -112,7 +169,11 @@ object AppUpdateChecker {
             releaseTitle = title,
             releaseNotesSnippet = snippet,
             apkDownloadUrl = apkUrl,
-            releasePageUrl = htmlUrl
+            releasePageUrl = htmlUrl,
+            apkFileName = apkFileName,
+            sha256Url = sha256Url,
+            expectedSha256Hex = inlineSha,
+            flavorMatched = if (bestApkRank == 0) flavorNorm else ""
         )
     }
 }

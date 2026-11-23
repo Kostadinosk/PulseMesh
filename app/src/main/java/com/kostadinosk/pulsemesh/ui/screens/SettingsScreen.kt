@@ -36,7 +36,9 @@ import com.kostadinosk.pulsemesh.model.LocationShareMode
 import com.kostadinosk.pulsemesh.model.PhoneModelProfile
 import com.kostadinosk.pulsemesh.ui.components.AeroGlossBadgeIcon
 import com.kostadinosk.pulsemesh.ui.components.ProMeshRssiChartCard
+import com.kostadinosk.pulsemesh.R
 import com.kostadinosk.pulsemesh.ui.theme.*
+import com.kostadinosk.pulsemesh.util.AppStrings
 import com.kostadinosk.pulsemesh.util.AppTheme
 import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 
@@ -118,6 +120,11 @@ fun SettingsScreen(
     onSetAppLockPin: (String) -> Unit = {},
     onSetBiometricUnlock: (Boolean) -> Unit = {},
     onClearAppLock: () -> Unit = {},
+    onOpenQrScanner: () -> Unit = {},
+    onStartVerifiedUpdate: () -> Unit = {},
+    onToggleLoraBridge: () -> Unit = {},
+    onSelectLoraProtocol: (com.kostadinosk.pulsemesh.service.LoraProtocol) -> Unit = {},
+    onScanLoraDevices: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -1278,6 +1285,52 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
+
+                                    val apkBeamUrl = "${state.webPortalStatus.portalUrl.trimEnd('/')}/download/pulsemesh.apk"
+                                    Surface(
+                                        color = p.surfaceVariant,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, CyanGateway.copy(alpha = 0.4f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = AppStrings.resolve(context, state.appLanguage, R.string.apk_beaming_title),
+                                                    color = CyanGateway,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 10.sp
+                                                )
+                                                Text(
+                                                    text = apkBeamUrl,
+                                                    color = p.textSecondary,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 9.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh APK Beam URL", apkBeamUrl))
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                modifier = Modifier.testTag("apk_beam_copy_btn")
+                                            ) {
+                                                Text(
+                                                    text = AppStrings.resolve(context, state.appLanguage, R.string.apk_beaming_copy),
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1741,6 +1794,85 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+        }
+        ElevatedCard(
+            shape = cardShape,
+            colors = CardDefaults.elevatedCardColors(containerColor = p.card),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, if (state.loraBridgeState.isConnected) p.emerald else p.border, cardShape)
+                .testTag("lora_bridge_card")
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = AppStrings.resolve(context, state.appLanguage, R.string.lora_bridge_title),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = if (state.loraBridgeState.isConnected) p.emerald else p.cyan
+                    )
+                )
+                Text(
+                    text = AppStrings.resolve(context, state.appLanguage, R.string.lora_bridge_subtitle),
+                    style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    com.kostadinosk.pulsemesh.service.LoraProtocol.entries.forEach { proto ->
+                        val selected = state.loraBridgeState.protocol == proto
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelectLoraProtocol(proto) },
+                            label = { Text(proto.name, fontSize = 9.5.sp, fontWeight = FontWeight.Bold) },
+                            modifier = Modifier.testTag("lora_proto_${proto.name.lowercase()}")
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onToggleLoraBridge,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (state.loraBridgeState.isConnected || state.loraBridgeState.isEnabled) p.red else p.emerald,
+                            contentColor = if (state.loraBridgeState.isConnected || state.loraBridgeState.isEnabled) Color.White else Color.Black
+                        ),
+                        modifier = Modifier.weight(1f).testTag("lora_connect_btn")
+                    ) {
+                        Text(
+                            text = AppStrings.resolve(
+                                context,
+                                state.appLanguage,
+                                if (state.loraBridgeState.isConnected || state.loraBridgeState.isEnabled) R.string.lora_disconnect else R.string.lora_connect_usb_ble
+                            ),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onScanLoraDevices,
+                        modifier = Modifier.testTag("lora_rescan_btn")
+                    ) {
+                        Text(
+                            text = AppStrings.resolve(context, state.appLanguage, R.string.lora_rescan),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                val lState = state.loraBridgeState
+                Text(
+                    text = "${lState.statusText} • TX:${lState.txFrames} RX:${lState.rxFrames}" +
+                        (lState.lastRssiDbm?.let { " • RSSI:${it}dBm" } ?: "") +
+                        (lState.lastSnrDb?.let { " • SNR:${it}dB" } ?: ""),
+                    color = p.textSecondary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
             }
         }
         } // end selectedLane == "HOTSPOT"
@@ -2621,7 +2753,7 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Reserve a unique @username protected by a 4-6 digit PIN and Recovery Key so distant friends can connect over Hybrid Relay and you can restore your identity on another device.",
+                    text = "Optional (recommended): reserve a @username protected by an 8+ char vault passphrase and Recovery Key so distant friends can connect over Hybrid Relay and you can restore your identity on another device.",
                     style = MaterialTheme.typography.bodySmall.copy(color = p.textSecondary)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2647,7 +2779,7 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Reserved Username (First-Come First-Serve)",
+                                    text = "Optional @username (Recommended)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = p.textMuted
                                 )
@@ -2657,7 +2789,7 @@ fun SettingsScreen(
                                             "@${state.claimedUsername} • ON HOLD (OFFLINE)"
                                         state.claimedUsername.isNotBlank() ->
                                             "@${state.claimedUsername}"
-                                        else -> "Not Reserved (Local Node Only)"
+                                        else -> "Not set yet (Optional, recommended)"
                                     },
                                     style = MaterialTheme.typography.titleSmall.copy(
                                         color = when {
@@ -2682,7 +2814,7 @@ fun SettingsScreen(
                             OutlinedButton(
                                 onClick = {
                                     accountDialogStatus = ""
-                                    accountDialogRecoveryMode = state.claimedUsername.isBlank()
+                                    accountDialogRecoveryMode = false
                                     accountUsernameInput = state.claimedUsername
                                     accountPinInput = ""
                                     accountRecoveryKeyInput = ""
@@ -2910,6 +3042,33 @@ fun SettingsScreen(
                     ) {
                         Text(if (isGreek) "ΑΝΤΙΓΡΑΦΗ URI" else "COPY URI", color = CyanGateway, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+                Button(
+                    onClick = onOpenQrScanner,
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanGateway, contentColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth().testTag("settings_scan_qr_button")
+                ) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = AppStrings.resolve(context, state.appLanguage, R.string.qr_scan_button),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = AppStrings.resolve(context, state.appLanguage, R.string.nfc_tap_to_pair_ready),
+                    color = p.textMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
+                if (state.lastQrPairingStatus.isNotBlank()) {
+                    Text(
+                        text = state.lastQrPairingStatus,
+                        color = p.emerald,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp
+                    )
                 }
                 OutlinedTextField(
                     value = joinQrImportInput,
@@ -3753,32 +3912,66 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("check_for_updates_btn")
                     ) {
                         Text(
-                            text = if (state.isCheckingForUpdate) "CHECKING..." else "CHECK FOR UPDATES",
+                            text = AppStrings.resolve(
+                                context,
+                                state.appLanguage,
+                                if (state.isCheckingForUpdate) R.string.update_checking else R.string.update_check_button
+                            ),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     state.availableUpdate?.let { upd ->
                         Button(
+                            onClick = onStartVerifiedUpdate,
+                            shape = btnShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = p.emerald,
+                                contentColor = Color.Black
+                            ),
+                            modifier = Modifier.testTag("verified_update_install_btn")
+                        ) {
+                            Text(
+                                text = AppStrings.resolve(context, state.appLanguage, R.string.update_verified_install, upd.latestVersion),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        OutlinedButton(
                             onClick = {
                                 runCatching {
                                     context.startActivity(
                                         android.content.Intent(
                                             android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(upd.apkDownloadUrl)
+                                            android.net.Uri.parse(upd.releasePageUrl)
                                         )
                                     )
                                 }
                             },
-                            shape = btnShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = p.emerald,
-                                contentColor = Color.Black
-                            )
+                            shape = btnShape
                         ) {
-                            Text("GET v${upd.latestVersion}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = AppStrings.resolve(context, state.appLanguage, R.string.update_github_fallback),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
+                }
+                if (state.apkUpdateInstallState.stage != com.kostadinosk.pulsemesh.service.ApkInstallStage.IDLE &&
+                    state.apkUpdateInstallState.message.isNotBlank()
+                ) {
+                    val installColor = when (state.apkUpdateInstallState.stage) {
+                        com.kostadinosk.pulsemesh.service.ApkInstallStage.FAILED -> p.red
+                        com.kostadinosk.pulsemesh.service.ApkInstallStage.INSTALLED -> p.emerald
+                        else -> p.cyan
+                    }
+                    Text(
+                        text = state.apkUpdateInstallState.message,
+                        color = installColor,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp
+                    )
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3855,7 +4048,7 @@ fun SettingsScreen(
 
         // About & GNU GPL-3.0 License Footer Notice
         Text(
-            text = "PulseMesh v1.4.7 • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
+            text = "PulseMesh v${com.kostadinosk.pulsemesh.BuildConfig.VERSION_NAME} (${com.kostadinosk.pulsemesh.BuildConfig.FLAVOR_TIER}) • © 2026 Konstantinos Kourtis • GNU GPL-3.0",
             style = MaterialTheme.typography.labelSmall.copy(
                 color = p.textMuted,
                 fontFamily = FontFamily.Monospace,
