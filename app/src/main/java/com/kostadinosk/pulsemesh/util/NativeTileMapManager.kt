@@ -6,9 +6,12 @@ package com.kostadinosk.pulsemesh.util
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.kostadinosk.pulsemesh.map.MapLayerStyle
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -41,6 +44,31 @@ object NativeTileMapManager {
         "https://a.tile.openstreetmap.fr/hot",
         "https://b.tile.openstreetmap.fr/hot"
     )
+
+    fun buildTileUrlsForStyle(style: MapLayerStyle, z: Int, x: Int, y: Int): List<String> = when (style) {
+        MapLayerStyle.DARK -> listOf(
+            "https://a.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
+            "https://b.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
+            "https://c.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
+            "https://tile.openstreetmap.org/$z/$x/$y.png"
+        )
+        MapLayerStyle.TOPO -> listOf(
+            "https://a.tile.opentopomap.org/$z/$x/$y.png",
+            "https://b.tile.opentopomap.org/$z/$x/$y.png",
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/$z/$y/$x"
+        )
+        MapLayerStyle.SATELLITE -> listOf(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x"
+        )
+        MapLayerStyle.RADAR -> emptyList()
+    }
+
+    private fun hasActiveDeviceInternet(context: Context): Boolean = runCatching {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val active = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(active) ?: return false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(false)
 
     /**
      * Synchronously fetches a PNG tile from OpenStreetMap (or returns disk-cached bytes)
@@ -91,9 +119,20 @@ object NativeTileMapManager {
     }
 
     /**
-     * Hierarchical persistent tile path: File(context.filesDir, "osm_tiles/$z/$x/$y.png")
+     * Per-style persistent tile path: File(context.filesDir, "osm_tiles/<style>/$z/$x/$y.png")
      */
-    fun getTileFile(context: Context, z: Int, x: Int, y: Int): File {
+    fun getTileFile(
+        context: Context,
+        z: Int,
+        x: Int,
+        y: Int,
+        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+    ): File {
+        val styleDir = layerStyle.name.lowercase()
+        return File(context.filesDir, "osm_tiles/$styleDir/$z/$x/$y.png")
+    }
+
+    private fun getLegacyRootTileFile(context: Context, z: Int, x: Int, y: Int): File {
         return File(context.filesDir, "osm_tiles/$z/$x/$y.png")
     }
 
@@ -102,25 +141,39 @@ object NativeTileMapManager {
         return File(dir, "${z}_${x}_${y}.png")
     }
 
-    fun isTileCachedOnDisk(context: Context, z: Int, x: Int, y: Int): Boolean {
-        val primary = File(context.filesDir, "osm_tiles/$z/$x/$y.png")
+    fun isTileCachedOnDisk(
+        context: Context,
+        z: Int,
+        x: Int,
+        y: Int,
+        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+    ): Boolean {
+        val primary = getTileFile(context, z, x, y, layerStyle)
         if (primary.exists() && primary.length() > 0L) return true
+        val rootLegacy = getLegacyRootTileFile(context, z, x, y)
+        if (layerStyle == MapLayerStyle.DARK && rootLegacy.exists() && rootLegacy.length() > 0L) return true
         val legacy = getLegacyCacheTileFile(context, z, x, y)
-        return legacy.exists() && legacy.length() > 0L
+        return layerStyle == MapLayerStyle.DARK && legacy.exists() && legacy.length() > 0L
     }
 
     /**
      * Non-blocking fast memory-cache lookup for Compose Canvas draw passes.
      * Disk reads and decoding happen asynchronously on Dispatchers.IO via fetchTileAsync.
      */
-    fun getCachedTile(context: Context, z: Int, x: Int, y: Int): ImageBitmap? {
-        return tileCache.get("$z/$x/$y")
+    fun getCachedTile(
+        context: Context,
+        z: Int,
+        x: Int,
+        y: Int,
+        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+    ): ImageBitmap? {
+        if (layerStyle == MapLayerStyle.RADAR) return null
+        return tileCache.get("${layerStyle.name}/$z/$x/$y")
     }
 
     /**
-     * Fetch a 256x256 PNG tile asynchronously if internet is enabled.
-     * Always checks `File(context.filesDir, "osm_tiles/$z/$x/$y.png")` first on Dispatchers.IO
-     * so downloaded areas render 100% offline without blocking the main thread.
+     * Fetch a 256x256 PNG tile asynchronously for the requested MapLayerStyle.
+     * Always checks per-style persistent disk cache & .mbtiles first on Dispatchers.IO.
      */
     fun fetchTileAsync(
         context: Context,
@@ -129,12 +182,14 @@ object NativeTileMapManager {
         y: Int,
         scope: CoroutineScope,
         isInternetEnabled: Boolean,
+        layerStyle: MapLayerStyle = MapLayerStyle.DARK,
         onTileLoaded: (z: Int, x: Int, y: Int, bitmap: ImageBitmap) -> Unit
     ) {
+        if (layerStyle == MapLayerStyle.RADAR) return
         val maxTile = (1 shl z)
         if (x < 0 || x >= maxTile || y < 0 || y >= maxTile) return
 
-        val key = "$z/$x/$y"
+        val key = "${layerStyle.name}/$z/$x/$y"
         if (tileCache.get(key) != null) return
 
         synchronized(inFlightKeys) {
@@ -143,12 +198,15 @@ object NativeTileMapManager {
 
         scope.launch(Dispatchers.IO) {
             try {
-                // Check persistent disk cache first (off main thread)
-                val primaryFile = getTileFile(context, z, x, y)
-                val legacyFile = getLegacyCacheTileFile(context, z, x, y)
+                val canFetchOnline = isInternetEnabled || hasActiveDeviceInternet(context)
+                // Check per-style persistent disk cache first (off main thread)
+                val primaryFile = getTileFile(context, z, x, y, layerStyle)
+                val legacyRootFile = if (layerStyle == MapLayerStyle.DARK && !canFetchOnline) getLegacyRootTileFile(context, z, x, y) else null
+                val legacyFile = if (layerStyle == MapLayerStyle.DARK && !canFetchOnline) getLegacyCacheTileFile(context, z, x, y) else null
                 val existingFile = when {
                     primaryFile.exists() && primaryFile.length() > 0L -> primaryFile
-                    legacyFile.exists() && legacyFile.length() > 0L -> legacyFile
+                    legacyRootFile != null && legacyRootFile.exists() && legacyRootFile.length() > 0L -> legacyRootFile
+                    legacyFile != null && legacyFile.exists() && legacyFile.length() > 0L -> legacyFile
                     else -> null
                 }
 
@@ -179,16 +237,16 @@ object NativeTileMapManager {
                 }
 
                 // If offline and not on disk, check whether an internet-connected Gateway Peer can proxy the tile
-                val gwProxyBase = if (!isInternetEnabled) gatewayTileProxyBaseUrl?.invoke()?.trimEnd('/') else null
-                if (!isInternetEnabled && gwProxyBase.isNullOrBlank()) {
+                val gwProxyBase = if (!canFetchOnline) gatewayTileProxyBaseUrl?.invoke()?.trimEnd('/') else null
+                if (!canFetchOnline && gwProxyBase.isNullOrBlank()) {
                     // Fallback: request via BLE/mesh TILE_REQ from any internet-connected Gateway Peer
                     gatewayMeshTileRequester?.invoke(z, x, y)
                     return@launch
                 }
 
                 var loadedBitmap: Bitmap? = null
-                val candidateUrls = if (isInternetEnabled) {
-                    TILE_SERVERS.map { "$it/$z/$x/$y.png" }
+                val candidateUrls = if (canFetchOnline) {
+                    buildTileUrlsForStyle(layerStyle, z, x, y)
                 } else {
                     listOf("$gwProxyBase/api/tiles/$z/$x/$y.png?fetch=1")
                 }
@@ -197,7 +255,7 @@ object NativeTileMapManager {
                     try {
                         val url = URL(urlStr)
                         conn = (url.openConnection() as HttpURLConnection).apply {
-                            setRequestProperty("User-Agent", "PulseMesh-Tactical-Android/1.2.7")
+                            setRequestProperty("User-Agent", "PulseMesh-Android/2.0.1 (+https://github.com/Kostadinosk/PulseMesh)")
                             setRequestProperty("Accept", "image/png,image/*;q=0.8")
                             connectTimeout = 4000
                             readTimeout = 4500

@@ -187,13 +187,14 @@ private fun buildLocalVectorOrRasterStyleJson(style: MapLayerStyle, online: Bool
         MapLayerStyle.SATELLITE -> "#0D141F"
         MapLayerStyle.RADAR -> "#061310"
     }
-    if (!online) {
+    if (!online || style == MapLayerStyle.RADAR) {
         return """{"version":8,"name":"PulseMeshOffline","sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"$bgHex"}}]}"""
     }
     val tileUrl = when (style) {
+        MapLayerStyle.DARK -> "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
         MapLayerStyle.TOPO -> "https://a.tile.opentopomap.org/{z}/{x}/{y}.png"
         MapLayerStyle.SATELLITE -> "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        MapLayerStyle.DARK, MapLayerStyle.RADAR -> "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        MapLayerStyle.RADAR -> return """{"version":8,"name":"PulseMeshRadar","sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"$bgHex"}}]}"""
     }
     return """
     {
@@ -208,7 +209,7 @@ private fun buildLocalVectorOrRasterStyleJson(style: MapLayerStyle, online: Bool
       },
       "layers": [
         {"id": "bg", "type": "background", "paint": {"background-color": "$bgHex"}},
-        {"id": "raster-tiles", "type": "raster", "source": "osm-raster", "paint": {"raster-opacity": ${if (style == MapLayerStyle.DARK) 0.72 else 0.92}}}
+        {"id": "raster-tiles", "type": "raster", "source": "osm-raster", "paint": {"raster-opacity": 0.96}}
       ]
     }
     """.trimIndent()

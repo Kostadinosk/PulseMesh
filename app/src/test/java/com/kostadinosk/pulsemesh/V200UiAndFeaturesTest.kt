@@ -275,4 +275,78 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("updates_data_settings_screen").assertExists()
         composeTestRule.onNodeWithTag("map_3state_bottom_sheet").assertExists()
     }
+
+    @Test
+    fun `v201 map styles use isolated per-style tile servers and caches and skip raster in radar mode`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val darkUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK, 12, 2318, 1580
+        )
+        val topoUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO, 12, 2318, 1580
+        )
+        val satUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.SATELLITE, 12, 2318, 1580
+        )
+        val radarUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR, 12, 2318, 1580
+        )
+        assertTrue(darkUrls.first().contains("dark_all"))
+        assertTrue(topoUrls.first().contains("opentopomap"))
+        assertTrue(satUrls.first().contains("World_Imagery"))
+        assertTrue("Radar mode must not fetch raster tiles", radarUrls.isEmpty())
+
+        val darkFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK)
+        val topoFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO)
+        val satFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.SATELLITE)
+        assertTrue(darkFile.path != topoFile.path && topoFile.path != satFile.path)
+    }
+
+    @Test
+    fun `v201 phone call screen and remnant-free settings sub-screens render cleanly`() {
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.PRACTICAL_TACTICAL, themeBrightness = ThemeBrightness.DARK) {
+                PulseVoiceHubScreen(
+                    state = MeshUiState(),
+                    duplexCallState = com.kostadinosk.pulsemesh.service.DuplexCallState(
+                        isInCall = true,
+                        peerCallsign = "Bravo-02",
+                        durationSeconds = 42
+                    ),
+                    onStartCall = {}, onStartGroupCall = {}, onEndCall = {}, onToggleMute = {},
+                    onToggleSpeaker = {}, onStartPtt = {}, onStopPtt = {}, onAcceptCall = {},
+                    onDeclineCall = {}, onReplayLastRx = {}, onSelectAudioRoute = {},
+                    onJoinPttChannel = {}, onToggleCourtesyBeep = {}, onToggleConferenceMute = {},
+                    onKickConferencePeer = {}
+                )
+                com.kostadinosk.pulsemesh.ui.screens.settings.ProfileSettingsScreen(
+                    state = MeshUiState(), onUpdateCallsign = {}, onRegenerateNodeId = {},
+                    onClaimOrRecoverUsername = { _, _, _, _, _ -> }, onOpenConnectHub = {}, onOpenOnboarding = {}
+                )
+                com.kostadinosk.pulsemesh.ui.screens.settings.RadiosSettingsScreen(
+                    state = MeshUiState(), onSetBatteryPowerProfile = {}, onToggleInternetMode = {},
+                    onToggleWebPortal = {}, onToggleBleCodedPhy = {}, onToggleWifiAware = {},
+                    onToggleBackgroundRelay = {}, onUpdateChannelAndPassphrase = { _, _ -> },
+                    onToggleLoraBridge = {}, onSelectLoraProtocol = {}, onScanLoraDevices = {},
+                    onToggleAcousticModem = {}, onToggleCotBridge = {}
+                )
+                com.kostadinosk.pulsemesh.ui.screens.settings.SecuritySettingsScreen(
+                    state = MeshUiState(), onRotateKeys = {}, onSelectLocationShareMode = {},
+                    onSetAppLockPin = {}, onSetBiometricUnlock = {}, onSetAppLockTimeout = {},
+                    onClearAppLock = {}, onSetDuressPin = {}, onCycleBurnTtl = {}, onPurgeStalePeers = {}
+                )
+                com.kostadinosk.pulsemesh.ui.screens.settings.SafetySettingsScreen(
+                    state = MeshUiState(), onOpenEmergencySosSheet = {},
+                    onSaveIceCard = { _, _, _, _ -> }, onSetDeadManMinutes = {},
+                    onCheckInDeadMan = {}, onConfigureGeofence = { _, _ -> }
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("phone_active_call_page").assertExists()
+        composeTestRule.onNodeWithTag("phone_call_end_btn").assertExists()
+        composeTestRule.onNodeWithTag("profile_settings_screen").assertExists()
+        composeTestRule.onNodeWithTag("radios_settings_screen").assertExists()
+        composeTestRule.onNodeWithTag("security_settings_screen").assertExists()
+        composeTestRule.onNodeWithTag("safety_settings_screen").assertExists()
+    }
 }

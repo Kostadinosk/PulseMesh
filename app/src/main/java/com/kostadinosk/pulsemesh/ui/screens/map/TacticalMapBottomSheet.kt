@@ -72,6 +72,8 @@ import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 @Composable
 fun TacticalMapOverlaySheet(
     state: MeshUiState,
+    selectedLayerStyle: com.kostadinosk.pulsemesh.map.MapLayerStyle = com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK,
+    onSelectLayerStyle: (com.kostadinosk.pulsemesh.map.MapLayerStyle) -> Unit = {},
     onSelectPeer: (MeshNode) -> Unit,
     onImportMapPack: () -> Unit,
     onImportGpxKml: () -> Unit,
@@ -232,7 +234,7 @@ fun TacticalMapOverlaySheet(
                     }
                 }
 
-                // State 1+: Peers & Waypoints List
+                // State 1+: Map Style Mode Switcher + Peers & Waypoints List
                 AnimatedVisibility(visible = sheetLevel >= 1) {
                     Column(
                         modifier = Modifier
@@ -240,6 +242,33 @@ fun TacticalMapOverlaySheet(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            com.kostadinosk.pulsemesh.map.MapLayerStyle.entries.forEach { style ->
+                                val active = selectedLayerStyle == style
+                                Surface(
+                                    color = if (active) tokens.accentPrimary else p.surfaceVariant,
+                                    shape = tokens.pillShape,
+                                    border = BorderStroke(1.dp, if (active) tokens.accentPrimary else p.border),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(tokens.pillShape)
+                                        .clickable { onSelectLayerStyle(style) }
+                                        .testTag("map_sheet_layer_${style.name.lowercase()}")
+                                ) {
+                                    Text(
+                                        text = style.name.lowercase().replaceFirstChar { it.uppercase() },
+                                        color = if (active) (if (tokens.isDark) Color.Black else Color.White) else p.textSecondary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(vertical = 7.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
                         if (peers.isEmpty()) {
                             Text(
                                 text = AppStrings.tr(lang, "No remote peers on radar yet. Tap My Location FAB to broadcast a GPS ping.", "Δεν υπάρχουν κόμβοι στο ραντάρ ακόμη."),

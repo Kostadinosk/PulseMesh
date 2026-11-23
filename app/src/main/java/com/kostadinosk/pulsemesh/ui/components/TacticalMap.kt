@@ -93,6 +93,8 @@ fun TacticalMap(
     isCotBridgeEnabled: Boolean = false,
     onImportMapPack: () -> Unit = {},
     onImportGpxKml: () -> Unit = {},
+    externalLayerStyle: com.kostadinosk.pulsemesh.map.MapLayerStyle? = null,
+    onLayerStyleChanged: (com.kostadinosk.pulsemesh.map.MapLayerStyle) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -115,7 +117,17 @@ fun TacticalMap(
     var pendingPinCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var selectedPinType by remember { mutableStateOf(WaypointType.RALLY) }
     var customPinTitle by remember { mutableStateOf("") }
-    var selectedLayerStyle by remember { mutableStateOf(com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
+    var selectedLayerStyle by remember { mutableStateOf(externalLayerStyle ?: com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
+    LaunchedEffect(externalLayerStyle) {
+        if (externalLayerStyle != null && externalLayerStyle != selectedLayerStyle) {
+            selectedLayerStyle = externalLayerStyle
+            tileRefreshCounter++
+        }
+    }
+    LaunchedEffect(selectedLayerStyle) {
+        onLayerStyleChanged(selectedLayerStyle)
+        tileRefreshCounter++
+    }
     var compassRotateEnabled by remember { mutableStateOf(false) }
     var isRulerMode by remember { mutableStateOf(false) }
     var rulerPointA by remember { mutableStateOf<Pair<Double, Double>?>(null) }
@@ -237,55 +249,49 @@ fun TacticalMap(
 
             val maxWorldTiles = 1 shl intZoom
 
-            // 1. Draw OpenStreetMap Tiles (checking persistent filesDir/osm_tiles/$z/$x/$y.png FIRST)
-            for (tx in minTileX..maxTileX) {
-                for (ty in minTileY..maxTileY) {
-                    val wrappedX = ((tx % maxWorldTiles) + maxWorldTiles) % maxWorldTiles
-                    if (ty < 0 || ty >= maxWorldTiles) continue
+            // 1. Draw per-style raster map tiles (DARK = Carto Dark Matter, TOPO = OpenTopoMap/Esri Topo, SATELLITE = Esri Imagery; RADAR skips raster completely!)
+            if (selectedLayerStyle != com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR) {
+                for (tx in minTileX..maxTileX) {
+                    for (ty in minTileY..maxTileY) {
+                        val wrappedX = ((tx % maxWorldTiles) + maxWorldTiles) % maxWorldTiles
+                        if (ty < 0 || ty >= maxWorldTiles) continue
 
-                    val tileLeft = viewCenterX + ((tx - curTileX) * tileSizePx).toFloat()
-                    val tileTop = viewCenterY + ((ty - curTileY) * tileSizePx).toFloat()
+                        val tileLeft = viewCenterX + ((tx - curTileX) * tileSizePx).toFloat()
+                        val tileTop = viewCenterY + ((ty - curTileY) * tileSizePx).toFloat()
 
-                    val cachedBmp = NativeTileMapManager.getCachedTile(context, intZoom, wrappedX, ty)
-                    if (cachedBmp != null) {
-                        drawImage(
-                            image = cachedBmp,
-                            dstOffset = IntOffset(tileLeft.toInt(), tileTop.toInt()),
-                            dstSize = IntSize(ceil(tileSizePx).toInt(), ceil(tileSizePx).toInt())
-                        )
-                        // Draw subtle emerald border around cached offline tiles
-                        drawRect(
-                            color = EmeraldMesh.copy(alpha = 0.35f),
-                            topLeft = Offset(tileLeft, tileTop),
-                            size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
-                            style = Stroke(width = 1f)
-                        )
-                    } else {
-                        // Subtle coordinate tile outline so underlying FlavorTacticalMapSurface (MapLibre/Radar) stays visible
-                        if (!isInternetEnabled && selectedLayerStyle != com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR) {
-                            drawRect(
-                                color = Color(0xFF141A24).copy(alpha = 0.25f),
-                                topLeft = Offset(tileLeft, tileTop),
-                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx)
+                        val cachedBmp = NativeTileMapManager.getCachedTile(context, intZoom, wrappedX, ty, selectedLayerStyle)
+                        if (cachedBmp != null) {
+                            drawImage(
+                                image = cachedBmp,
+                                dstOffset = IntOffset(tileLeft.toInt(), tileTop.toInt()),
+                                dstSize = IntSize(ceil(tileSizePx).toInt(), ceil(tileSizePx).toInt())
                             )
-                        }
-                        drawRect(
-                            color = Color(0xFF222D3D).copy(alpha = 0.35f),
-                            topLeft = Offset(tileLeft, tileTop),
-                            size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
-                            style = Stroke(width = 1f)
-                        )
+                            drawRect(
+                                color = EmeraldMesh.copy(alpha = 0.22f),
+                                topLeft = Offset(tileLeft, tileTop),
+                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
+                                style = Stroke(width = 0.75f)
+                            )
+                        } else {
+                            drawRect(
+                                color = Color(0xFF222D3D).copy(alpha = 0.28f),
+                                topLeft = Offset(tileLeft, tileTop),
+                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
+                                style = Stroke(width = 0.75f)
+                            )
 
-                        // Fetch tile asynchronously (checks persistent offline disk cache first on IO)
-                        NativeTileMapManager.fetchTileAsync(
-                            context = context,
-                            z = intZoom,
-                            x = wrappedX,
-                            y = ty,
-                            scope = coroutineScope,
-                            isInternetEnabled = isInternetEnabled
-                        ) { _, _, _, _ ->
-                            tileRefreshCounter++
+                            // Fetch style-specific tile asynchronously (checks per-style offline disk cache & .mbtiles first on IO)
+                            NativeTileMapManager.fetchTileAsync(
+                                context = context,
+                                z = intZoom,
+                                x = wrappedX,
+                                y = ty,
+                                scope = coroutineScope,
+                                isInternetEnabled = isInternetEnabled,
+                                layerStyle = selectedLayerStyle
+                            ) { _, _, _, _ ->
+                                tileRefreshCounter++
+                            }
                         }
                     }
                 }

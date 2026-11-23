@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PulseMesh v1.5.5 - Off-Grid Tactical Mesh Messenger &amp; Voice Communicator</title>
+  <title>PulseMesh v2.0.1 - Off-Grid Tactical Mesh Messenger &amp; Voice Communicator</title>
   <meta name="description" content="Off-grid peer-to-peer Android, iPhone PWA &amp; Web communication over BLE 0xCAFE/0xCAFF, Wi-Fi Direct, 2-Tier Root CA SSL Hotspot, Acoustic AFSK, and E2EE @username accounts." />
   <meta name="theme-color" content="#041320" />
   <link rel="icon" type="image/png" sizes="512x512" href="assets/pulsemesh-logo.png?v=2" />
@@ -757,6 +757,41 @@
       }
     }
 
+    img, video {
+      max-inline-size: 100%;
+      block-size: auto;
+    }
+
+    html {
+      scroll-padding-top: calc(5.25rem + env(safe-area-inset-top, 0px));
+    }
+
+    .site-header.is-measuring * {
+      transition: none !important;
+    }
+
+    @media (pointer: coarse) {
+      body {
+        background-attachment: scroll;
+      }
+    }
+
+    @media (max-width: 760px) {
+      header.navbar.site-header {
+        top: max(8px, env(safe-area-inset-top, 0px));
+        padding: 0 max(12px, env(safe-area-inset-left, 0px)) 0 max(12px, env(safe-area-inset-right, 0px));
+      }
+      .navbar-inner {
+        padding: 8px 12px;
+        gap: 8px;
+      }
+      .mobile-action-bar {
+        padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+        padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+        padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+      }
+    }
+
     @media (max-width: 540px) {
       .cta-group {
         flex-direction: column;
@@ -768,11 +803,37 @@
         grid-template-columns: 1fr 1fr;
         gap: 8px;
       }
+      .brand {
+        gap: 7px;
+      }
+      .brand img {
+        width: 30px;
+        height: 30px;
+      }
       .brand span:not(.brand-badge) {
-        font-size: 1rem;
+        font-size: 0.96rem;
+      }
+      .brand-badge {
+        display: none;
+      }
+      .theme-toggle {
+        padding: 6px 10px;
       }
       #themeLabel {
-        font-size: 0.76rem;
+        font-size: 0.74rem;
+      }
+      .menu-button {
+        padding: 6px 12px;
+        font-size: 0.82rem;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .hud-grid {
+        grid-template-columns: 1fr;
+      }
+      #themeLabel {
+        display: none;
       }
     }
   </style>
@@ -783,7 +844,7 @@
       <a href="index.html" class="brand" aria-current="page">
         <img src="assets/pulsemesh-logo.png?v=2" alt="PulseMesh Icon" />
         <span>PulseMesh</span>
-        <span class="brand-badge">v1.5.5</span>
+        <span class="brand-badge">v2.0.1</span>
       </a>
       <ul id="site-menu" class="site-menu nav-links" popover="auto">
         <li><a href="web/" style="color:var(--accent-emerald);font-weight:800;">iPhone &amp; Web App</a></li>
@@ -796,7 +857,7 @@
       </ul>
       <div class="nav-actions-right">
         <button class="theme-btn" id="themeToggle" type="button" aria-label="Toggle Frutiger Aero Theme">
-          <span id="themeLabel">☀ Daylight Aero</span>
+          <span id="themeLabel">☀ Light</span>
         </button>
         <button class="menu-button" type="button" popovertarget="site-menu" aria-expanded="false" aria-controls="site-menu">
           ☰ Menu
@@ -812,7 +873,7 @@
         <div class="pill-row">
           <span class="pill emerald">● Android &amp; Official iPhone PWA</span>
           <span class="pill">BLE 0xCAFE / 0xCAFF</span>
-          <span class="pill amber">v1.5.5 Map 2.0, CameraX QR/NFC, LoRa Bridge, Acoustic 2.0 RS-FEC &amp; Double Ratchet</span>
+          <span class="pill amber">v2.0.1 Map 2.0, CameraX QR/NFC, LoRa Bridge, Acoustic 2.0 RS-FEC &amp; Double Ratchet</span>
         </div>
         <h1>
           Peer-to-Peer Tactical Mesh for <span class="gradient-text">Zero-Infrastructure</span> Android, iPhone &amp; Web.
@@ -826,14 +887,14 @@
           <a class="btn btn-primary" href="web/">
             📱 Open iPhone PWA / Web Node
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.5.5/app-full-release.apk">
-            ⬇ Download Full APK (v1.5.5)
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/latest/download/app-full-release.apk">
+            ⬇ Download Full APK (v2.0.1)
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.5.5/app-lite-release.apk">
-            ⚡ Lite APK (v1.5.5)
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/latest/download/app-lite-release.apk">
+            ⚡ Lite APK (v2.0.1)
           </a>
-          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.5.5" target="_blank" rel="noopener">
-            v1.5.5 Release Notes →
+          <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/latest" target="_blank" rel="noopener">
+            v2.0.1 Release Notes →
           </a>
         </div>
         <div class="meta-caption">
@@ -1048,7 +1109,7 @@ cd PulseMesh
         <a href="web/">Web App</a> &bull;
         <a href="contact.html">Contact</a> &bull;
         <a href="https://github.com/Kostadinosk/PulseMesh">Repository</a> &bull;
-        <a href="https://github.com/Kostadinosk/PulseMesh/releases/tag/v1.5.5">Release v1.5.5</a>
+        <a href="https://github.com/Kostadinosk/PulseMesh/releases/latest">Release v2.0.1</a>
       </div>
     </div>
   </footer>
@@ -1056,7 +1117,7 @@ cd PulseMesh
   <!-- Mobile Fixed Bottom Quick-Action Bar -->
   <div class="mobile-action-bar" role="region" aria-label="Quick Mobile Actions">
     <a class="btn btn-primary" href="web/">📱 Open Web App</a>
-    <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/download/v1.5.5/app-full-release.apk">⬇ APK v1.5.5</a>
+    <a class="btn btn-secondary" href="https://github.com/Kostadinosk/PulseMesh/releases/latest/download/app-full-release.apk">⬇ APK v2.0.1</a>
   </div>
 
   <script>
@@ -1070,7 +1131,7 @@ cd PulseMesh
       }
       function syncLabel() {
         const current = root.getAttribute("data-theme") || "dark";
-        label.textContent = current === "dark" ? "☀ Daylight Aero" : "☾ Dark Frutiger Aero";
+        label.textContent = current === "dark" ? "☀ Light" : "☾ Dark";
       }
       syncLabel();
       btn.addEventListener("click", function () {
@@ -1087,13 +1148,21 @@ cd PulseMesh
       const menu = document.getElementById("site-menu");
       if (header && nav && menuBtn && menu) {
         function updateLayout() {
-          if (menu.matches(":popover-open")) menu.hidePopover();
+          const wasOpen = typeof menu.matches === "function" && menu.matches(":popover-open");
+          header.classList.add("is-measuring");
+          menu.removeAttribute("popover");
           menu.classList.remove("is-open");
-          menuBtn.setAttribute("aria-expanded", "false");
           header.classList.add("is-wide");
-          if (nav.scrollWidth > nav.clientWidth || window.innerWidth < 920) {
+          const fitsInline = nav.scrollWidth <= nav.clientWidth && window.innerWidth >= 920;
+          if (!fitsInline) {
             header.classList.remove("is-wide");
+            menu.setAttribute("popover", "auto");
+            if (wasOpen && typeof menu.showPopover === "function") {
+              try { menu.showPopover(); } catch (e) {}
+            }
           }
+          menuBtn.setAttribute("aria-expanded", String(!fitsInline && wasOpen));
+          requestAnimationFrame(() => header.classList.remove("is-measuring"));
         }
         new ResizeObserver(updateLayout).observe(header);
         updateLayout();

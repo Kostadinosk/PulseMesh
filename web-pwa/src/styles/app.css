@@ -4,6 +4,7 @@
 :root {
   /* Base color-scheme: MUST stay light dark so CSS follows OS & <meta> override */
   color-scheme: light dark;
+  --target-size: 24px;
 
   /* Raw light/dark tokens (Practical Tactical default) */
   --bg-light: #f4f7fa;
@@ -182,6 +183,12 @@
   }
 }
 
+@media (pointer: coarse) {
+  :root {
+    --target-size: 44px;
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -198,7 +205,31 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   overflow: hidden;
+  overflow-wrap: break-word;
+  scroll-padding-bottom: calc(4.5rem + var(--safe-bottom));
   -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+p, li {
+  text-wrap: pretty;
+}
+
+:where(a, code) {
+  overflow-wrap: anywhere;
+}
+
+img, video {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+:where(button, select, textarea, input:not([type="checkbox"], [type="radio"]), .btn, .nav-btn) {
+  min-block-size: var(--target-size);
+  min-inline-size: var(--target-size);
 }
 
 .app-shell {
@@ -262,8 +293,24 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .top-bar {
+    padding: calc(6px + var(--safe-top)) 10px 6px;
+    gap: 6px;
+  }
+  .brand-sub,
+  #transportStatusPill {
+    display: none;
+  }
+  .top-actions .btn {
+    padding: 6px 10px;
+    font-size: 0.74rem;
+  }
 }
 
 /* Workspace Body (switches to side rail on >= 760px via @container) */

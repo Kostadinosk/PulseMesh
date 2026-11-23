@@ -1,5 +1,5 @@
 {
-  "name": "PulseMesh v2.0.0 - Practical Off-Grid & Hybrid Mesh Node",
+  "name": "PulseMesh v2.0.1 - Practical Off-Grid & Hybrid Mesh Node",
   "short_name": "PulseMesh",
   "description": "PulseMesh v2.0.0 practical off-grid tactical mesh chat, Signal Double Ratchet E2EE, 60-digit Safety Numbers, encrypted .pmbackup, browser QR scanner, WebRTC Voice Hub, Acoustic 2.0 RS-FEC, and offline Tactical Map 2.0 for iPhone, iPad, Android, and desktop.",
   "start_url": "./",

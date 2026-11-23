@@ -113,6 +113,7 @@ class MainActivity : FragmentActivity() {
                 var showEmergencySosSheet by remember { mutableStateOf(false) }
                 var safetyNumberPeer by remember { mutableStateOf<Pair<String, String>?>(null) }
                 var activeSettingsDest by remember { mutableStateOf<com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination?>(null) }
+                var activeMapLayerStyle by remember { mutableStateOf(com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
                 var pendingBackupPassphrase by remember { mutableStateOf("") }
 
                 val backupExportLauncher = rememberLauncherForActivityResult(
@@ -630,9 +631,13 @@ class MainActivity : FragmentActivity() {
                                     isCotBridgeEnabled = state.isCotBridgeEnabled,
                                     onImportMapPack = { mapPackPicker.launch(arrayOf("*/*")) },
                                     onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
+                                    externalLayerStyle = activeMapLayerStyle,
+                                    onLayerStyleChanged = { activeMapLayerStyle = it },
                                 )
                                 com.kostadinosk.pulsemesh.ui.screens.map.TacticalMapOverlaySheet(
                                     state = state,
+                                    selectedLayerStyle = activeMapLayerStyle,
+                                    onSelectLayerStyle = { activeMapLayerStyle = it },
                                     onSelectPeer = { viewModel.selectNode(it) },
                                     onImportMapPack = { mapPackPicker.launch(arrayOf("*/*")) },
                                     onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
@@ -871,99 +876,58 @@ class MainActivity : FragmentActivity() {
                                                         backupImportLauncher.launch(arrayOf("*/*"))
                                                     }
                                                 )
-                                            else -> SettingsScreen(
-                                                state = state,
-                                                onToggleSimpleMode = { viewModel.toggleSimpleMode() },
-                                                onToggleTransportMode = { viewModel.toggleInternetEnabled() },
-                                                onSelectPhoneProfile = { viewModel.selectPhoneModel(it) },
-                                                onAutoMatchHardware = { viewModel.autoSwitchToDetectedHardware() },
-                                                onRegenerateNodeId = { viewModel.regenerateNodeId() },
-                                                onUpdateCallsign = { viewModel.updateCallsign(it) },
-                                                onUpdateMeshChannel = { viewModel.setMeshChannel(it) },
-                                                onPingMeshNow = { viewModel.pingMeshNow() },
-                                                onRequestGpsPermission = {
-                                                    permissionLauncher.launch(permissionsToRequest)
-                                                    viewModel.requestGpsUpdates()
-                                                },
-                                                onSetManualLocation = { lat, lon ->
-                                                    viewModel.setManualGpsLocation(lat, lon)
-                                                },
-                                                onOpenSetupWizard = { viewModel.openSetupWizard() },
-                                                onVerifyRoot = { viewModel.verifyRootStatus() },
-                                                onToggleInternetEnabled = { viewModel.toggleInternetEnabled() },
-                                                onToggleSpokenCallerId = { viewModel.toggleSpokenCallerId() },
-                                                onReconnectRelay = { viewModel.reconnectRelay() },
-                                                onRotateKeys = { viewModel.rotateEncryptionKeys() },
-                                                onToggleHotspot = { viewModel.toggleOrConnectHotspot() },
-                                                onHostHotspot = { viewModel.hostHotspotExplicitly() },
-                                                onJoinHotspot = { viewModel.joinPeerHotspotExplicitly() },
-                                                onStopHotspot = { viewModel.stopHotspotExplicitly() },
-                                                onForceGattReDiscovery = { viewModel.forceGattReDiscovery() },
-                                                onToggleBroadcastCoarseLocation = { viewModel.toggleBroadcastCoarseLocationInBle() },
-                                                onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
-                                                onUpdateMeshPassphrase = { viewModel.setMeshPassphrase(it) },
-                                                onToggleHotspotAutoPopup = { viewModel.setHotspotAutoPopupEnabled(it) },
-                                                onRunMeshLinkSweep = { viewModel.runMeshLinkQualitySweep() },
-                                                onSelectAutoCheckInInterval = { viewModel.setAutoCheckInIntervalMin(it) },
-                                                onToggleLightMode = { viewModel.toggleLightMode() },
-                                                onSelectAppTheme = { viewModel.setAppTheme(it) },
-                                                onClaimOrRecoverUsername = { u, pin, rk, rec, cb ->
-                                                    viewModel.claimOrRecoverUsername(u, pin, rk, rec, cb)
-                                                },
-                                                onUpdateUsernameRelayUrl = { url, cb ->
-                                                    viewModel.setUsernameRelayUrl(url, cb)
-                                                },
-                                                onSyncAccountBackupNow = { cb ->
-                                                    viewModel.syncAccountBackupNow(cb)
-                                                },
-                                                onToggleBackgroundRelayService = { viewModel.toggleBackgroundRelayService() },
-                                                onToggleVolumeButtonPtt = { viewModel.toggleVolumeButtonPtt() },
-                                                onToggleRadioVoxBridge = { viewModel.toggleRadioVoxBridge() },
-                                                onToggleDeadReckoning = { viewModel.toggleDeadReckoning() },
-                                                onToggleBreadcrumbRecording = { viewModel.toggleBreadcrumbRecording() },
-                                                onClearBreadcrumbTrail = { viewModel.clearBreadcrumbTrail() },
-                                                onShareBreadcrumbTrail = { viewModel.shareBreadcrumbTrailToMesh() },
-                                                onBroadcastOfflineMapTiles = { viewModel.broadcastOfflineMapTilesToPeers() },
-                                                onTransmitKeyVerifyChirp = { viewModel.transmitUltrasonicKeyVerifyChirp() },
-                                                onCycleMessageBurnTtl = { viewModel.cycleMessageBurnTtl() },
-                                                onSetDuressPin = { pin -> viewModel.setDuressPin(pin) },
-                                                onTriggerDuressWipe = { pin -> viewModel.verifyOrTriggerDuressWipe(pin) },
-                                                onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
-                                                onImportGpx = { xml -> viewModel.importBreadcrumbsFromGpx(xml) },
-                                                onToggleWebPortal = { viewModel.toggleWebPortal() },
-                                                onDeleteAccountInfo = { u, pin, rk -> viewModel.deleteAllAccountInformation(u, pin, rk) },
-                                                onSetAppLanguage = { lang -> viewModel.setAppLanguage(lang) },
-                                                onShareLocalFile = { name, _, bytes -> viewModel.shareLocalFileToPortal(name, bytes) != null },
-                                                onDeleteSharedFile = { id -> viewModel.deleteSharedFileFromPortal(id) },
-                                                onSendQuickStatus = { code -> viewModel.sendQuickStatus(code) },
-                                                onToggleQuickStatusVoice = { viewModel.toggleQuickStatusVoice() },
-                                                onSaveIceMedicalCard = { b, a, c -> viewModel.saveIceMedicalCard(b, a, "", c) },
-                                                onSetDeadManSwitchMinutes = { m -> viewModel.setDeadManSwitchMinutes(m) },
-                                                onCheckInDeadManSwitch = { viewModel.checkInDeadManSwitch() },
-                                                onConfigureGeofence = { en, rad -> viewModel.configureGeofence(enabled = en, radiusMeters = rad) },
-                                                onToggleExpeditionMode = { viewModel.toggleExpeditionMode() },
-                                                onToggleExpeditionAutoBelow20 = { viewModel.toggleExpeditionAutoBelow20() },
-                                                onExportTripArchive = { viewModel.exportTripArchiveJson() },
-                                                onBuildInstantJoinQr = { viewModel.buildInstantJoinQrPayload() },
-                                                onImportInstantJoinQr = { uri -> viewModel.importInstantJoinQrPayload(uri) },
-                                                onSetDecoyPin = { pin -> viewModel.setDecoyPin(pin) },
-                                                onTriggerDecoyMode = { pin -> viewModel.verifyOrEnterDecoyMode(pin) },
-                                                onCheckForUpdateNow = { viewModel.checkForAppUpdateNow(userInitiated = true) },
-                                                onToggleBell202Modem = { viewModel.toggleBell202Modem() },
-                                                onTransmitBell202Chirp = { viewModel.transmitBell202AcousticMessage("PulseMesh Bell202 Ping") },
-                                                onPurgePhantomPeers = { viewModel.purgePhantomAndCachedPeers() },
-                                                onSetShowTacticalHud = { viewModel.setShowTacticalHud(it) },
-                                                onSetBatteryPowerProfile = { viewModel.setBatteryPowerProfile(it) },
-                                                onSetAppLockTimeout = { viewModel.setAppLockTimeout(it) },
-                                                onSetAppLockPin = { viewModel.setAppLockPin(it) },
-                                                onSetBiometricUnlock = { viewModel.setBiometricUnlockEnabled(it) },
-                                                onClearAppLock = { viewModel.clearAppLock() },
-                                                onOpenQrScanner = { showQrScannerDialog = true },
-                                                onStartVerifiedUpdate = { viewModel.downloadAndInstallVerifiedUpdate() },
-                                                onToggleLoraBridge = { viewModel.toggleLoraBridge() },
-                                                onSelectLoraProtocol = { proto -> viewModel.selectLoraProtocol(proto) },
-                                                onScanLoraDevices = { viewModel.scanLoraDevices() },
-                                            )
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.PROFILE ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.ProfileSettingsScreen(
+                                                    state = state,
+                                                    onUpdateCallsign = { viewModel.updateCallsign(it) },
+                                                    onRegenerateNodeId = { viewModel.regenerateNodeId() },
+                                                    onClaimOrRecoverUsername = { u, pin, rk, rec, cb ->
+                                                        viewModel.claimOrRecoverUsername(u, pin, rk, rec, cb)
+                                                    },
+                                                    onOpenConnectHub = { showConnectHub = true },
+                                                    onOpenOnboarding = { viewModel.openSetupWizard() }
+                                                )
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.RADIOS ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.RadiosSettingsScreen(
+                                                    state = state,
+                                                    onSetBatteryPowerProfile = { viewModel.setBatteryPowerProfile(it) },
+                                                    onToggleInternetMode = { viewModel.toggleInternetEnabled() },
+                                                    onToggleWebPortal = { viewModel.toggleWebPortal() },
+                                                    onToggleBleCodedPhy = { viewModel.toggleBleCodedPhy() },
+                                                    onToggleWifiAware = { viewModel.toggleWifiAware() },
+                                                    onToggleBackgroundRelay = { viewModel.toggleBackgroundRelayService() },
+                                                    onUpdateChannelAndPassphrase = { ch, pass ->
+                                                        if (ch.isNotBlank()) viewModel.setMeshChannel(ch)
+                                                        if (pass.isNotBlank()) viewModel.setMeshPassphrase(pass)
+                                                    },
+                                                    onToggleLoraBridge = { viewModel.toggleLoraBridge() },
+                                                    onSelectLoraProtocol = { viewModel.selectLoraProtocol(it) },
+                                                    onScanLoraDevices = { viewModel.scanLoraDevices() },
+                                                    onToggleAcousticModem = { viewModel.toggleBell202Modem() },
+                                                    onToggleCotBridge = { viewModel.setCotBridgeEnabled(it) }
+                                                )
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.SECURITY ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.SecuritySettingsScreen(
+                                                    state = state,
+                                                    onRotateKeys = { viewModel.rotateEncryptionKeys() },
+                                                    onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
+                                                    onSetAppLockPin = { viewModel.setAppLockPin(it) },
+                                                    onSetBiometricUnlock = { viewModel.setBiometricUnlockEnabled(it) },
+                                                    onSetAppLockTimeout = { viewModel.setAppLockTimeout(it) },
+                                                    onClearAppLock = { viewModel.clearAppLock() },
+                                                    onSetDuressPin = { viewModel.setDuressPin(it) },
+                                                    onCycleBurnTtl = { viewModel.cycleMessageBurnTtl() },
+                                                    onPurgeStalePeers = { viewModel.purgePhantomAndCachedPeers() }
+                                                )
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.SAFETY ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.SafetySettingsScreen(
+                                                    state = state,
+                                                    onOpenEmergencySosSheet = { showEmergencySosSheet = true },
+                                                    onSaveIceCard = { b, a, n, c -> viewModel.saveIceMedicalCard(b, a, n, c) },
+                                                    onSetDeadManMinutes = { viewModel.setDeadManSwitchMinutes(it) },
+                                                    onCheckInDeadMan = { viewModel.checkInDeadManSwitch() },
+                                                    onConfigureGeofence = { en, rad -> viewModel.configureGeofence(enabled = en, radiusMeters = rad) }
+                                                )
                                         }
                                     }
                                 )
