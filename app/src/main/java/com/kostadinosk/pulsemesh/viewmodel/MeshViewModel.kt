@@ -49,9 +49,7 @@ data class MeshUiState(
     val localNodeId: String = "0x4F2A",
     val operatorCallsign: String = "Operator",
     val localDeviceModel: String = "OnePlus 15",
-    val activeTransportDesc: String = "BLE 1M/Coded + Hotspot Wi-Fi",
     val txPowerDesc: String = "+14 dBm (Unrooted)",
-    val isBroadcastingGps: Boolean = true,
     val activePeerCount: Int = 0, // 100% Real - starts with 0 peers until discovered
     val realBatteryPercent: Int = 85,
     val hotspotButtonText: String = "HOTSPOT: OFF",
@@ -75,12 +73,14 @@ data class MeshUiState(
     val isInternetEnabled: Boolean = false,
     val isSpokenCallerIdEnabled: Boolean = false,
     val encryptionKeyEpoch: Int = 1,
-    val isE2eeActive: Boolean = true,
     val x25519Fingerprint: String = "7A:B2:3F:89:12:44:C0:EE",
     val x25519PublicKey: String = "",
     val showSetupWizard: Boolean = false,
     val isSimpleMode: Boolean = true,
     val appTheme: com.kostadinosk.pulsemesh.util.AppTheme = com.kostadinosk.pulsemesh.util.AppTheme.TACTICAL_DARK,
+    val themePreset: com.kostadinosk.pulsemesh.util.ThemePreset = com.kostadinosk.pulsemesh.util.ThemePreset.PRACTICAL_TACTICAL,
+    val themeBrightness: com.kostadinosk.pulsemesh.util.ThemeBrightness = com.kostadinosk.pulsemesh.util.ThemeBrightness.SYSTEM,
+    val hardwareReport: com.kostadinosk.pulsemesh.util.HardwareCapabilityReport? = null,
     val meshChannel: String = "pulsemesh_live_primary",
 
     // Dual-Mode Transport & Live Packet Counters
@@ -114,7 +114,6 @@ data class MeshUiState(
 
     // Map Settings
     val mapRenderMode: MapRenderMode = MapRenderMode.VECTOR_LEAFLET,
-    val isPrivacyFuzzingEnabled: Boolean = false,
     val isSosActive: Boolean = false,
     val waypoints: List<TacticalWaypoint> = emptyList(),
 
@@ -145,7 +144,6 @@ data class MeshUiState(
     val systemlessMountEnabled: Boolean = false,
     val rangeMultiplier: Float = 1.0f,
     val chipsetProfile: ChipsetProfile = ChipsetProfile.QUALCOMM_SNAPDRAGON,
-    val oemBypassStatus: OemBypassStatus = OemBypassStatus(),
 
     // Live Radio Hardware Diagnostic & BLE Sniffer State
     val bleTxState: BleTxDiagnosticState = BleTxDiagnosticState(),
@@ -171,7 +169,6 @@ data class MeshUiState(
     val barometricAltitudeMeters: Double? = null,
     val pendingDtnCount: Int = 0,
     val wifiAwareEnabled: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
-    val ultrasonicModemEnabled: Boolean = false,
     val bell202ModemEnabled: Boolean = false,
     val activeL2capChannelsCount: Int = 0,
     val localL2capPsm: Int = 0,
@@ -180,7 +177,6 @@ data class MeshUiState(
     val locationShareMode: LocationShareMode = LocationShareMode.EXACT,
     val meshPassphrase: String = "pulsemesh-tactical",
     val isAppInForeground: Boolean = true,
-    val activeOmniLayersSummary: String = "Omni Stack Active (BLE 1M/LR/2M/L2CAP • P2P/NAN • IPv4-MC/IPv6/mDNS • Acoustic • USB/ETH • eSIM)",
     val isHotspotAutoPopupEnabled: Boolean = true,
     val pendingHotspotPrompt: com.kostadinosk.pulsemesh.service.HotspotPromptInfo? = null,
     val autoCheckInIntervalMin: Int = 0,
@@ -229,6 +225,7 @@ data class MeshUiState(
     val iceAllergies: String = "",
     val iceNotes: String = "",
     val iceEmergencyContact: String = "",
+    val iceMedicalInfo: String = "",
     val deadManSwitchMinutes: Int = 0,
     val deadManRemainingSeconds: Int = 0,
     val geofenceEnabled: Boolean = false,
@@ -286,8 +283,10 @@ data class MeshUiState(
     val lastQrPairingStatus: String = "",
     val acousticV2EncryptedEnabled: Boolean = true,
 
-    // Active Navigation Tab (0: Map, 1: Chat, 2: Voice, 3: Settings)
-    val selectedTabIndex: Int = 0
+    val backupStatusMessage: String = "",
+
+    // Active Navigation Tab (1: Chats [default start], 0: Map, 2: Voice, 3: Settings)
+    val selectedTabIndex: Int = 1
 )
 
 class MeshViewModel(application: Application) : AndroidViewModel(application) {
@@ -495,31 +494,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
     )
 
-    val ultrasonicModem = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem(
+    val emergencyToolkit = com.kostadinosk.pulsemesh.service.EmergencyToolkitService(
         context = application,
-        scope = viewModelScope,
-        isVoiceMicBusy = {
-            tacticalCallService.callState.value.isInCall ||
-                _uiState.value.duplexCallState.isInCall ||
-                audioService.isRecording.value ||
-                _uiState.value.isPttPressed ||
-                !appInForeground
-        },
-        onAcousticSignalDecoded = { sigType, srcNodeIdHex ->
-            val pkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
-                packetId = "us_${srcNodeIdHex}_${System.currentTimeMillis()}",
-                srcNodeId = srcNodeIdHex,
-                srcCallsign = peersBackingMap[normalizeId(srcNodeIdHex)]?.callsign ?: "Node-$srcNodeIdHex",
-                dstNodeId = "ALL",
-                type = sigType,
-                payload = "Ultrasonic 18.5kHz Acoustic Frame",
-                sourceTransport = "ULTRASONIC",
-                rssiDbm = -50
-            )
-            viewModelScope.launch(Dispatchers.Main) {
-                handleIncomingPacket(pkt)
-            }
-        }
+        scope = viewModelScope
     )
 
     val bell202Modem = com.kostadinosk.pulsemesh.service.Bell202AcousticModem(
@@ -1284,7 +1261,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Start real-time Compass (Rotation Vector / Magnetometer), Barometer Altitude & Step Dead-Reckoning service
-        ultrasonicModem.voxPreKeyPilotEnabled = prefs.isRadioVoxBridgeEnabled
+        val detectedHwReport = runCatching { com.kostadinosk.pulsemesh.util.HardwareCapabilityDetector.detect(application) }.getOrNull()
+        _uiState.update {
+            it.copy(
+                themePreset = prefs.themePreset,
+                themeBrightness = prefs.themeBrightness,
+                hardwareReport = detectedHwReport,
+                localDeviceModel = detectedHwReport?.resolvedMarketingName ?: it.localDeviceModel
+            )
+        }
         if (prefs.isBackgroundRelayServiceEnabled) {
             syncBackgroundRelayService()
         }
@@ -1941,11 +1926,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun setMapRenderMode(mode: MapRenderMode) {
         _uiState.update { it.copy(mapRenderMode = mode) }
         triggerHaptic(30)
-    }
-
-    fun togglePrivacyFuzzing() {
-        _uiState.update { it.copy(isPrivacyFuzzingEnabled = !it.isPrivacyFuzzingEnabled) }
-        triggerHaptic(40)
     }
 
     fun broadcastGpsBeacon() {
@@ -6503,7 +6483,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         ?: peersBackingMap[normSrc]?.publicKeyBase64
                         ?: ""
                     if (rxChecksum >= 0 && peerKey.isNotBlank()) {
-                        val expectedChecksum = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.fingerprintChecksum8(peerKey)
+                        val expectedChecksum = com.kostadinosk.pulsemesh.service.Bell202AcousticModem.fingerprintChecksum8(peerKey)
                         if (rxChecksum == expectedChecksum) {
                             acceptChangedPeerKey(canonicalSrcId)
                             triggerHaptic(75)
@@ -6644,9 +6624,53 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAppTheme(theme: com.kostadinosk.pulsemesh.util.AppTheme) {
         prefs.appTheme = theme
-        _uiState.update { it.copy(appTheme = theme) }
+        _uiState.update {
+            it.copy(
+                appTheme = theme,
+                themePreset = theme.toThemePreset(),
+                themeBrightness = theme.toThemeBrightness()
+            )
+        }
         scheduleAccountBackupSync()
         triggerHaptic(30)
+    }
+
+    fun setThemePreset(preset: com.kostadinosk.pulsemesh.util.ThemePreset) {
+        prefs.themePreset = preset
+        val mapped = com.kostadinosk.pulsemesh.util.AppTheme.fromPresetAndBrightness(preset, prefs.themeBrightness)
+        _uiState.update {
+            it.copy(
+                themePreset = preset,
+                appTheme = mapped
+            )
+        }
+        scheduleAccountBackupSync()
+        triggerHaptic(30)
+    }
+
+    fun setThemeBrightness(brightness: com.kostadinosk.pulsemesh.util.ThemeBrightness) {
+        prefs.themeBrightness = brightness
+        val mapped = com.kostadinosk.pulsemesh.util.AppTheme.fromPresetAndBrightness(prefs.themePreset, brightness)
+        _uiState.update {
+            it.copy(
+                themeBrightness = brightness,
+                appTheme = mapped
+            )
+        }
+        scheduleAccountBackupSync()
+        triggerHaptic(25)
+    }
+
+    fun refreshHardwareReport() {
+        val report = runCatching {
+            com.kostadinosk.pulsemesh.util.HardwareCapabilityDetector.detect(getApplication())
+        }.getOrNull()
+        _uiState.update {
+            it.copy(
+                hardwareReport = report,
+                localDeviceModel = report?.resolvedMarketingName ?: it.localDeviceModel
+            )
+        }
     }
 
     fun toggleLightMode() {
@@ -6758,10 +6782,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 // 3. Hybrid ntfy.sh (when Internet Enabled)
                 if (_uiState.value.isInternetEnabled) {
                     runCatching { meshNetworkService.broadcastPacket(pkt) }
-                }
-                // 4. Optional Near-Ultrasonic Acoustic Air-Gap Modem (18–19.2 kHz BFSK) on first pulse
-                if (idx == 0 && ultrasonicModem.isEnabled) {
-                    runCatching { ultrasonicModem.transmitControlSignal(type, state.localNodeId) }
                 }
                 if (idx < repeatCount - 1) {
                     delay(spacingMs)
@@ -7785,7 +7805,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleRadioVoxBridge() {
         val next = !_uiState.value.isRadioVoxBridgeEnabled
         prefs.isRadioVoxBridgeEnabled = next
-        ultrasonicModem.voxPreKeyPilotEnabled = next
         _uiState.update { it.copy(isRadioVoxBridgeEnabled = next) }
         triggerHaptic(35)
     }
@@ -9497,6 +9516,88 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         payload: String
     ): String = securityController.decryptDm(peerNodeId, peerPublicKeyBase64, payload)
 
+    fun sendImSafeCheckIn() {
+        val st = _uiState.value
+        val gpsPart = if (st.userLatitude != null && st.userLongitude != null && (st.userLatitude != 0.0 || st.userLongitude != 0.0)) {
+            "GPS %.5f, %.5f".format(st.userLatitude, st.userLongitude)
+        } else {
+            "GPS pending"
+        }
+        val msg = "[CHECK-IN: I AM SAFE] ${st.operatorCallsign} • $gpsPart • Battery ${st.realBatteryPercent}%"
+        if (st.isSosActive) {
+            toggleSosBeacon()
+        }
+        emergencyToolkit.stopTorchMorse()
+        emergencyToolkit.stopSiren()
+        sendMessageInThread("channel_primary", msg)
+        triggerHaptic(50)
+    }
+
+    fun computePeerSafetyNumber(peerNodeId: String): String {
+        val st = _uiState.value
+        val peerPub = st.conversations.firstOrNull { it.peerNodeId == peerNodeId }?.safetyFingerprint?.takeIf { it.isNotBlank() }
+            ?: st.conversations.firstOrNull { it.peerNodeId == peerNodeId }?.safetyFingerprint
+            ?: peerNodeId
+        return com.kostadinosk.pulsemesh.crypto.SafetyNumberUtil.compute60DigitSafetyNumber(
+            localNodeId = st.localNodeId,
+            localPublicKey = st.x25519PublicKey.ifBlank { st.localNodeId },
+            peerNodeId = peerNodeId,
+            peerPublicKey = peerPub
+        )
+    }
+
+    fun exportEncryptedBackupEnvelope(passphrase: String): Result<String> {
+        val st = _uiState.value
+        return runCatching {
+            val payload = com.kostadinosk.pulsemesh.service.PulseMeshBackupPayload(
+                operatorCallsign = st.operatorCallsign,
+                nodeId = st.localNodeId,
+                claimedUsername = st.claimedUsername,
+                x25519PublicKey = prefs.x25519PublicKey,
+                x25519PrivateKey = prefs.x25519PrivateKey,
+                iceMedicalInfo = listOf(st.iceBloodType, st.iceAllergies, st.iceNotes, st.iceEmergencyContact, st.iceMedicalInfo).filter { it.isNotBlank() }.joinToString(" • "),
+                meshChannel = st.meshChannel
+            )
+            val env = com.kostadinosk.pulsemesh.service.EncryptedBackupManager.exportEncryptedBackup(payload, passphrase)
+            _uiState.update { it.copy(backupStatusMessage = "Encrypted .pmbackup ready (${env.length} chars, AES-256-GCM).") }
+            env
+        }.onFailure { err ->
+            _uiState.update { it.copy(backupStatusMessage = "Backup export failed: ${err.message}") }
+        }
+    }
+
+    fun importEncryptedBackupEnvelope(envelope: String, passphrase: String): Result<String> {
+        return com.kostadinosk.pulsemesh.service.EncryptedBackupManager
+            .importEncryptedBackup(envelope, passphrase)
+            .map { payload ->
+                if (payload.operatorCallsign.isNotBlank()) prefs.operatorCallsign = payload.operatorCallsign
+                if (payload.nodeId.isNotBlank()) prefs.nodeId = payload.nodeId
+                if (payload.claimedUsername.isNotBlank()) prefs.claimedUsername = payload.claimedUsername
+                if (payload.x25519PublicKey.isNotBlank() && payload.x25519PrivateKey.isNotBlank()) {
+                    prefs.x25519PublicKey = payload.x25519PublicKey
+                    prefs.x25519PrivateKey = payload.x25519PrivateKey
+                }
+                if (payload.iceMedicalInfo.isNotBlank()) prefs.iceNotes = payload.iceMedicalInfo
+                if (payload.meshChannel.isNotBlank()) prefs.meshChannel = payload.meshChannel
+                _uiState.update {
+                    it.copy(
+                        operatorCallsign = prefs.operatorCallsign,
+                        localNodeId = prefs.nodeId,
+                        claimedUsername = prefs.claimedUsername,
+                        x25519PublicKey = prefs.x25519PublicKey,
+                        iceNotes = prefs.iceNotes,
+                        iceMedicalInfo = prefs.iceNotes,
+                        meshChannel = prefs.meshChannel,
+                        backupStatusMessage = "Restored identity ${prefs.operatorCallsign} (${prefs.nodeId}) from .pmbackup."
+                    )
+                }
+                "Restored ${prefs.operatorCallsign} (${prefs.nodeId})"
+            }
+            .onFailure { err ->
+                _uiState.update { it.copy(backupStatusMessage = "Backup import failed: ${err.message}") }
+            }
+    }
+
     override fun onCleared() {
         super.onCleared()
         pulseMeshWebServer.stop()
@@ -9514,7 +9615,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         deadManSwitchJob?.cancel()
         runCatching { statusTts?.stop(); statusTts?.shutdown() }
         statusTts = null
-        ultrasonicModem.stopListeningLoop()
+        emergencyToolkit.release()
         bell202Modem.setListening(false)
         cotBridge?.stop()
         loraBridge.disconnect()

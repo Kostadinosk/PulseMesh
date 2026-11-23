@@ -64,6 +64,39 @@ class Bell202AcousticModem(
 
     companion object {
         const val SAMPLE_RATE = 44100
+
+        fun fingerprintChecksum8(fingerprintOrPubKey: String): Int {
+            val clean = fingerprintOrPubKey.trim()
+            if (clean.isEmpty()) return 0
+            var hash = 0x5A
+            for (ch in clean) {
+                hash = ((hash * 33) xor ch.code) and 0xFF
+            }
+            return hash and 0xFF
+        }
+
+        fun goertzelMagnitudeSquared(
+            samples: ShortArray,
+            offset: Int,
+            length: Int,
+            targetFreqHz: Double,
+            sampleRate: Int = SAMPLE_RATE
+        ): Double {
+            if (length <= 0 || offset + length > samples.size) return 0.0
+            val k = (0.5 + (length * targetFreqHz) / sampleRate).toInt()
+            val omega = (2.0 * PI * k) / length
+            val coeff = 2.0 * cos(omega)
+            var q0 = 0.0
+            var q1 = 0.0
+            var q2 = 0.0
+            for (i in 0 until length) {
+                q0 = coeff * q1 - q2 + samples[offset + i].toDouble()
+                q2 = q1
+                q1 = q0
+            }
+            return q1 * q1 + q2 * q2 - q1 * q2 * coeff
+        }
+
         const val SYMBOL_DURATION_MS = 20
         const val SYMBOL_SAMPLES = (SAMPLE_RATE * SYMBOL_DURATION_MS) / 1000 // 882 samples @ 44.1 kHz
         const val PREAMBLE_SYMBOLS = 4
@@ -325,9 +358,9 @@ class Bell202AcousticModem(
             var consecutive = 0
             var offset = 0
             while (offset + symSamples <= samples.size) {
-                val pPre = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_PREAMBLE_HZ, sampleRate)
-                val p1 = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_MARK_1_HZ, sampleRate)
-                val p0 = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_SPACE_0_HZ, sampleRate)
+                val pPre = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_PREAMBLE_HZ, sampleRate)
+                val p1 = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_MARK_1_HZ, sampleRate)
+                val p0 = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_SPACE_0_HZ, sampleRate)
                 if (pPre > 1.0e9 && pPre > p1 * 1.4 && pPre > p0 * 1.4) {
                     if (consecutive == 0) preambleStart = offset
                     consecutive++
@@ -335,9 +368,9 @@ class Bell202AcousticModem(
                     if (consecutive >= PREAMBLE_SYMBOLS - 1) {
                         // Advance past any remaining preamble symbol
                         while (offset + symSamples <= samples.size) {
-                            val pp = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_PREAMBLE_HZ, sampleRate)
-                            val pm = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_MARK_1_HZ, sampleRate)
-                            val ps = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_SPACE_0_HZ, sampleRate)
+                            val pp = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_PREAMBLE_HZ, sampleRate)
+                            val pm = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_MARK_1_HZ, sampleRate)
+                            val ps = goertzelMagnitudeSquared(samples, offset, symSamples, FREQ_SPACE_0_HZ, sampleRate)
                             if (pp > pm * 1.3 && pp > ps * 1.3) {
                                 offset += symSamples
                             } else {
@@ -359,8 +392,8 @@ class Bell202AcousticModem(
                 var b = 0
                 for (bitIdx in 0 until 8) {
                     val sOff = pos + bitIdx * symSamples
-                    val pMark = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, sOff, symSamples, FREQ_MARK_1_HZ, sampleRate)
-                    val pSpace = UltrasonicAcousticModem.goertzelMagnitudeSquared(samples, sOff, symSamples, FREQ_SPACE_0_HZ, sampleRate)
+                    val pMark = goertzelMagnitudeSquared(samples, sOff, symSamples, FREQ_MARK_1_HZ, sampleRate)
+                    val pSpace = goertzelMagnitudeSquared(samples, sOff, symSamples, FREQ_SPACE_0_HZ, sampleRate)
                     b = (b shl 1) or (if (pMark >= pSpace) 1 else 0)
                 }
                 return b and 0xFF
@@ -554,8 +587,8 @@ class Bell202AcousticModem(
                         var b = 0
                         for (bitIdx in 0 until 8) {
                             if (!readExactSymbol()) return null
-                            val pMark = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
-                            val pSpace = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
+                            val pMark = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
+                            val pSpace = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
                             b = (b shl 1) or (if (pMark >= pSpace) 1 else 0)
                         }
                         return b and 0xFF
@@ -563,9 +596,9 @@ class Bell202AcousticModem(
 
                     while (isActive && isListening && !isVoiceMicBusy()) {
                         if (!readExactSymbol()) break
-                        val pPre = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_PREAMBLE_HZ, SAMPLE_RATE)
-                        val p1 = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
-                        val p0 = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
+                        val pPre = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_PREAMBLE_HZ, SAMPLE_RATE)
+                        val p1 = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
+                        val p0 = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
 
                         if (pPre > 1.5e9 && pPre > p1 * 1.5 && pPre > p0 * 1.5) {
                             preambleHits++
@@ -573,9 +606,9 @@ class Bell202AcousticModem(
                                 // Skip trailing preamble symbol if still present
                                 var firstBitBuf: ShortArray? = null
                                 if (readExactSymbol()) {
-                                    val pp2 = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_PREAMBLE_HZ, SAMPLE_RATE)
-                                    val pm2 = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
-                                    val ps2 = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
+                                    val pp2 = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_PREAMBLE_HZ, SAMPLE_RATE)
+                                    val pm2 = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
+                                    val ps2 = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
                                     if (!(pp2 > pm2 * 1.3 && pp2 > ps2 * 1.3)) {
                                         firstBitBuf = symBuf.copyOf()
                                     }
@@ -584,8 +617,8 @@ class Bell202AcousticModem(
 
                                 // Decode byte 0 using firstBitBuf if we already consumed bit 0
                                 val firstByte = if (firstBitBuf != null) {
-                                    val pm = UltrasonicAcousticModem.goertzelMagnitudeSquared(firstBitBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
-                                    val ps = UltrasonicAcousticModem.goertzelMagnitudeSquared(firstBitBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
+                                    val pm = goertzelMagnitudeSquared(firstBitBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
+                                    val ps = goertzelMagnitudeSquared(firstBitBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
                                     var b = if (pm >= ps) 1 else 0
                                     var ok = true
                                     for (bitIdx in 1 until 8) {
@@ -593,8 +626,8 @@ class Bell202AcousticModem(
                                             ok = false
                                             break
                                         }
-                                        val m = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
-                                        val s = UltrasonicAcousticModem.goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
+                                        val m = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_MARK_1_HZ, SAMPLE_RATE)
+                                        val s = goertzelMagnitudeSquared(symBuf, 0, SYMBOL_SAMPLES, FREQ_SPACE_0_HZ, SAMPLE_RATE)
                                         b = (b shl 1) or (if (m >= s) 1 else 0)
                                     }
                                     if (ok) b and 0xFF else null

@@ -1,6 +1,6 @@
 {
   "name": "pulsemesh-web-pwa",
-  "version": "1.5.5",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Official modular Vite single-file Web & iPhone PWA client for PulseMesh",

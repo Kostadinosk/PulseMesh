@@ -11,13 +11,50 @@ import com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager
 import com.kostadinosk.pulsemesh.model.LocationShareMode
 import java.security.SecureRandom
 
+enum class ThemePreset(val displayName: String, val subtitle: String) {
+    PRACTICAL_TACTICAL("Practical Tactical", "Modern Material 3 Expressive default"),
+    CLEAN_MESSENGER("Clean Messenger", "Minimal everyday Signal/WhatsApp clarity"),
+    FIELD_OPS_HUD("Field Ops HUD", "High-density ATAK console & telemetry"),
+    FRUTIGER_AERO("Frutiger Aero", "Luminous crystal glass & aqua highlights")
+}
+
+enum class ThemeBrightness(val displayName: String) {
+    SYSTEM("System"),
+    DARK("Dark"),
+    LIGHT("Light")
+}
+
 enum class AppTheme(val displayName: String) {
     ORIGINAL("Original Classic"),
     FRUTIGER_AERO("Frutiger Aero"),
     FRUTIGER_AERO_DARK("Frutiger Aero Dark"),
     MATERIAL3("Material 3"),
     TACTICAL_DARK("Tactical Dark"),
-    TACTICAL_LIGHT("Daylight Light")
+    TACTICAL_LIGHT("Daylight Light");
+
+    fun toThemePreset(): ThemePreset = when (this) {
+        ORIGINAL -> ThemePreset.FIELD_OPS_HUD
+        FRUTIGER_AERO, FRUTIGER_AERO_DARK -> ThemePreset.FRUTIGER_AERO
+        MATERIAL3 -> ThemePreset.CLEAN_MESSENGER
+        TACTICAL_DARK, TACTICAL_LIGHT -> ThemePreset.PRACTICAL_TACTICAL
+    }
+
+    fun toThemeBrightness(): ThemeBrightness = when (this) {
+        FRUTIGER_AERO, TACTICAL_LIGHT -> ThemeBrightness.LIGHT
+        MATERIAL3 -> ThemeBrightness.SYSTEM
+        ORIGINAL, FRUTIGER_AERO_DARK, TACTICAL_DARK -> ThemeBrightness.DARK
+    }
+
+    companion object {
+        fun fromPresetAndBrightness(preset: ThemePreset, brightness: ThemeBrightness): AppTheme = when (preset) {
+            ThemePreset.PRACTICAL_TACTICAL ->
+                if (brightness == ThemeBrightness.LIGHT) TACTICAL_LIGHT else TACTICAL_DARK
+            ThemePreset.CLEAN_MESSENGER -> MATERIAL3
+            ThemePreset.FIELD_OPS_HUD -> ORIGINAL
+            ThemePreset.FRUTIGER_AERO ->
+                if (brightness == ThemeBrightness.DARK) FRUTIGER_AERO_DARK else FRUTIGER_AERO
+        }
+    }
 }
 
 class DevicePreferences(context: Context) {
@@ -58,13 +95,51 @@ class DevicePreferences(context: Context) {
         return "0x$hex"
     }
 
+    var themePreset: ThemePreset
+        get() {
+            val saved = prefs.getString("theme_preset_v2", null)
+            if (saved != null) {
+                return runCatching { ThemePreset.valueOf(saved) }
+                    .getOrDefault(ThemePreset.PRACTICAL_TACTICAL)
+            }
+            return appTheme.toThemePreset()
+        }
+        set(value) {
+            prefs.edit()
+                .putString("theme_preset_v2", value.name)
+                .putString("app_theme", AppTheme.fromPresetAndBrightness(value, themeBrightness).name)
+                .apply()
+        }
+
+    var themeBrightness: ThemeBrightness
+        get() {
+            val saved = prefs.getString("theme_brightness_v2", null)
+            if (saved != null) {
+                return runCatching { ThemeBrightness.valueOf(saved) }
+                    .getOrDefault(ThemeBrightness.SYSTEM)
+            }
+            return appTheme.toThemeBrightness()
+        }
+        set(value) {
+            prefs.edit()
+                .putString("theme_brightness_v2", value.name)
+                .putString("app_theme", AppTheme.fromPresetAndBrightness(themePreset, value).name)
+                .apply()
+        }
+
     var appTheme: AppTheme
         get() {
             val saved = prefs.getString("app_theme", AppTheme.TACTICAL_DARK.name)
             return runCatching { AppTheme.valueOf(saved ?: AppTheme.TACTICAL_DARK.name) }
                 .getOrDefault(AppTheme.TACTICAL_DARK)
         }
-        set(value) = prefs.edit().putString("app_theme", value.name).apply()
+        set(value) {
+            prefs.edit()
+                .putString("app_theme", value.name)
+                .putString("theme_preset_v2", value.toThemePreset().name)
+                .putString("theme_brightness_v2", value.toThemeBrightness().name)
+                .apply()
+        }
 
     var meshChannel: String
         get() = prefs.getString("mesh_channel", "pulsemesh_live_primary") ?: "pulsemesh_live_primary"

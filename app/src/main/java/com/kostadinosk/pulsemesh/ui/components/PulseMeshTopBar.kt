@@ -10,14 +10,39 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,23 +56,27 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kostadinosk.pulsemesh.ui.theme.*
+import com.kostadinosk.pulsemesh.ui.theme.LocalPulseTokens
+import com.kostadinosk.pulsemesh.ui.theme.PulseMeshTheme
+import com.kostadinosk.pulsemesh.util.AppStrings
+import com.kostadinosk.pulsemesh.util.ThemeBrightness
+import com.kostadinosk.pulsemesh.util.ThemePreset
 import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * Adaptive Top Bar (`>= 48.dp` minimum height, overflow & font-scale safe) + Live Signal-Reactive Mesh Heartbeat Ribbon:
- * - Left: Callsign + Node ID in compact bold emerald text (ellipsizes gracefully on narrow widths).
- * - Center: Status pill ("OFF-GRID" or "HYBRID") + clickable Hotspot status pill + live peer badge ("P:${state.activePeerCount}").
- * - Right: Battery % and compact "Grant Perms" chip ONLY while permissions are missing.
- * - Bottom Ribbon: Sweeping RF Mesh Heartbeat waveform reacting to live TX/RX packets & active transport color.
+ * PulseMesh v2.0 Compact 1-Row Practical Top Bar:
+ * - Left: Interactive Mesh Status Pill (live transport dot, callsign/mode, peer count -> taps open Telemetry Drawer)
+ * - Right: Permissions button (only when missing), 1-tap Connect & Share QR button, and SOS Emergency Kit trigger
+ * - Bottom: Subtle 3dp signal-reactive mesh heartbeat ribbon
  */
 @Composable
 fun PulseMeshTopBar(
@@ -59,14 +88,18 @@ fun PulseMeshTopBar(
     onToggleSos: () -> Unit = {},
     onDismissIncomingSos: () -> Unit = {},
     onAutoConnectHotspot: () -> Unit = {},
+    onOpenTelemetryDrawer: () -> Unit = onToggleTransportMode,
+    onOpenConnectHub: () -> Unit = onAutoConnectHotspot,
+    onOpenSosDrawer: () -> Unit = onToggleSos,
     modifier: Modifier = Modifier
 ) {
-    val p = LocalPulsePalette.current
-    val pillShape = tacticalButtonShape(state.isSimpleMode, p.isOriginal, p.isAero)
+    val tokens = LocalPulseTokens.current
+    val p = tokens.palette
 
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .background(p.topBarBg)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
     ) {
         val showSosBanner = state.isSosActive || state.incomingSosAlert.isNotBlank()
@@ -77,9 +110,9 @@ fun PulseMeshTopBar(
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
                     animation = tween(durationMillis = 480, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse,
+                    repeatMode = RepeatMode.Reverse
                 ),
-                label = "sos_flash",
+                label = "sos_flash"
             )
             val strobeBg = Color(
                 red = 0.78f + 0.22f * sosPulse,
@@ -89,357 +122,304 @@ fun PulseMeshTopBar(
             )
             val bannerText = when {
                 state.isSosActive && state.incomingSosAlert.isNotBlank() ->
-                    com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "⚠ SOS ACTIVE • ${state.incomingSosAlert}", "⚠ ΕΝΕΡΓΟ SOS • ${state.incomingSosAlert}")
+                    AppStrings.tr(state.appLanguage, "SOS ACTIVE • ${state.incomingSosAlert}", "ΕΝΕΡΓΟ SOS • ${state.incomingSosAlert}")
                 state.incomingSosAlert.isNotBlank() ->
-                    com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "⚠ EMERGENCY ${state.incomingSosAlert}", "⚠ ΕΚΤΑΚΤΟ ${state.incomingSosAlert}")
+                    AppStrings.tr(state.appLanguage, "EMERGENCY ${state.incomingSosAlert}", "ΕΚΤΑΚΤΟ ${state.incomingSosAlert}")
                 else ->
-                    com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "⚠ PRIORITY SOS DISTRESS BEACON BROADCASTING", "⚠ ΕΚΠΟΜΠΗ ΣΗΜΑΤΟΣ ΚΙΝΔΥΝΟΥ SOS")
+                    AppStrings.tr(state.appLanguage, "SOS DISTRESS BEACON BROADCASTING", "ΕΚΠΟΜΠΗ ΣΗΜΑΤΟΣ ΚΙΝΔΥΝΟΥ SOS")
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 46.dp)
+                    .heightIn(min = 44.dp)
                     .background(strobeBg)
-                    .border(2.dp, Color.White.copy(alpha = 0.55f + 0.45f * sosPulse))
                     .clickable {
-                        if (state.isSosActive) onToggleSos() else onDismissIncomingSos()
+                        if (state.isSosActive) onOpenSosDrawer() else onDismissIncomingSos()
                     }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .testTag("top_bar_sos_banner"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.4f + 0.6f * sosPulse))
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = bannerText,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .border(1.dp, Color.White, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "SOS",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
                     Text(
-                        text = if (state.isSosActive) {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "STOP SOS", "ΤΕΡΜΑΤΙΣΜΟΣ SOS")
-                        } else {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "DISMISS", "ΚΛΕΙΣΙΜΟ")
-                        },
+                        text = bannerText,
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontFamily = tokens.labelFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                Text(
+                    text = if (state.isSosActive) AppStrings.tr(state.appLanguage, "MANAGE", "ΕΛΕΓΧΟΣ") else AppStrings.tr(state.appLanguage, "DISMISS", "ΚΛΕΙΣΙΜΟ"),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp
+                )
             }
         }
 
+        // Compact 1-row main bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .then(
-                    if (p.isAero) {
-                        Modifier.aeroGlassPanel(
-                            p,
-                            cornerRadius = 0.dp,
-                            tint = if (p.isDarkAero) Color(0xE6081F33) else Color(0xEAF2FAFF)
-                        )
-                    } else {
-                        Modifier.background(p.topBarBg)
-                    }
-                )
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .heightIn(min = 54.dp)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Callsign + Node ID in compact bold emerald text
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onOpenSetupWizard() }
-                    .padding(vertical = 4.dp)
-            ) {
-                Text(
-                    text = "${state.operatorCallsign} (${state.localNodeId})",
-                    color = p.emerald,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            val statusColor = when {
+                state.isSosActive -> tokens.statusDanger
+                state.isInternetEnabled -> tokens.statusMesh
+                state.activePeerCount > 0 -> tokens.statusOnline
+                else -> tokens.statusWarning
+            }
+            val modeLabel = when {
+                state.isInternetEnabled -> AppStrings.tr(state.appLanguage, "Hybrid", "Υβριδικό")
+                state.webPortalStatus.isRunning -> AppStrings.tr(state.appLanguage, "Hotspot", "Hotspot")
+                else -> AppStrings.tr(state.appLanguage, "Off-Grid", "Εκτός Δικτ.")
             }
 
-            // Center: Status pill ("OFF-GRID" or "HYBRID") + Hotspot status pill + Live Peer Count badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            // Interactive Mesh Status Pill -> Opens Tap-to-Expand Telemetry Drawer
+            Surface(
+                color = p.surface,
+                shape = tokens.pillShape,
+                border = BorderStroke(tokens.borderWidth, statusColor.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clip(tokens.pillShape)
+                    .clickable { onOpenTelemetryDrawer() }
+                    .testTag("top_bar_mesh_status_pill")
             ) {
-                val isOffGrid = !state.isInternetEnabled
-                val pillColor = if (isOffGrid) p.emerald else p.amber
-                val pillBg = if (isOffGrid) p.emeraldDim else p.amberDim
-                Box(
-                    modifier = Modifier
-                        .clip(pillShape)
-                        .background(pillBg)
-                        .then(
-                            if (p.isAero) {
-                                Modifier.aeroGlossOverlay(p, pillBg, pillShape, cornerRadius = 18.dp)
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .border(1.dp, pillColor, pillShape)
-                        .clickable { onToggleTransportMode() }
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = if (isOffGrid) {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "OFF-GRID", "ΕΚΤΟΣ ΔΙΚΤΥΟΥ")
-                        } else {
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "HYBRID", "ΥΒΡΙΔΙΚΟ")
-                        },
-                        color = pillColor,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                val hsShort = when {
-                    state.hotspotButtonText.contains("LINKED", ignoreCase = true) -> "HS:LINK"
-                    state.hotspotButtonText.contains("HOST", ignoreCase = true) -> "HS:HOST"
-                    state.hotspotButtonText.contains("START", ignoreCase = true) -> "HS:..."
-                    else -> ""
-                }
-                if (hsShort.isNotEmpty()) {
                     Box(
                         modifier = Modifier
-                            .clip(pillShape)
-                            .background(p.cyanDim)
-                            .border(1.dp, p.cyan, pillShape)
-                            .clickable { onAutoConnectHotspot() }
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                    )
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                            text = state.operatorCallsign.ifBlank { "PulseMesh" },
+                            color = p.textPrimary,
+                            fontFamily = tokens.labelFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "$modeLabel • ${state.activePeerCount} ${AppStrings.tr(state.appLanguage, "peers", "κόμβοι")}${if (tokens.showHudTelemetryBadges) " • ${state.realBatteryPercent}%" else ""}",
+                            color = p.textSecondary,
+                            fontFamily = tokens.labelFontFamily,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = "Mesh Telemetry",
+                        tint = p.textMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Right compact action cluster
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (!state.hasRequiredPermissions && state.showPermissionsBanner) {
+                    Button(
+                        onClick = onRequestPermissions,
+                        shape = tokens.pillShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = tokens.statusWarning,
+                            contentColor = Color.Black
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag("top_bar_grant_perms_btn")
                     ) {
                         Text(
-                            text = hsShort,
-                            color = p.cyan,
-                            fontSize = 9.sp,
+                            text = AppStrings.tr(state.appLanguage, "Grant", "Άδειες"),
                             fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
+                            fontSize = 11.sp
                         )
                     }
                 }
 
-                val hasPeers = state.activePeerCount > 0
-                Box(
+                // 1-Tap Connect & Share Hub (QR / NFC / iPhone Bridge / APK / LoRa)
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = tokens.pillShape,
+                    border = BorderStroke(tokens.borderWidth, p.border),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    IconButton(
+                        onClick = onOpenConnectHub,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("top_bar_connect_hub_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode2,
+                            contentDescription = AppStrings.tr(state.appLanguage, "Connect & Share", "Σύνδεση & Κοινοποίηση"),
+                            tint = tokens.accentPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+
+                // 1-Tap SOS Emergency Kit Trigger
+                Surface(
+                    color = if (state.isSosActive) tokens.statusDanger else tokens.statusDanger.copy(alpha = 0.14f),
+                    shape = tokens.pillShape,
+                    border = BorderStroke(1.dp, tokens.statusDanger.copy(alpha = 0.65f)),
                     modifier = Modifier
-                        .clip(pillShape)
-                        .background(if (hasPeers) p.emeraldDim else p.surfaceVariant)
-                        .border(1.dp, if (hasPeers) p.emerald else p.border, pillShape)
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .height(36.dp)
+                        .clip(tokens.pillShape)
+                        .clickable { onOpenSosDrawer() }
+                        .testTag("top_bar_sos_btn")
                 ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (hasPeers) p.emerald else p.textMuted)
-                        )
                         Text(
-                            text = "${state.activePeerCount}",
-                            color = if (hasPeers) p.emerald else p.textSecondary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-            }
-
-            // Right: Battery % and compact "Grant Perms" chip ONLY while permissions missing
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "⚡${state.realBatteryPercent}%",
-                    color = p.emerald,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-
-                if (!state.hasRequiredPermissions) {
-                    Box(
-                        modifier = Modifier
-                            .clip(pillShape)
-                            .background(p.amberDim)
-                            .border(1.dp, p.amber, pillShape)
-                            .clickable { onRequestPermissions() }
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Grant Perms",
-                            color = p.amber,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
+                            text = "SOS",
+                            color = if (state.isSosActive) Color.White else tokens.statusDanger,
+                            fontFamily = tokens.labelFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp
                         )
                     }
                 }
             }
         }
 
-        // Upgrade 2: Live Signal-Reactive Mesh Heartbeat Ribbon (hidden in Original Classic theme)
-        if (!p.isOriginal) {
-            MeshHeartbeatRibbon(state = state, palette = p)
+        // Subtle live RF Mesh Heartbeat Ribbon
+        val packetEnergy = remember { Animatable(0.2f) }
+        val totalPackets = state.txFramesCount + state.rxFramesCount
+        LaunchedEffect(totalPackets) {
+            if (totalPackets > 0) {
+                packetEnergy.snapTo(1f)
+                packetEnergy.animateTo(0.18f, animationSpec = tween(durationMillis = 850))
+            }
         }
-        HorizontalDivider(color = p.border, thickness = 1.dp)
+        val sweepTransition = rememberInfiniteTransition(label = "mesh_ribbon")
+        val sweepPhase by sweepTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 3600, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "ribbon_phase"
+        )
+        val ribbonColor = when {
+            state.isSosActive -> tokens.statusDanger
+            state.isInternetEnabled -> tokens.statusMesh
+            else -> tokens.accentPrimary
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(p.border.copy(alpha = 0.35f))
+        ) {
+            val w = size.width
+            val h = size.height
+            val cy = h / 2f
+            val path = Path()
+            val steps = 48
+            val amp = (h * 0.45f) * packetEnergy.value
+            for (i in 0..steps) {
+                val t = i.toFloat() / steps.toFloat()
+                val dist = t - sweepPhase
+                val env = exp((-dist * dist * 42f).toDouble()).toFloat()
+                val y = cy + sin((t * 16.0 * PI)).toFloat() * amp * env
+                val x = t * w
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                color = ribbonColor.copy(alpha = 0.85f),
+                style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+            drawCircle(
+                color = ribbonColor,
+                radius = 1.8.dp.toPx(),
+                center = Offset(sweepPhase * w, cy)
+            )
+        }
     }
 }
 
+@Preview(name = "TopBar Practical Tactical Dark", showBackground = true)
 @Composable
-private fun MeshHeartbeatRibbon(
-    state: MeshUiState,
-    palette: PulseMeshPalette,
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "mesh_heartbeat")
-    val sweep by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "heartbeat_sweep",
-    )
-    val fastPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 700, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "packet_wave_phase",
-    )
-
-    // Spike burst energy whenever packets, messages, or audio frames are sent/received
-    val packetActivityCounter = state.txFramesCount + state.rxFramesCount +
-        state.packets.size + state.txAudioCount + state.rxAudioCount
-    val burstEnergy = remember { Animatable(0f) }
-    LaunchedEffect(packetActivityCounter) {
-        if (packetActivityCounter > 0) {
-            burstEnergy.snapTo(1f)
-            burstEnergy.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 2100, easing = LinearEasing)
+fun PreviewTopBarPracticalDark() {
+    PulseMeshTheme(themePreset = ThemePreset.PRACTICAL_TACTICAL, themeBrightness = ThemeBrightness.DARK) {
+        PulseMeshTopBar(
+            state = MeshUiState(
+                operatorCallsign = "Alpha-01",
+                activePeerCount = 4,
+                hasRequiredPermissions = true
             )
-        }
-    }
-
-    val hsLinked = state.hotspotState.isActive ||
-        state.hotspotButtonText.contains("LINKED", ignoreCase = true) ||
-        state.hotspotButtonText.contains("HOST", ignoreCase = true)
-    val accent = when {
-        state.isSosActive || state.incomingSosAlert.isNotBlank() -> palette.red
-        hsLinked -> palette.cyan
-        state.isInternetEnabled -> palette.amber
-        else -> palette.emerald
-    }
-    val energy = if (state.isSosActive || state.isPttPressed) 1f else burstEnergy.value
-    val baseAmp = if (state.activePeerCount > 0 || hsLinked) 0.52f else 0.28f
-    val amplitudeScale = (baseAmp + 0.62f * energy).coerceAtMost(1.15f)
-    val ribbonHeight = (14f + 7f * energy).dp
-    val primaryPath = remember { Path() }
-    val harmonicPath = remember { Path() }
-
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ribbonHeight)
-            .background(palette.topBarBg),
-    ) {
-        val midY = size.height * 0.52f
-        val maxAmp = (size.height * 0.42f) * amplitudeScale
-        val steps = 96
-        primaryPath.reset()
-        harmonicPath.reset()
-
-        // More waves & wider active envelope when packets are being transmitted/received!
-        val envelopeWidth = 0.0045f + 0.095f * energy
-        val waveFreq = 26.0 + 34.0 * energy
-        val globalWaveMix = 0.38f * energy
-
-        for (i in 0..steps) {
-            val u = i.toFloat() / steps.toFloat()
-            val x = u * size.width
-            var dist = u - sweep
-            if (dist < -0.5f) dist += 1f
-            if (dist > 0.5f) dist -= 1f
-            val localEnvelope = exp(-(dist * dist) / envelopeWidth)
-            val carrier = sin(dist * waveFreq * PI - fastPhase * (0.4f + 1.4f * energy)).toFloat()
-            val globalBurstWaves = sin(u * (14.0 + 18.0 * energy) * PI - fastPhase * 2f).toFloat() * globalWaveMix
-            val combined = (carrier * localEnvelope + globalBurstWaves).coerceIn(-1.15f, 1.15f)
-            val y = midY - (combined * maxAmp)
-            if (i == 0) primaryPath.moveTo(x, y) else primaryPath.lineTo(x, y)
-
-            // Secondary harmonic wave visible during active packet bursts
-            if (energy > 0.05f) {
-                val hWave = sin(u * 22.0 * PI + fastPhase * 1.6f).toFloat() * (0.55f * energy) * maxAmp
-                val hy = midY - hWave
-                if (i == 0) harmonicPath.moveTo(x, hy) else harmonicPath.lineTo(x, hy)
-            }
-        }
-
-        drawLine(
-            color = accent.copy(alpha = 0.18f),
-            start = Offset(0f, midY),
-            end = Offset(size.width, midY),
-            strokeWidth = 1f,
         )
-        if (energy > 0.05f) {
-            drawPath(
-                path = harmonicPath,
-                color = accent.copy(alpha = 0.32f * energy),
-                style = Stroke(width = 1.3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+    }
+}
+
+@Preview(name = "TopBar Field Ops HUD", showBackground = true)
+@Composable
+fun PreviewTopBarFieldOps() {
+    PulseMeshTheme(themePreset = ThemePreset.FIELD_OPS_HUD, themeBrightness = ThemeBrightness.DARK) {
+        PulseMeshTopBar(
+            state = MeshUiState(
+                operatorCallsign = "Ranger-7",
+                activePeerCount = 7,
+                isInternetEnabled = true,
+                realBatteryPercent = 78,
+                hasRequiredPermissions = false
             )
-            // Soft outer glow during active TX/RX bursts
-            drawPath(
-                path = primaryPath,
-                color = accent.copy(alpha = 0.28f * energy),
-                style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
-            )
-        }
-        drawPath(
-            path = primaryPath,
-            color = accent.copy(alpha = 0.86f + 0.14f * energy),
-            style = Stroke(width = (1.6f + 0.7f * energy).dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
-        val pulseX = sweep * size.width
-        drawCircle(
-            color = accent,
-            radius = (2.6f + 1.4f * energy).dp.toPx(),
-            center = Offset(pulseX, midY),
+    }
+}
+
+@Preview(name = "TopBar SOS Active", showBackground = true)
+@Composable
+fun PreviewTopBarSosActive() {
+    PulseMeshTheme(themePreset = ThemePreset.CLEAN_MESSENGER, themeBrightness = ThemeBrightness.LIGHT) {
+        PulseMeshTopBar(
+            state = MeshUiState(
+                operatorCallsign = "Maya",
+                activePeerCount = 2,
+                isSosActive = true,
+                hasRequiredPermissions = true
+            )
         )
     }
 }

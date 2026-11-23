@@ -43,6 +43,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import com.kostadinosk.pulsemesh.ui.screens.chat.ChatListFilter
+import com.kostadinosk.pulsemesh.ui.screens.chat.InConversationSearchBar
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kostadinosk.pulsemesh.model.ChatConversation
@@ -95,6 +97,7 @@ fun MeshChatScreen(
     onRotateGroupKey: (String) -> Unit = {},
     onBuildGroupInviteQr: (String) -> String = { "" },
     onSendVoiceNoteClip: (ByteArray, Long) -> Unit = { _, _ -> },
+    onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     if (state.selectedThreadId == null) {
@@ -144,6 +147,7 @@ fun MeshChatScreen(
             onRotateGroupKey = onRotateGroupKey,
             onBuildGroupInviteQr = onBuildGroupInviteQr,
             onSendVoiceNoteClip = onSendVoiceNoteClip,
+            onOpenSafetyNumber = onOpenSafetyNumber,
             modifier = modifier
         )
     }
@@ -181,8 +185,21 @@ private fun ConversationListView(
         state.nodes.filter { !it.isSelf }
     }
 
-    val filteredConversations = remember(state.conversations, state.searchQuery) {
-        if (state.searchQuery.isBlank()) {
+    var selectedFilter by remember { mutableStateOf(ChatListFilter.ALL) }
+    val nearbyNodeIds = remember(state.nodes) {
+        state.nodes.filter { !it.isSelf }.map { it.id }.toSet()
+    }
+    val matchingMessageThreadIds = remember(state.packets, state.searchQuery) {
+        val q = state.searchQuery.trim().lowercase()
+        if (q.isBlank()) emptySet<String>()
+        else state.packets.filter { pkt ->
+            pkt.content.lowercase().contains(q) || pkt.sourceCallsign.lowercase().contains(q)
+        }.flatMap { pkt ->
+            listOf("channel_primary", "dm_${pkt.sourceId}", "dm_${pkt.destId}", pkt.destId)
+        }.toSet()
+    }
+    val filteredConversations = remember(state.conversations, state.searchQuery, selectedFilter, nearbyNodeIds, matchingMessageThreadIds) {
+        val queryFiltered = if (state.searchQuery.isBlank()) {
             state.conversations
         } else {
             val q = state.searchQuery.trim().lowercase()
@@ -190,8 +207,15 @@ private fun ConversationListView(
                 it.title.lowercase().contains(q) ||
                     it.lastMessageText.lowercase().contains(q) ||
                     (it.peerNodeId?.lowercase()?.contains(q) == true) ||
-                    (it.groupId?.lowercase()?.contains(q) == true)
+                    (it.groupId?.lowercase()?.contains(q) == true) ||
+                    matchingMessageThreadIds.contains(it.threadId)
             }
+        }
+        when (selectedFilter) {
+            ChatListFilter.ALL -> queryFiltered
+            ChatListFilter.UNREAD -> queryFiltered.filter { it.unreadCount > 0 }
+            ChatListFilter.NEARBY_MESH -> queryFiltered.filter { it.isPinned || (it.peerNodeId != null && nearbyNodeIds.contains(it.peerNodeId)) }
+            ChatListFilter.GROUPS -> queryFiltered.filter { it.isGroup }
         }
     }
 
@@ -436,6 +460,41 @@ private fun ConversationListView(
                         .heightIn(min = 48.dp)
                         .testTag("chat_search_bar")
                 )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val unreadTotal = state.conversations.count { it.unreadCount > 0 }
+                    val nearbyTotal = state.conversations.count { it.isPinned || (it.peerNodeId != null && nearbyNodeIds.contains(it.peerNodeId)) }
+                    ChatListFilter.entries.forEach { filter ->
+                        val isSel = selectedFilter == filter
+                        val suffix = when (filter) {
+                            ChatListFilter.UNREAD -> if (unreadTotal > 0) " ($unreadTotal)" else ""
+                            ChatListFilter.NEARBY_MESH -> if (nearbyTotal > 0) " ($nearbyTotal)" else ""
+                            else -> ""
+                        }
+                        Surface(
+                            color = if (isSel) p.emerald.copy(alpha = 0.2f) else p.surfaceVariant,
+                            shape = RoundedCornerShape(50),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) p.emerald else p.border),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable { selectedFilter = filter }
+                                .testTag("chat_filter_${filter.name.lowercase()}")
+                        ) {
+                            Text(
+                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, filter.labelEn, filter.labelEl) + suffix,
+                                color = if (isSel) p.emerald else p.textSecondary,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1485,6 +1544,7 @@ private fun ConversationThreadView(
     onRotateGroupKey: (String) -> Unit = {},
     onBuildGroupInviteQr: (String) -> String = { "" },
     onSendVoiceNoteClip: (ByteArray, Long) -> Unit = { _, _ -> },
+    onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     // Intercept back button to return to conversation list
@@ -1654,11 +1714,24 @@ private fun ConversationThreadView(
                     )
                 }
 
-                // If 1-to-1 DM, show prominent Direct Call button!
+                // If 1-to-1 DM, show Safety Number shield + Direct Call button!
                 val dmPeerId = currentConvo?.peerNodeId.orEmpty()
                 if (isDm && dmPeerId.isNotBlank()) {
                     val peerNode = state.nodes.find { it.id == dmPeerId }
                         ?: com.kostadinosk.pulsemesh.model.MeshNode(id = dmPeerId, callsign = currentConvo.title)
+
+                    // Interactive Safety Number Verification Button
+                    IconButton(
+                        onClick = { onOpenSafetyNumber(dmPeerId, currentConvo.title) },
+                        modifier = Modifier.size(34.dp).testTag("chat_safety_number_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = "Safety Number",
+                            tint = if (currentConvo.isKeyChangedWarning) p.red else p.emerald,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
 
                     // Direct Call Button
                     IconButton(
@@ -1829,18 +1902,35 @@ private fun ConversationThreadView(
         }
 
         if (showThreadSearch) {
-            OutlinedTextField(
-                value = threadSearchQuery,
-                onValueChange = {
+            val searchScrollScope = rememberCoroutineScope()
+            var activeMatchIdx by remember(threadSearchQuery) { mutableIntStateOf(0) }
+            val matchCount = filteredPackets.size
+            InConversationSearchBar(
+                query = threadSearchQuery,
+                matchCount = matchCount,
+                activeMatchIndex = activeMatchIdx.coerceIn(0, (matchCount - 1).coerceAtLeast(0)),
+                onQueryChange = {
                     threadSearchQuery = it
                     onSearchActiveThread(it)
                 },
-                placeholder = { Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Search messages in this chat...", "Αναζήτηση μηνυμάτων στη συνομιλία..."), fontSize = 11.sp) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                    .testTag("chat_thread_search_input")
+                onPreviousMatch = {
+                    if (matchCount > 0) {
+                        activeMatchIdx = (activeMatchIdx - 1 + matchCount) % matchCount
+                        searchScrollScope.launch { runCatching { listState.animateScrollToItem(activeMatchIdx) } }
+                    }
+                },
+                onNextMatch = {
+                    if (matchCount > 0) {
+                        activeMatchIdx = (activeMatchIdx + 1) % matchCount
+                        searchScrollScope.launch { runCatching { listState.animateScrollToItem(activeMatchIdx) } }
+                    }
+                },
+                onClose = {
+                    showThreadSearch = false
+                    threadSearchQuery = ""
+                    onSearchActiveThread("")
+                },
+                appLanguage = state.appLanguage
             )
         }
 

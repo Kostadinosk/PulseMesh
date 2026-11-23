@@ -55,7 +55,11 @@ import com.kostadinosk.pulsemesh.ui.components.AppLockOverlay
 import com.kostadinosk.pulsemesh.ui.components.LockScreenCallCoverOverlay
 import com.kostadinosk.pulsemesh.ui.components.PersistentMiniCallBar
 import com.kostadinosk.pulsemesh.ui.components.PulseMeshTopBar
+import com.kostadinosk.pulsemesh.ui.components.ConnectShareSheet
+import com.kostadinosk.pulsemesh.ui.components.EmergencySosSheet
+import com.kostadinosk.pulsemesh.ui.components.SafetyNumberSheet
 import com.kostadinosk.pulsemesh.ui.components.TacticalMap
+import com.kostadinosk.pulsemesh.ui.components.TelemetryStatusDrawer
 import com.kostadinosk.pulsemesh.ui.components.TelemetryHudCard
 import com.kostadinosk.pulsemesh.ui.screens.*
 import androidx.compose.ui.window.Dialog
@@ -95,9 +99,55 @@ class MainActivity : FragmentActivity() {
             val isDeviceKeyguardLocked by keyguardLockedFlow.collectAsState()
             var manualLockCoverRequested by remember { mutableStateOf(false) }
 
-            PulseMeshTheme(appTheme = state.appTheme) {
+            PulseMeshTheme(
+                appTheme = state.appTheme,
+                themePreset = state.themePreset,
+                themeBrightness = state.themeBrightness
+            ) {
                 val p = LocalPulsePalette.current
+                val tokens = com.kostadinosk.pulsemesh.ui.theme.LocalPulseTokens.current
+                val toolkitState by viewModel.emergencyToolkit.state.collectAsState()
                 var showQrScannerDialog by remember { mutableStateOf(false) }
+                var showTelemetryDrawer by remember { mutableStateOf(false) }
+                var showConnectHub by remember { mutableStateOf(false) }
+                var showEmergencySosSheet by remember { mutableStateOf(false) }
+                var safetyNumberPeer by remember { mutableStateOf<Pair<String, String>?>(null) }
+                var activeSettingsDest by remember { mutableStateOf<com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination?>(null) }
+                var pendingBackupPassphrase by remember { mutableStateOf("") }
+
+                val backupExportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+                ) { uri ->
+                    if (uri != null && pendingBackupPassphrase.length >= 8) {
+                        val res = viewModel.exportEncryptedBackupEnvelope(pendingBackupPassphrase)
+                        pendingBackupPassphrase = ""
+                        res.onSuccess { envelope ->
+                            runCatching {
+                                contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(envelope) }
+                            }
+                            android.widget.Toast.makeText(this@MainActivity, "Exported encrypted .pmbackup", android.widget.Toast.LENGTH_SHORT).show()
+                        }.onFailure { err ->
+                            android.widget.Toast.makeText(this@MainActivity, err.message ?: "Backup export failed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                val backupImportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null && pendingBackupPassphrase.length >= 8) {
+                        val raw = runCatching {
+                            contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        }.getOrNull().orEmpty()
+                        val res = viewModel.importEncryptedBackupEnvelope(raw, pendingBackupPassphrase)
+                        pendingBackupPassphrase = ""
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            res.getOrElse { it.message ?: "Backup restore failed" },
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
 
                 val mapPackPicker = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument()
@@ -275,22 +325,22 @@ class MainActivity : FragmentActivity() {
                     return@PulseMeshTheme
                 }
 
-                // BackHandler navigation behavior
-                BackHandler(enabled = (state.selectedNode != null) || (state.selectedTabIndex != 0)) {
-                    if (state.selectedNode != null) {
-                        viewModel.selectNode(null)
-                    } else if (state.selectedTabIndex != 0) {
-                        viewModel.setTab(0)
+                // BackHandler navigation behavior (start tab is Chats = 1)
+                BackHandler(enabled = (activeSettingsDest != null) || (state.selectedNode != null) || (state.selectedTabIndex != 1)) {
+                    when {
+                        activeSettingsDest != null -> activeSettingsDest = null
+                        state.selectedNode != null -> viewModel.selectNode(null)
+                        state.selectedTabIndex != 1 -> viewModel.setTab(1)
                     }
                 }
 
-                // Clean 4-Tab structure: Map, Chats, Voice, Settings (localized EN/EL via strings.xml)
+                // Clean 4-Tab practical order: Chats (default start), Map, Voice, Settings
                 val tabs = remember(state.appLanguage) {
                     listOf(
-                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_map), Icons.Default.Map),
-                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_chats), Icons.AutoMirrored.Filled.Chat),
-                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_voice), Icons.Default.Radio),
-                        NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_settings), Icons.Default.Settings),
+                        1 to NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_chats), Icons.AutoMirrored.Filled.Chat),
+                        0 to NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_map), Icons.Default.Map),
+                        2 to NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_voice), Icons.Default.Radio),
+                        3 to NavTabItem(AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.tab_settings), Icons.Default.Settings),
                     )
                 }
 
@@ -315,6 +365,9 @@ class MainActivity : FragmentActivity() {
                                 onToggleSos = { viewModel.toggleSosBeacon() },
                                 onDismissIncomingSos = { viewModel.dismissIncomingSosAlert() },
                                 onAutoConnectHotspot = { viewModel.toggleOrConnectHotspot() },
+                                onOpenTelemetryDrawer = { showTelemetryDrawer = true },
+                                onOpenConnectHub = { showConnectHub = true },
+                                onOpenSosDrawer = { showEmergencySosSheet = true },
                             )
                             state.availableUpdate?.let { upd ->
                                 Surface(
@@ -421,18 +474,11 @@ class MainActivity : FragmentActivity() {
                                 val totalUnreadChats = remember(state.conversations) {
                                     state.conversations.sumOf { it.unreadCount }
                                 }
-                                tabs.forEachIndexed { index, (title, icon) ->
-                                    val isSelected = state.selectedTabIndex == index
-                                    val tabColor = if (isSelected) {
-                                        when (index) {
-                                            1 -> p.cyan
-                                            3 -> if (!state.isSimpleMode) p.amber else p.emerald
-                                            else -> p.emerald
-                                        }
-                                    } else {
-                                        p.textMuted
-                                    }
-                                    val aeroKind = when (index) {
+                                tabs.forEach { (tabId, tabItem) ->
+                                    val (title, icon) = tabItem
+                                    val isSelected = state.selectedTabIndex == tabId
+                                    val tabColor = if (isSelected) tokens.accentPrimary else p.textMuted
+                                    val aeroKind = when (tabId) {
                                         0 -> AeroTabIconKind.MAP
                                         1 -> AeroTabIconKind.CHATS
                                         2 -> AeroTabIconKind.VOICE
@@ -440,11 +486,14 @@ class MainActivity : FragmentActivity() {
                                     }
                                     NavigationBarItem(
                                         selected = isSelected,
-                                        onClick = { viewModel.setTab(index) },
+                                        onClick = {
+                                            if (tabId == 3) activeSettingsDest = null
+                                            viewModel.setTab(tabId)
+                                        },
                                         icon = {
                                             BadgedBox(
                                                 badge = {
-                                                    if (index == 1 && totalUnreadChats > 0) {
+                                                    if (tabId == 1 && totalUnreadChats > 0) {
                                                         Badge(
                                                             containerColor = p.emerald,
                                                             contentColor = if (p.isLight || p.isAero) Color.White else Color.Black,
@@ -463,11 +512,7 @@ class MainActivity : FragmentActivity() {
                                                     AeroNavOrbIcon(
                                                         kind = aeroKind,
                                                         selected = isSelected,
-                                                        accentColor = when (index) {
-                                                            1 -> p.cyan
-                                                            3 -> if (!state.isSimpleMode) p.amber else p.emerald
-                                                            else -> p.emerald
-                                                        },
+                                                        accentColor = tokens.accentPrimary,
                                                         isDarkAero = p.isDarkAero,
                                                         size = 26.dp,
                                                     )
@@ -520,11 +565,15 @@ class MainActivity : FragmentActivity() {
                                 modifier = Modifier.testTag("tablet_navigation_rail")
                             ) {
                                 Spacer(modifier = Modifier.weight(1f))
-                                tabs.forEachIndexed { index, (title, icon) ->
-                                    val isSelected = state.selectedTabIndex == index
+                                tabs.forEach { (tabId, tabItem) ->
+                                    val (title, icon) = tabItem
+                                    val isSelected = state.selectedTabIndex == tabId
                                     NavigationRailItem(
                                         selected = isSelected,
-                                        onClick = { viewModel.setTab(index) },
+                                        onClick = {
+                                            if (tabId == 3) activeSettingsDest = null
+                                            viewModel.setTab(tabId)
+                                        },
                                         icon = { Icon(icon, contentDescription = title) },
                                         label = { Text(title, fontSize = 10.sp) }
                                     )
@@ -582,6 +631,15 @@ class MainActivity : FragmentActivity() {
                                     onImportMapPack = { mapPackPicker.launch(arrayOf("*/*")) },
                                     onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
                                 )
+                                com.kostadinosk.pulsemesh.ui.screens.map.TacticalMapOverlaySheet(
+                                    state = state,
+                                    onSelectPeer = { viewModel.selectNode(it) },
+                                    onImportMapPack = { mapPackPicker.launch(arrayOf("*/*")) },
+                                    onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
+                                    onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
+                                    onToggleCotBridge = { enabled -> viewModel.setCotBridgeEnabled(enabled) },
+                                    onBroadcastGpsPin = { viewModel.pingMeshNow() }
+                                )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(
                                         node = selNode,
@@ -620,6 +678,7 @@ class MainActivity : FragmentActivity() {
                                         onRotateKeys = { viewModel.rotateEncryptionKeys() },
                                         onCreateGroup = { groupName, memberIds -> viewModel.createMeshGroup(groupName, memberIds) },
                                         onVerifyFingerprint = { peerId -> viewModel.acceptChangedPeerKey(peerId) },
+                                        onOpenSafetyNumber = { peerId, peerName -> safetyNumberPeer = peerId to peerName },
                                         onPlayVoiceClip = { viewModel.audioService.playAudioBase64(it) },
                                         onSendPhoto = { bmp, caption -> viewModel.sendPhotoInChat(bmp, caption) },
                                         onSendTacticalSnap = { viewModel.sendTacticalSnapInChat() },
@@ -654,6 +713,7 @@ class MainActivity : FragmentActivity() {
                                         onRotateKeys = { viewModel.rotateEncryptionKeys() },
                                         onCreateGroup = { groupName, memberIds -> viewModel.createMeshGroup(groupName, memberIds) },
                                         onVerifyFingerprint = { peerId -> viewModel.acceptChangedPeerKey(peerId) },
+                                        onOpenSafetyNumber = { peerId, peerName -> safetyNumberPeer = peerId to peerName },
                                         onPlayVoiceClip = { viewModel.audioService.playAudioBase64(it) },
                                         onSendPhoto = { bmp, caption -> viewModel.sendPhotoInChat(bmp, caption) },
                                         onSendTacticalSnap = { viewModel.sendTacticalSnapInChat() },
@@ -705,6 +765,7 @@ class MainActivity : FragmentActivity() {
                                         viewModel.createMeshGroup(groupName, memberIds)
                                     },
                                     onVerifyFingerprint = { peerId -> viewModel.acceptChangedPeerKey(peerId) },
+                                        onOpenSafetyNumber = { peerId, peerName -> safetyNumberPeer = peerId to peerName },
                                     onPlayVoiceClip = { viewModel.audioService.playAudioBase64(it) },
                                     onSendPhoto = { bmp, caption -> viewModel.sendPhotoInChat(bmp, caption) },
                                     onSendTacticalSnap = { viewModel.sendTacticalSnapInChat() },
@@ -747,150 +808,70 @@ class MainActivity : FragmentActivity() {
                                     },
                                 )
                             }
-                            2 -> SimpleCallVoiceScreen(
+                            2 -> com.kostadinosk.pulsemesh.ui.screens.voice.PulseVoiceHubScreen(
                                 state = state,
                                 duplexCallState = state.duplexCallState,
-                                audioService = viewModel.audioService,
                                 onStartCall = { viewModel.startDuplexCall(it) },
-                                appLanguage = state.appLanguage,
                                 onStartGroupCall = { viewModel.startGroupMeshCall() },
                                 onEndCall = { viewModel.endDuplexCall() },
                                 onToggleMute = { viewModel.toggleCallMute() },
                                 onToggleSpeaker = { viewModel.toggleCallSpeaker() },
                                 onStartPtt = { viewModel.startPtt() },
                                 onStopPtt = { viewModel.stopPtt() },
-                                onToggleLiveMicrophone = { viewModel.toggleUseLiveMicrophone() },
                                 onAcceptCall = { viewModel.acceptDuplexCall() },
                                 onDeclineCall = { viewModel.declineDuplexCall() },
-                                onTestMicLoopback = { viewModel.audioService.testMicAndSpeakerLoopback() },
-                                onToggleHotspot = { viewModel.toggleOrConnectHotspot() },
-                                onPushToOverride = { viewModel.setCallPushToOverride(it) },
                                 onReplayLastRx = { viewModel.replayLastRxVoice(isCallMode = false) },
-                                onReplayLastCallRx = { viewModel.replayLastRxVoice(isCallMode = true) },
-                                onReplayLastPttRx = { viewModel.replayLastRxVoice(isCallMode = false) },
-                                onHealHotspot = { viewModel.healHotspotLinkNow() },
-                                onCycleVoiceClarity = { viewModel.cycleVoiceClarityPreset() },
-                                onOpenLockScreenCover = { manualLockCoverRequested = true },
-                                onToggleBell202Modem = { viewModel.toggleBell202Modem() },
-                                onTransmitBell202Message = { msg, isSos ->
-                                    viewModel.transmitBell202AcousticMessage(msg, isSos = isSos)
-                                },
                                 onSelectAudioRoute = { route -> viewModel.selectAudioRoute(route) },
                                 onJoinPttChannel = { cid -> viewModel.joinPttChannel(cid) },
                                 onToggleCourtesyBeep = { enabled -> viewModel.setPttCourtesyBeepEnabled(enabled) },
                                 onToggleConferenceMute = { nid -> viewModel.toggleConferencePeerMute(nid) },
-                                onKickConferencePeer = { nid -> viewModel.kickConferencePeer(nid) },
-                                onLeaveVoiceDrop = { peerId, peerName ->
-                                    viewModel.recordAndSendVoiceDropToPeer(peerId, peerName)
-                                },
+                                onKickConferencePeer = { nid -> viewModel.kickConferencePeer(nid) }
                             )
                             else -> {
-                                // Unified Settings & Live Radio Diagnostics (no Simple vs Pro lock)
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .aeroCanvasBackground(p)
-                                ) {
-                                        val subTabShape = tacticalButtonShape(false, p.isOriginal, p.isAero)
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    horizontal = if (p.isAero) 10.dp else 0.dp,
-                                                    vertical = if (p.isAero) 6.dp else 0.dp,
+                                com.kostadinosk.pulsemesh.ui.screens.settings.ModularSettingsHub(
+                                    state = state,
+                                    activeDestination = activeSettingsDest,
+                                    onNavigate = { activeSettingsDest = it },
+                                    subScreenContent = { dest ->
+                                        when (dest) {
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.APPEARANCE ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.AppearanceSettingsScreen(
+                                                    selectedPreset = state.themePreset,
+                                                    selectedBrightness = state.themeBrightness,
+                                                    appLanguage = state.appLanguage,
+                                                    onSelectPreset = { viewModel.setThemePreset(it) },
+                                                    onSelectBrightness = { viewModel.setThemeBrightness(it) },
+                                                    onSelectLanguage = { viewModel.setAppLanguage(it) }
                                                 )
-                                                .then(
-                                                    if (p.isAero) {
-                                                        Modifier.aeroGlassPanel(
-                                                            palette = p,
-                                                            cornerRadius = 18.dp,
-                                                            tint = if (p.isDarkAero) Color(0xD40A2338) else Color(0xECFFFFFF),
-                                                            borderColor = p.borderBright,
-                                                        )
-                                                    } else {
-                                                        Modifier.background(p.card)
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.RADIO_LAB ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.RadioLabDiagnosticsScreen(
+                                                    state = state,
+                                                    onStartBleTx = { viewModel.startLiveBleTx() },
+                                                    onStopBleTx = { viewModel.stopLiveBleTx() },
+                                                    onToggleRxSniffer = { viewModel.toggleRawBleSniffer() },
+                                                    onClearBleDevices = { viewModel.clearScannedBleDevices() },
+                                                    onRequestPermissions = { permissionLauncher.launch(permissionsToRequest) },
+                                                    onForceGattReDiscovery = { viewModel.forceGattReDiscovery() },
+                                                    onRunPingSweep = { viewModel.runMeshLinkQualitySweep() },
+                                                    onVerifyRoot = { viewModel.verifyRootStatus() },
+                                                    onRefreshHardware = { viewModel.refreshHardwareReport() }
+                                                )
+                                            com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.UPDATES_DATA ->
+                                                com.kostadinosk.pulsemesh.ui.screens.settings.UpdatesDataSettingsScreen(
+                                                    state = state,
+                                                    backupStatusMessage = state.backupStatusMessage,
+                                                    onCheckUpdates = { viewModel.checkForAppUpdateNow(userInitiated = true) },
+                                                    onInstallVerifiedUpdate = { viewModel.downloadAndInstallVerifiedUpdate() },
+                                                    onExportEncryptedBackup = { pass ->
+                                                        pendingBackupPassphrase = pass
+                                                        backupExportLauncher.launch("pulsemesh_${state.operatorCallsign}.pmbackup")
+                                                    },
+                                                    onImportEncryptedBackup = { pass ->
+                                                        pendingBackupPassphrase = pass
+                                                        backupImportLauncher.launch(arrayOf("*/*"))
                                                     }
                                                 )
-                                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            val sysSelected = proSettingsSubTab == 0
-                                            val rfSelected = proSettingsSubTab == 1
-                                            val activeFg = if (p.isLight || p.isAero) Color.White else Color.Black
-                                            Button(
-                                                onClick = { proSettingsSubTab = 0 },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (sysSelected) {
-                                                        if (p.isAero) Color.Transparent else p.emerald
-                                                    } else p.surfaceVariant,
-                                                    contentColor = if (sysSelected) activeFg else p.textSecondary,
-                                                ),
-                                                shape = subTabShape,
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .heightIn(min = 36.dp)
-                                                    .then(
-                                                        if (sysSelected && p.isAero) {
-                                                            Modifier.aeroGlossOverlay(p, p.emerald, subTabShape, 14.dp)
-                                                        } else Modifier
-                                                    )
-                                                    .testTag("pro_subtab_system"),
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Tune,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(14.dp),
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.settings_tab_upper),
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            }
-                                            Button(
-                                                onClick = { proSettingsSubTab = 1 },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (rfSelected) {
-                                                        if (p.isAero) Color.Transparent else p.amber
-                                                    } else p.surfaceVariant,
-                                                    contentColor = if (rfSelected) activeFg else p.textSecondary,
-                                                ),
-                                                shape = subTabShape,
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .heightIn(min = 36.dp)
-                                                    .then(
-                                                        if (rfSelected && p.isAero) {
-                                                            Modifier.aeroGlossOverlay(p, p.amber, subTabShape, 14.dp)
-                                                        } else Modifier
-                                                    )
-                                                    .testTag("pro_subtab_rflab"),
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Terminal,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(14.dp),
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = AppStrings.resolve(this@MainActivity, state.appLanguage, R.string.radio_diagnostics_tab),
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            }
-                                        }
-                                        if (proSettingsSubTab == 0) {
-                                            SettingsScreen(
+                                            else -> SettingsScreen(
                                                 state = state,
                                                 onToggleSimpleMode = { viewModel.toggleSimpleMode() },
                                                 onToggleTransportMode = { viewModel.toggleInternetEnabled() },
@@ -983,31 +964,11 @@ class MainActivity : FragmentActivity() {
                                                 onSelectLoraProtocol = { proto -> viewModel.selectLoraProtocol(proto) },
                                                 onScanLoraDevices = { viewModel.scanLoraDevices() },
                                             )
-                                        } else {
-                                            RootBoosterScreen(
-                                                state = state,
-                                                onToggleBleCoded = { viewModel.toggleBleCodedPhy() },
-                                                onToggleWifiStuffing = { viewModel.toggleWifiBeaconStuffing() },
-                                                onToggleUnthrottledScan = { viewModel.toggleUnthrottledScan() },
-                                                onToggleSystemlessMount = { viewModel.toggleSystemlessMount() },
-                                                onSelectPhoneProfile = { profile -> viewModel.selectPhoneModel(profile) },
-                                                onAutoSwitchToDetected = { viewModel.autoSwitchToDetectedHardware() },
-                                                onForceOverrideMismatch = { viewModel.forceOverrideMismatch() },
-                                                onOpenMismatchDialog = { viewModel.openMismatchDialog() },
-                                                onVerifyRoot = { viewModel.verifyRootStatus() },
-                                                onStartBleTx = { viewModel.startLiveBleTx() },
-                                                onStopBleTx = { viewModel.stopLiveBleTx() },
-                                                onToggleRxSniffer = { viewModel.toggleRawBleSniffer() },
-                                                onClearBleDevices = { viewModel.clearScannedBleDevices() },
-                                                onRequestPermissions = { permissionLauncher.launch(permissionsToRequest) },
-                                                onForceGattReDiscovery = { viewModel.forceGattReDiscovery() },
-                                                onToggleWifiAware = { viewModel.toggleWifiAware() },
-                                                onToggleUltrasonicModem = { viewModel.toggleUltrasonicModem() },
-                                            )
                                         }
                                     }
-                                }
+                                )
                             }
+                        }
 
                         // Persistent Corner SOS Beacon Button (Start corner, hidden inside chat threads and active/ringing calls so it never blocks message/call controls)
                         var showSosConfirmDialog by remember { mutableStateOf(false) }
@@ -1037,11 +998,7 @@ class MainActivity : FragmentActivity() {
                                     .align(Alignment.BottomStart)
                                     .padding(start = 14.dp, bottom = 14.dp)
                                     .clickable {
-                                        if (state.isSosActive) {
-                                            viewModel.toggleSosBeacon()
-                                        } else {
-                                            showSosConfirmDialog = true
-                                        }
+                                        showEmergencySosSheet = true
                                     }
                                     .testTag("sos_corner_button")
                             ) {
@@ -1256,35 +1213,86 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                // Tactical Landing & Device Setup Wizard Screen
+                // PulseMesh v2.0 Dual-Track Onboarding (Fast 3-Step / Custom 5-Step)
                 if (state.showSetupWizard) {
-                    TacticalDeviceWizardScreen(
-                        initialCallsign = state.operatorCallsign,
-                        initialNodeId = state.localNodeId,
-                        initialSelectedProfile = state.selectedPhoneProfile,
-                        detectedHardware = state.detectedHardware,
-                        initialPureOffGrid = !state.isInternetEnabled,
-                        initialInternetBridge = state.isInternetEnabled,
-                        onCompleteWizard = { callsign, nodeId, profile, pureOffGrid, internetBridge ->
-                            viewModel.saveDeviceProfile(callsign, nodeId, profile, pureOffGrid, internetBridge)
+                    com.kostadinosk.pulsemesh.ui.onboarding.PulseOnboardingScreen(
+                        state = state,
+                        onUpdateCallsign = { viewModel.updateCallsign(it) },
+                        onReserveUsername = { user, pass ->
+                            viewModel.claimOrRecoverUsername(user, pass, "", false) { _, _ -> }
+                        },
+                        onRequestPermissions = { permissionLauncher.launch(permissionsToRequest) },
+                        onDownloadMapRegion = { lat, lon, _, _ ->
+                            viewModel.broadcastOfflineMapTilesToPeers(lat, lon)
+                        },
+                        onSaveIceInfo = { ice -> viewModel.saveIceMedicalCard("", "", "", ice) },
+                        onOpenQrScanner = {
                             viewModel.closeSetupWizard()
+                            showQrScannerDialog = true
                         },
-                        onDismiss = { viewModel.closeSetupWizard() },
-                        onSelectTransportPosture = { pureOffGrid ->
-                            viewModel.toggleInternetEnabled(enabled = !pureOffGrid)
+                        onFinish = { viewModel.closeSetupWizard() }
+                    )
+                }
+
+                // PulseMesh v2.0 Tap-to-Expand Telemetry Drawer
+                if (showTelemetryDrawer) {
+                    TelemetryStatusDrawer(
+                        state = state,
+                        onDismiss = { showTelemetryDrawer = false },
+                        onToggleInternetMode = { viewModel.toggleInternetEnabled() },
+                        onToggleHotspot = { viewModel.toggleWebPortal() },
+                        onOpenRadioLab = {
+                            activeSettingsDest = com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.RADIO_LAB
+                            viewModel.setTab(3)
                         },
-                        currentAppTheme = state.appTheme,
-                        onSelectAppTheme = { selectedTheme ->
-                            viewModel.setAppTheme(selectedTheme)
-                        },
-                        initialClaimedUsername = state.claimedUsername,
-                        initialRecoveryKey = "",
-                        usernameAuthStatus = state.usernameAuthStatus,
-                        isReservingUsername = state.isReservingUsername,
-                        isUsernameOnHold = state.isUsernameOnHold,
-                        onClaimOrRecoverUsername = { u, pin, rk, rec, cb ->
-                            viewModel.claimOrRecoverUsername(u, pin, rk, rec, cb)
-                        },
+                        onOpenConnectHub = { showConnectHub = true }
+                    )
+                }
+
+                // PulseMesh v2.0 Unified 1-Tap Connect & Share Hub
+                if (showConnectHub) {
+                    ConnectShareSheet(
+                        state = state,
+                        onDismiss = { showConnectHub = false },
+                        onLaunchQrScanner = { showQrScannerDialog = true },
+                        onToggleHotspotPortal = { viewModel.toggleWebPortal() },
+                        onToggleLoraBridge = { viewModel.toggleLoraBridge() },
+                        onSelectLoraProtocol = { viewModel.selectLoraProtocol(it) },
+                        onScanLoraDevices = { viewModel.scanLoraDevices() },
+                        onToggleAcousticModem = { viewModel.toggleBell202Modem() },
+                        onSendAcousticMessage = { msg -> viewModel.transmitBell202AcousticMessage(msg, isSos = false) }
+                    )
+                }
+
+                // PulseMesh v2.0 Offline Emergency Kit & SOS Drawer
+                if (showEmergencySosSheet) {
+                    EmergencySosSheet(
+                        state = state,
+                        toolkitState = toolkitState,
+                        onDismiss = { showEmergencySosSheet = false },
+                        onToggleSosBeacon = { viewModel.toggleSosBeacon() },
+                        onSendImSafeCheckIn = { viewModel.sendImSafeCheckIn() },
+                        onToggleTorchMorse = { viewModel.emergencyToolkit.toggleTorchMorseSos() },
+                        onToggleSiren = { viewModel.emergencyToolkit.toggleSiren() }
+                    )
+                }
+
+                // PulseMesh v2.0 Interactive Safety Number & Key Verification Sheet
+                safetyNumberPeer?.let { (peerId, peerName) ->
+                    val convo = state.conversations.firstOrNull { it.peerNodeId == peerId }
+                    val peerNode = state.nodes.firstOrNull { it.id == peerId }
+                    SafetyNumberSheet(
+                        localNodeId = state.localNodeId,
+                        localPublicKey = state.x25519PublicKey,
+                        peerNodeId = peerId,
+                        peerCallsign = peerName,
+                        peerPublicKey = convo?.safetyFingerprint.orEmpty().ifBlank { peerId },
+                        isKeyChangedWarning = convo?.isKeyChangedWarning == true,
+                        isVerified = convo?.isKeyChangedWarning == false && !convo.safetyFingerprint.isNullOrBlank(),
+                        appLanguage = state.appLanguage,
+                        onMarkVerified = { viewModel.acceptChangedPeerKey(peerId) },
+                        onScanPeerQr = { showQrScannerDialog = true },
+                        onDismiss = { safetyNumberPeer = null }
                     )
                 }
 

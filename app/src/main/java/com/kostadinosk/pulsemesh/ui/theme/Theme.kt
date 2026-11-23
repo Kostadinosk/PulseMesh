@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.kostadinosk.pulsemesh.util.AppTheme
+import com.kostadinosk.pulsemesh.util.ThemeBrightness
+import com.kostadinosk.pulsemesh.util.ThemePreset
 
 @Immutable
 data class PulseMeshPalette(
@@ -379,39 +381,53 @@ fun paletteFromMaterial3Scheme(
 @Composable
 fun PulseMeshTheme(
     appTheme: AppTheme = AppTheme.TACTICAL_DARK,
+    themePreset: ThemePreset? = null,
+    themeBrightness: ThemeBrightness? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val darkSystem = isSystemInDarkTheme()
+    val resolvedPreset = themePreset ?: appTheme.toThemePreset()
+    val resolvedBrightness = themeBrightness ?: appTheme.toThemeBrightness()
+    val isDark = when (resolvedBrightness) {
+        ThemeBrightness.SYSTEM -> darkSystem
+        ThemeBrightness.DARK -> true
+        ThemeBrightness.LIGHT -> false
+    }
 
-    val colorScheme = when (appTheme) {
-        AppTheme.FRUTIGER_AERO -> AeroColorScheme
-        AppTheme.FRUTIGER_AERO_DARK -> DarkAeroColorScheme
-        AppTheme.TACTICAL_LIGHT -> LightTacticalColorScheme
-        AppTheme.MATERIAL3 -> {
+    val tokens = resolvePulseTokens(
+        preset = resolvedPreset,
+        brightness = resolvedBrightness,
+        isDark = isDark
+    )
+
+    val colorScheme = when (resolvedPreset) {
+        ThemePreset.FRUTIGER_AERO -> if (isDark) DarkAeroColorScheme else AeroColorScheme
+        ThemePreset.CLEAN_MESSENGER -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 runCatching {
-                    if (darkSystem) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                    if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
                 }.getOrElse {
-                    if (darkSystem) Material3FallbackDarkColorScheme else Material3FallbackLightColorScheme
+                    if (isDark) Material3FallbackDarkColorScheme else Material3FallbackLightColorScheme
                 }
             } else {
-                if (darkSystem) Material3FallbackDarkColorScheme else Material3FallbackLightColorScheme
+                if (isDark) Material3FallbackDarkColorScheme else Material3FallbackLightColorScheme
             }
         }
-        else -> TacticalColorScheme
+        ThemePreset.PRACTICAL_TACTICAL, ThemePreset.FIELD_OPS_HUD ->
+            if (isDark) TacticalColorScheme else LightTacticalColorScheme
     }
 
-    val palette = when (appTheme) {
-        AppTheme.FRUTIGER_AERO -> AeroPulsePalette
-        AppTheme.FRUTIGER_AERO_DARK -> DarkAeroPulsePalette
-        AppTheme.TACTICAL_LIGHT -> LightPulsePalette
-        AppTheme.ORIGINAL -> OriginalDarkPulsePalette
-        AppTheme.MATERIAL3 -> paletteFromMaterial3Scheme(colorScheme, isDark = darkSystem)
-        else -> DarkPulsePalette
+    val effectiveTokens = if (resolvedPreset == ThemePreset.CLEAN_MESSENGER && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        tokens.copy(palette = paletteFromMaterial3Scheme(colorScheme, isDark = isDark))
+    } else {
+        tokens
     }
 
-    CompositionLocalProvider(LocalPulsePalette provides palette) {
+    CompositionLocalProvider(
+        LocalPulseTokens provides effectiveTokens,
+        LocalPulsePalette provides effectiveTokens.palette
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

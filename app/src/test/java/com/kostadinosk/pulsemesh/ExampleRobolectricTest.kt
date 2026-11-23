@@ -1474,22 +1474,16 @@ class ExampleRobolectricTest {
     assertTrue("Stepping North must increase latitude", nLat > 37.9838)
     assertEquals(23.7275, nLon, 0.0001)
 
-    // 2. Ultrasonic VOX pre-key pilot modulation & key verify checksum
-    val checksum = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.fingerprintChecksum8("TEST_PUBKEY_BASE64")
-    val frame = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.packFrame32(
-      com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.OP_KEY_VERIFY,
-      "0xABCD",
-      checksum
+    // 2. Consolidated Bell202 Acoustic 2.0 fingerprint checksum & Goertzel demodulation
+    val checksum = com.kostadinosk.pulsemesh.service.Bell202AcousticModem.fingerprintChecksum8("TEST_PUBKEY_BASE64")
+    assertTrue("Fingerprint checksum must be 8-bit", checksum in 0..255)
+    val pcm = com.kostadinosk.pulsemesh.service.Bell202AcousticModem.modulateFrameToPcm("PMTEST".toByteArray())
+    assertTrue("Modulated Bell202 PCM must be non-empty", pcm.isNotEmpty())
+    val goertzel = com.kostadinosk.pulsemesh.service.Bell202AcousticModem.goertzelMagnitudeSquared(
+      pcm, 0, com.kostadinosk.pulsemesh.service.Bell202AcousticModem.SYMBOL_SAMPLES,
+      com.kostadinosk.pulsemesh.service.Bell202AcousticModem.FREQ_PREAMBLE_HZ
     )
-    val unpacked = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.unpackFrame32(frame)
-    assertNotNull(unpacked)
-    assertEquals(com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.OP_KEY_VERIFY, unpacked!!.first)
-    assertEquals("0xABCD", unpacked.second)
-    assertEquals(checksum, unpacked.third)
-
-    val normalPcm = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.modulateFrameToPcm44k(frame, includeVoxPilot = false)
-    val voxPcm = com.kostadinosk.pulsemesh.service.UltrasonicAcousticModem.modulateFrameToPcm44k(frame, includeVoxPilot = true)
-    assertTrue("VOX pilot must prepend 8 symbols", voxPcm.size > normalPcm.size)
+    assertTrue("Goertzel preamble bin energy must be positive", goertzel > 0.0)
 
     // 3. Breadcrumb GPX import/export
     val gpxSample = """

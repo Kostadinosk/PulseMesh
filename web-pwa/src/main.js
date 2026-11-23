@@ -37,6 +37,10 @@ import {
 } from "./net/webPush.js";
 import { createVoiceHub } from "./voice/voiceHub.js";
 import { createTacticalMapController, exportWaypointsToGpx } from "./map/tacticalMap.js";
+import { compute60DigitSafetyNumber } from "./crypto/safetyNumber.js";
+import { exportEncryptedBackup, importEncryptedBackup } from "./crypto/encryptedBackup.js";
+import { createCameraQrScanner, parsePulseMeshQrUri } from "./qr/qrScanner.js";
+import { buildSafeCheckInText, createWebEmergencySiren } from "./emergency/sosKit.js";
 
 const STORAGE_KEY = "pulsemesh_web_v155_state";
 
@@ -135,7 +139,7 @@ async function boot() {
     });
   }
 
-  document.documentElement.dataset.theme = state.theme;
+  // Theme handled by <meta name="color-scheme"> + data-preset
   setLanguage(state.lang);
 
   // Sync settings inputs
@@ -650,24 +654,315 @@ async function boot() {
     sendLocalHostPacket({ type: "HEARTBEAT", dstNodeId: "ALL", payload: "PING" });
     mapStatusPill.textContent = "Mesh ping transmitted.";
   });
-  document.getElementById("topSosBtn").addEventListener("click", () => {
-    const sosText = `EMERGENCY SOS from ${state.callsign} (${state.nodeId})`;
-    appendMessage({ threadId: "channel_primary", sender: state.callsign, text: sosText, transport: "SOS", isSelf: true });
-    sendLocalHostPacket({ type: "SOS", dstNodeId: "ALL", payload: sosText });
+  // v2.0.0 Theme Preset & 3-State Color Scheme Override (per modern-web-guidance dark-mode-toggle)
+  const colorSchemeMeta = document.querySelector("meta[name=\"color-scheme\"]");
+  const setPresetSelect = document.getElementById("setPresetSelect");
+
+  function applyColorScheme(mode, persist = true) {
+    const normalized = mode === "dark" || mode === "light" ? mode : "system";
+    if (colorSchemeMeta) {
+      colorSchemeMeta.content = normalized === "system" ? "light dark" : normalized;
+    }
+    if (persist) {
+      try {
+        if (normalized === "system") localStorage.removeItem("color-scheme");
+        else localStorage.setItem("color-scheme", normalized);
+      } catch {}
+    }
+    if (setThemeSelect) setThemeSelect.value = normalized;
+  }
+
+  function applyThemePreset(preset, persist = true) {
+    const valid = ["practical", "messenger", "field-ops", "aero"].includes(preset) ? preset : "practical";
+    document.documentElement.dataset.preset = valid;
+    if (persist) {
+      try { localStorage.setItem("pulsemesh_theme_preset", valid); } catch {}
+    }
+    if (setPresetSelect) setPresetSelect.value = valid;
+  }
+
+  try {
+    applyColorScheme(localStorage.getItem("color-scheme") || "system", false);
+    applyThemePreset(localStorage.getItem("pulsemesh_theme_preset") || "practical", false);
+  } catch {}
+
+  window.addEventListener("storage", (ev) => {
+    if (ev.key === "color-scheme") applyColorScheme(ev.newValue || "system", false);
+    if (ev.key === "pulsemesh_theme_preset") applyThemePreset(ev.newValue || "practical", false);
   });
 
-  // Settings Controls
+  // v2.0.0 Emergency SOS Kit Dialog (Broadcast SOS, Web Audio Rescue Siren, "I am Safe" Check-In)
+  const sosDialog = document.getElementById("sosDialog");
+  const webSiren = createWebEmergencySiren();
+  document.getElementById("topSosBtn").addEventListener("click", () => {
+    sosDialog?.showModal();
+  });
+  document.getElementById("sosBroadcastBtn")?.addEventListener("click", () => {
+    const sosText = `EMERGENCY SOS from ${state.callsign} (${state.nodeId}) • GPS ${state.lat?.toFixed(5) || "0"}, ${state.lon?.toFixed(5) || "0"}`;
+    appendMessage({ threadId: "channel_primary", sender: state.callsign, text: sosText, transport: "SOS", isSelf: true });
+    sendLocalHostPacket({ type: "SOS", dstNodeId: "ALL", payload: sosText });
+    cfRealtime.send({ dstNodeId: "ALL", type: "SOS", payload: sosText, srcNodeId: state.nodeId, srcCallsign: state.callsign });
+    sosDialog?.close();
+  });
+  document.getElementById("sosSirenBtn")?.addEventListener("click", (e) => {
+    webSiren.toggle();
+    e.currentTarget.textContent = webSiren.isActive() ? "STOP RESCUE SIREN" : "Toggle Rescue Siren (Web Audio)";
+  });
+  document.getElementById("sosImSafeBtn")?.addEventListener("click", () => {
+    webSiren.stop();
+    const safeText = buildSafeCheckInText(state.callsign, state.lat, state.lon);
+    appendMessage({ threadId: "channel_primary", sender: state.callsign, text: safeText, transport: "CHECK-IN", isSelf: true });
+    sendLocalHostPacket({ type: "CHAT", dstNodeId: "ALL", payload: safeText });
+    sosDialog?.close();
+  });
+
+  // v2.0.0 QR Camera Scanner & Invite URI Connect Hub Dialog
+  const qrDialog = document.getElementById("qrConnectDialog");
+  const qrVideo = document.getElementById("qrCameraVideo");
+  const qrStatus = document.getElementById("qrScannerStatus");
+  const qrManualInput = document.getElementById("qrManualUriInput");
+  const applyParsedQr = (rawUri) => {
+    const parsed = parsePulseMeshQrUri(rawUri);
+    if (parsed.kind === "peer") {
+      const id = parsed.nodeId || `0x${(parsed.username || "PEER").slice(0, 6).toUpperCase()}`;
+      state.peers.set(normId(id), {
+        nodeId: id,
+        callsign: parsed.callsign,
+        username: parsed.username,
+        publicKeyBase64: parsed.publicKey || ""
+      });
+      state.activeThreadId = `dm_${id}`;
+      renderPeersAndThreads();
+      renderMessages();
+      qrStatus.textContent = `Connected to ${parsed.callsign} (${id})`;
+      qrDialog?.close();
+    } else if (parsed.kind === "verify") {
+      qrStatus.textContent = `Safety Number QR scanned for ${parsed.peer} (${parsed.safetyNumber.slice(0, 10)}...)`;
+    } else {
+      qrStatus.textContent = "Unrecognized QR format. Expected pulsemesh://join?... or @username.";
+    }
+  };
+  const camScanner = createCameraQrScanner(qrVideo, applyParsedQr, (msg) => {
+    if (qrStatus) qrStatus.textContent = msg;
+  });
+  document.getElementById("topQrConnectBtn")?.addEventListener("click", () => qrDialog?.showModal());
+  document.getElementById("startQrCamBtn")?.addEventListener("click", async () => {
+    if (qrVideo) qrVideo.hidden = false;
+    await camScanner.start();
+  });
+  document.getElementById("copyMyInviteBtn")?.addEventListener("click", async () => {
+    const u = state.claimedUsername ? `&user=${encodeURIComponent(state.claimedUsername)}` : "";
+    const k = state.pubKeyB64 ? `&pub=${encodeURIComponent(state.pubKeyB64)}` : "";
+    const uri = `pulsemesh://join?id=${encodeURIComponent(state.nodeId)}&name=${encodeURIComponent(state.callsign)}${u}${k}`;
+    try {
+      await navigator.clipboard.writeText(uri);
+      qrStatus.textContent = "Copied your PulseMesh invite URI to clipboard.";
+    } catch {
+      if (qrManualInput) qrManualInput.value = uri;
+      qrStatus.textContent = "Invite URI placed in the input box below.";
+    }
+  });
+  document.getElementById("applyQrUriBtn")?.addEventListener("click", () => {
+    if (qrManualInput?.value) applyParsedQr(qrManualInput.value);
+  });
+  qrDialog?.addEventListener("close", () => {
+    camScanner.stop();
+    if (qrVideo) qrVideo.hidden = true;
+  });
+
+  // v2.0.0 Interactive 60-Digit Safety Number Verification Dialog
+  const safetyDialog = document.getElementById("safetyNumberDialog");
+  const safetyGrid = document.getElementById("safetyNumberGrid");
+  const safetySub = document.getElementById("safetyPeerSubtitle");
+  document.getElementById("openSafetyNumberBtn")?.addEventListener("click", async () => {
+    const peerId = state.activeThreadId.startsWith("dm_") ? state.activeThreadId.slice(3) : "ALL";
+    const peer = state.peers.get(normId(peerId));
+    const peerPub = peer?.publicKeyBase64 || peerId;
+    const sn = await compute60DigitSafetyNumber(state.nodeId, state.pubKeyB64 || state.nodeId, peerId, peerPub);
+    if (safetySub) {
+      safetySub.textContent = `Compare these 12 five-digit blocks with ${peer?.callsign || peerId} (matches Android PulseMesh v2.0).`;
+    }
+    if (safetyGrid) {
+      safetyGrid.innerHTML = "";
+      for (const blk of sn.split(" ")) {
+        const span = document.createElement("span");
+        span.textContent = blk;
+        safetyGrid.appendChild(span);
+      }
+    }
+    safetyDialog?.showModal();
+  });
+
+  // v2.0.0 Global & In-Chat Message Search Filtering
+  const filterDomItems = (containerId, query) => {
+    const q = String(query || "").trim().toLowerCase();
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    for (const child of box.children) {
+      child.hidden = Boolean(q && !child.textContent.toLowerCase().includes(q));
+    }
+  };
+  document.getElementById("globalChatSearchInput")?.addEventListener("input", (e) => {
+    filterDomItems("threadListContainer", e.target.value);
+    filterDomItems("peerListContainer", e.target.value);
+  });
+  document.getElementById("inChatSearchInput")?.addEventListener("input", (e) => {
+    filterDomItems("messageLogContainer", e.target.value);
+  });
+
+  // v2.0.0 Voice Note Recorder (MediaRecorder Opus/WebM) & Compressed Photo/File Sharing
+  let activeRecorder = null;
+  let recordedChunks = [];
+  const voiceNoteBtn = document.getElementById("chatVoiceNoteBtn");
+  voiceNoteBtn?.addEventListener("click", async () => {
+    if (activeRecorder && activeRecorder.state === "recording") {
+      activeRecorder.stop();
+      voiceNoteBtn.textContent = "🎙";
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      appendMessage({ threadId: state.activeThreadId, sender: "System", text: "Voice note recording requires HTTPS or iOS Root CA trust.", transport: "AUDIO", isSelf: false });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordedChunks = [];
+      activeRecorder = new MediaRecorder(stream);
+      activeRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) recordedChunks.push(ev.data); };
+      activeRecorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordedChunks, { type: activeRecorder.mimeType || "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        appendMessage({ threadId: state.activeThreadId, sender: state.callsign, text: `[Voice Note ${(blob.size / 1024).toFixed(1)} KB]`, transport: "VOICE NOTE", isSelf: true });
+        const log = document.getElementById("messageLogContainer");
+        if (log) {
+          const audioEl = document.createElement("audio");
+          audioEl.controls = true;
+          audioEl.src = url;
+          audioEl.style.maxWidth = "260px";
+          log.appendChild(audioEl);
+          log.scrollTop = log.scrollHeight;
+        }
+      };
+      activeRecorder.start();
+      voiceNoteBtn.textContent = "⏹";
+    } catch (err) {
+      appendMessage({ threadId: state.activeThreadId, sender: "System", text: `Mic error: ${err.message || err}`, transport: "AUDIO", isSelf: false });
+    }
+  });
+
+  document.getElementById("chatMediaFileInput")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    appendMessage({
+      threadId: state.activeThreadId,
+      sender: state.callsign,
+      text: `[Attachment: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]`,
+      transport: "FILE",
+      isSelf: true
+    });
+    if (file.type.startsWith("image/")) {
+      const imgUrl = URL.createObjectURL(file);
+      const log = document.getElementById("messageLogContainer");
+      if (log) {
+        const img = document.createElement("img");
+        img.src = imgUrl;
+        img.alt = file.name;
+        img.className = "msg-img";
+        log.appendChild(img);
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  });
+
+  // v2.0.0 GPX Import onto Tactical Map 2.0
+  document.getElementById("mapImportGpxInput")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const xml = await file.text();
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    let imported = 0;
+    for (const pt of doc.querySelectorAll("wpt, trkpt")) {
+      const lat = parseFloat(pt.getAttribute("lat") || "");
+      const lon = parseFloat(pt.getAttribute("lon") || "");
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        const name = pt.querySelector("name")?.textContent || `GPX #${imported + 1}`;
+        state.waypoints.push({ lat, lon, label: name });
+        imported++;
+      }
+    }
+    mapCtrl.render();
+    mapStatusPill.textContent = `Imported ${imported} GPX points from ${file.name}.`;
+  });
+
+  // v2.0.0 Encrypted Offline .pmbackup Export & Import
+  const backupPassInput = document.getElementById("backupPassphraseInput");
+  const backupStatusNote = document.getElementById("backupStatusNote");
+  document.getElementById("exportBackupBtn")?.addEventListener("click", async () => {
+    const pass = backupPassInput?.value || "";
+    try {
+      const env = await exportEncryptedBackup({
+        operatorCallsign: state.callsign,
+        nodeId: state.nodeId,
+        claimedUsername: state.claimedUsername,
+        x25519PublicKey: state.pubKeyB64,
+        x25519PrivateKey: state.privKeyB64,
+        meshChannel: state.passphrase
+      }, pass);
+      const blob = new Blob([env], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `pulsemesh_${state.callsign.replace(/[^a-zA-Z0-9_-]/g, "") || "node"}.pmbackup`;
+      a.click();
+      if (backupStatusNote) backupStatusNote.textContent = "Exported AES-256-GCM encrypted .pmbackup.";
+    } catch (err) {
+      if (backupStatusNote) backupStatusNote.textContent = err.message || "Export failed.";
+    }
+  });
+  document.getElementById("importBackupFileInput")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const pass = backupPassInput?.value || "";
+    try {
+      const raw = await file.text();
+      const restored = await importEncryptedBackup(raw, pass);
+      state.callsign = restored.operatorCallsign;
+      state.nodeId = restored.nodeId || state.nodeId;
+      state.claimedUsername = restored.claimedUsername;
+      if (restored.x25519PublicKey && restored.x25519PrivateKey) {
+        state.pubKeyB64 = restored.x25519PublicKey;
+        state.privKeyB64 = restored.x25519PrivateKey;
+      }
+      saveConfig({
+        callsign: state.callsign,
+        nodeId: state.nodeId,
+        claimedUsername: state.claimedUsername,
+        pubKeyB64: state.pubKeyB64,
+        privKeyB64: state.privKeyB64
+      });
+      refreshHeaderIdentity();
+      if (backupStatusNote) backupStatusNote.textContent = `Restored ${state.callsign} (${state.nodeId}) from .pmbackup.`;
+    } catch (err) {
+      if (backupStatusNote) backupStatusNote.textContent = `Restore failed: ${err.message || err}`;
+    }
+  });
+
+  // Settings Controls (4 ThemePresets + 3-state color-scheme + Language)
+  setPresetSelect?.addEventListener("change", () => applyThemePreset(setPresetSelect.value, true));
+  setThemeSelect?.addEventListener("change", () => applyColorScheme(setThemeSelect.value, true));
   document.getElementById("saveSettingsBtn").addEventListener("click", () => {
     state.callsign = setCallsignInput.value.trim() || state.callsign;
     state.passphrase = setPassphraseInput.value.trim() || "pulsemesh-tactical";
-    state.theme = setThemeSelect.value === "light" ? "light" : "dark";
+    applyThemePreset(setPresetSelect?.value || "practical", true);
+    applyColorScheme(setThemeSelect?.value || "system", true);
     state.lang = setLangSelect.value === "el" ? "el" : "en";
-    document.documentElement.dataset.theme = state.theme;
     setLanguage(state.lang);
     saveConfig({
       callsign: state.callsign,
       passphrase: state.passphrase,
-      theme: state.theme,
       lang: state.lang
     });
     refreshHeaderIdentity();

@@ -27,6 +27,16 @@ import {
   initDoubleRatchetInitiator,
   initDoubleRatchetResponder
 } from "../src/crypto/doubleRatchet.js";
+import {
+  buildVerificationQrPayload,
+  compute60DigitSafetyNumber,
+  verifyScannedQrPayload
+} from "../src/crypto/safetyNumber.js";
+import {
+  exportEncryptedBackup,
+  importEncryptedBackup
+} from "../src/crypto/encryptedBackup.js";
+import { parsePulseMeshQrUri } from "../src/qr/qrScanner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -170,8 +180,43 @@ function testCompiledBundleParity() {
   console.log(`PASS testCompiledBundleParity (SHA-256=${hashA.slice(0, 16)}..., ${(bufA.length / 1024).toFixed(1)} KB)`);
 }
 
+async function testSafetyNumberAndBackup() {
+  const snA = await compute60DigitSafetyNumber("0xAAA1", "PUB_ALICE_BASE64", "0xBBB2", "PUB_BOB_BASE64");
+  const snB = await compute60DigitSafetyNumber("0xBBB2", "PUB_BOB_BASE64", "0xAAA1", "PUB_ALICE_BASE64");
+  assert.equal(snA, snB, "60-digit Safety Number must be symmetric across peers");
+  assert.equal(snA.split(" ").length, 12);
+  const qr = buildVerificationQrPayload("0xAAA1", "0xBBB2", snA);
+  assert.equal(verifyScannedQrPayload(qr, snB), true);
+  assert.equal(verifyScannedQrPayload(qr + "1", snB), false);
+
+  const env = await exportEncryptedBackup({
+    operatorCallsign: "WebRanger",
+    nodeId: "0xDEAD1234",
+    claimedUsername: "webranger",
+    x25519PublicKey: "PUB_W",
+    x25519PrivateKey: "PRIV_W"
+  }, "correct-horse-battery", 10000);
+  assert.ok(env.startsWith("PMBK2:"));
+  const restored = await importEncryptedBackup(env, "correct-horse-battery", 10000);
+  assert.equal(restored.operatorCallsign, "WebRanger");
+  assert.equal(restored.claimedUsername, "webranger");
+  let failedWrongPass = false;
+  try {
+    await importEncryptedBackup(env, "wrong-passphrase", 10000);
+  } catch {
+    failedWrongPass = true;
+  }
+  assert.equal(failedWrongPass, true, "Wrong passphrase must fail closed");
+
+  const parsed = parsePulseMeshQrUri("pulsemesh://join?id=0x1234&name=Alpha&user=alpha");
+  assert.equal(parsed.kind, "peer");
+  assert.equal(parsed.nodeId, "0x1234");
+  console.log(`PASS testSafetyNumberAndBackup (SN=${snA.slice(0, 17)}...)`);
+}
+
 await testReedSolomon();
 await testAcousticV2();
 await testDoubleRatchetAndZeroTrustDm();
+await testSafetyNumberAndBackup();
 testCompiledBundleParity();
 console.log("ALL WEB PWA TESTS PASSED.");

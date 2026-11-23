@@ -1,11 +1,19 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-preset="practical">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>PulseMesh v1.5.5 — Off-Grid &amp; iPhone PWA Mesh Node</title>
-  <meta name="description" content="Official PulseMesh v1.5.5 Web &amp; iPhone PWA client with Signal Double Ratchet E2EE, WebRTC P2P Opus, Bell 202 Acoustic 2.0 (Reed-Solomon FEC + AES-256-GCM), VAPID Web Push, and Offline Tactical Map 2.0." />
-  <meta name="theme-color" content="#041320" />
+  <meta name="color-scheme" content="light dark" />
+  <script>
+    try {
+      document.querySelector('meta[name="color-scheme"]').content = localStorage.getItem("color-scheme") ?? "light dark";
+      var p = localStorage.getItem("pulsemesh_theme_preset");
+      if (p) document.documentElement.dataset.preset = p;
+    } catch (e) {}
+  </script>
+  <title>PulseMesh v2.0.0 — Practical Off-Grid &amp; iPhone PWA</title>
+  <meta name="description" content="Official PulseMesh v2.0.0 Web &amp; iPhone PWA client with Signal Double Ratchet E2EE, 60-Digit Safety Numbers, Encrypted .pmbackup, Browser QR Scanner, Voice Notes, WebRTC Opus, Acoustic 2.0, VAPID Web Push, and Tactical Map 2.0." />
+  <meta name="theme-color" content="#0c1118" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="PulseMesh" />
@@ -15,174 +23,252 @@
   <link rel="stylesheet" href="./src/styles/app.css" />
 </head>
 <body>
-  <header class="top-bar">
-    <div class="brand-row">
-      <img id="brandLogoImg" src="../assets/pulsemesh-logo.png" width="34" height="34" alt="PulseMesh logo" />
-      <div>
-        <h1 class="brand-title" data-i18n="appName">PulseMesh</h1>
-        <p class="brand-sub" id="topNodeIdentity" data-i18n="subtitleOffGrid">v1.5.5 Web &amp; iPhone PWA • Double Ratchet • Acoustic 2.0</p>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="brand-row">
+        <img id="brandLogoImg" class="brand-logo" src="../assets/pulsemesh-logo.png" width="34" height="34" alt="PulseMesh logo" />
+        <div>
+          <h1 class="brand-title" data-i18n="appName">PulseMesh</h1>
+          <p class="brand-sub" id="topNodeIdentity" data-i18n="subtitleOffGrid">v2.0.0 Practical PWA • Double Ratchet • Acoustic 2.0</p>
+        </div>
       </div>
+      <div class="top-actions">
+        <span class="pill emerald" id="transportStatusPill">E2EE READY</span>
+        <button type="button" class="btn" id="topQrConnectBtn">QR</button>
+        <button type="button" class="btn" id="topSetupBtn" data-i18n="settingsAccountBtn">@user</button>
+        <button type="button" class="btn btn-primary" id="topPingBtn" data-i18n="pingBtn">PING</button>
+        <button type="button" class="btn btn-danger" id="topSosBtn" data-i18n="sosBtn">SOS</button>
+      </div>
+    </header>
+
+    <div class="workspace-body">
+      <main class="app-main">
+        <!-- TAB 1 (DEFAULT START): CHATS, SEARCH, VOICE NOTES, ATTACHMENTS & SAFETY NUMBERS -->
+        <section class="tab-pane active scroller" id="pane-chats" aria-label="Encrypted Chats">
+          <div class="chat-layout">
+            <aside class="card thread-sidebar">
+              <h2 data-i18n="chatsTitle">Encrypted Mesh Threads</h2>
+              <input type="search" id="globalChatSearchInput" placeholder="Search threads, peers, or messages..." />
+              <div class="row-wrap">
+                <input type="text" id="newDmTargetInput" data-i18n-placeholder="newDmPlaceholder" placeholder="DM @username or 0xNodeId..." style="flex:1;" />
+                <button type="button" class="btn btn-primary" id="startDmBtn">+</button>
+              </div>
+              <div class="thread-list scroller" id="threadListContainer"></div>
+              <h3 data-i18n="peersOnlineTitle">Live Mesh Peers</h3>
+              <div class="peer-list scroller" id="peerListContainer"></div>
+            </aside>
+
+            <div class="card" style="flex:1;min-height:0;">
+              <div class="row-wrap" style="justify-content:space-between;">
+                <h2 id="activeThreadTitle">#Primary Tactical Mesh (PM2 AES-256-GCM)</h2>
+                <div class="row-wrap">
+                  <button type="button" class="btn" id="openSafetyNumberBtn" title="Verify 60-digit Safety Number">Verify Key</button>
+                  <span class="pill emerald" id="activeThreadCryptoBadge">PM2 / PMDR2 E2EE</span>
+                </div>
+              </div>
+              <input type="search" id="inChatSearchInput" placeholder="Filter messages in this conversation..." />
+              <div class="message-log scroller" id="messageLogContainer"></div>
+              <form id="chatSendForm" class="row-wrap">
+                <label class="btn" for="chatMediaFileInput" title="Share compressed photo or file">📎</label>
+                <input type="file" id="chatMediaFileInput" accept="image/*,.gpx,.kml,.txt,.json,.pmbackup" hidden />
+                <button type="button" class="btn" id="chatVoiceNoteBtn" title="Record voice note">🎙</button>
+                <input type="text" id="chatMessageInput" data-i18n-placeholder="chatInputPlaceholder" placeholder="Type E2EE message..." style="flex:1;" maxlength="500" />
+                <button type="submit" class="btn btn-emerald" data-i18n="sendBtn">Send</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: EDGE-TO-EDGE OFFLINE TACTICAL MAP 2.0 -->
+        <section class="tab-pane map-pane" id="pane-map" aria-label="Tactical Map">
+          <div class="map-canvas-wrap">
+            <canvas id="tacticalMapCanvas"></canvas>
+            <div class="map-hud">
+              <button type="button" class="btn" id="mapLayerDarkBtn" data-i18n="mapLayerDark">Dark</button>
+              <button type="button" class="btn" id="mapLayerTopoBtn" data-i18n="mapLayerTopo">Topo</button>
+              <button type="button" class="btn" id="mapLayerRadarBtn" data-i18n="mapLayerRadar">Radar</button>
+              <button type="button" class="btn" id="mapRulerBtn" data-i18n="mapRulerToggle">Ruler</button>
+              <label class="btn" for="mapImportGpxInput">Import GPX</label>
+              <input type="file" id="mapImportGpxInput" accept=".gpx,.xml" hidden />
+              <button type="button" class="btn" id="mapExportGpxBtn" data-i18n="mapExportGpx">Export GPX</button>
+              <button type="button" class="btn" id="mapZoomInBtn" aria-label="Zoom in">+</button>
+              <button type="button" class="btn" id="mapZoomOutBtn" aria-label="Zoom out">-</button>
+              <span class="pill" id="mapStatusPill" data-i18n="mapDropHint">Tap map to place waypoint or measure ruler leg</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: VOICE HUB, WEBRTC CALLS, PTT & ACOUSTIC MODEM 2.0 -->
+        <section class="tab-pane scroller" id="pane-voice" aria-label="Voice Hub and Acoustic Modem">
+          <div class="card">
+            <h2 data-i18n="voiceHubTitle">Voice Hub &amp; Walkie-Talkie Deck</h2>
+            <div class="row-wrap">
+              <select id="voicePeerSelect" aria-label="Select peer for WebRTC voice call" style="flex:1;"></select>
+              <button type="button" class="btn btn-emerald" id="startWebRtcCallBtn" data-i18n="callPeerBtn">WebRTC Call</button>
+              <button type="button" class="btn btn-primary" id="pttHoldBtn" data-i18n="pttHoldBtn">HOLD TO TALK (PTT)</button>
+              <label class="btn" for="httpMicFileInput" data-i18n="pttSpeakClipBtn">Speak Clip (HTTP Mic fallback)</label>
+              <input type="file" id="httpMicFileInput" accept="audio/*" capture="user" hidden />
+            </div>
+            <p class="status-note" id="voiceStatusBox">WebRTC P2P Opus + Cloudflare Calls TURN ready.</p>
+            <audio id="remoteCallAudio" autoplay></audio>
+          </div>
+
+          <div class="card">
+            <h2 data-i18n="acousticTitle">Bell 202 Acoustic 2.0 (RS-FEC + AES-256-GCM)</h2>
+            <div class="row-wrap">
+              <input type="text" id="bell202MsgInput" maxlength="72" data-i18n-placeholder="acousticPlaceholder" placeholder="Short air-gap message (max 72 chars)..." style="flex:1;" />
+              <button type="button" class="btn btn-primary" id="bell202TxBtn" data-i18n="acousticTxBtn">Chirp V2 Encrypted</button>
+              <button type="button" class="btn btn-danger" id="bell202SosBtn" data-i18n="acousticSosBtn">Acoustic SOS</button>
+              <button type="button" class="btn" id="bell202RxToggleBtn" data-i18n="acousticRxOff">Acoustic RX: OFF</button>
+            </div>
+            <p class="status-note" id="bell202StatusBox">Reed-Solomon GF(2^8) (8 parity bytes, repairs up to 4 corrupted bytes) + AES-256-GCM.</p>
+          </div>
+        </section>
+
+        <!-- TAB 4: SETTINGS, 4 THEME PRESETS, .PMBACKUP, VAPID PUSH, iOS ROOT CA & APK BEAM -->
+        <section class="tab-pane scroller" id="pane-settings" aria-label="Settings">
+          <div class="card">
+            <h2 data-i18n="tabSettings">Identity, Appearance &amp; Language</h2>
+            <div class="row-wrap">
+              <div class="field" style="flex:1;">
+                <label for="setCallsignInput" data-i18n="callsignLabel">Operator Callsign</label>
+                <input type="text" id="setCallsignInput" maxlength="24" autocomplete="nickname" />
+              </div>
+              <div class="field" style="flex:1;">
+                <label for="setPassphraseInput" data-i18n="channelPassphraseLabel">Mesh Channel Passphrase</label>
+                <input type="password" id="setPassphraseInput" maxlength="64" autocomplete="current-password" />
+              </div>
+            </div>
+            <div class="row-wrap">
+              <div class="field" style="flex:1;">
+                <label for="setPresetSelect">Visual Style Preset</label>
+                <select id="setPresetSelect">
+                  <option value="practical">Practical Tactical (Default)</option>
+                  <option value="messenger">Clean Messenger</option>
+                  <option value="field-ops">Field Ops HUD</option>
+                  <option value="aero">Frutiger Aero</option>
+                </select>
+              </div>
+              <div class="field" style="flex:1;">
+                <label for="setThemeSelect" data-i18n="themeLabel">Brightness (System / Dark / Light)</label>
+                <select id="setThemeSelect">
+                  <option value="system">System (Auto)</option>
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+              <div class="field" style="flex:1;">
+                <label for="setLangSelect" data-i18n="languageLabel">Language / Γλώσσα</label>
+                <select id="setLangSelect">
+                  <option value="en">English (EN)</option>
+                  <option value="el">Ελληνικά (EL)</option>
+                </select>
+              </div>
+            </div>
+            <div class="row-wrap">
+              <button type="button" class="btn btn-emerald" id="saveSettingsBtn">Save Settings</button>
+              <button type="button" class="btn btn-primary" id="openAccountDialogBtn" data-i18n="usernameOptionalTitle">Optional (Recommended): @username</button>
+              <button type="button" class="btn" id="purgePeersBtn" data-i18n="purgeBotsBtn">Purge Stale Peers</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Encrypted Offline Backup (.pmbackup)</h2>
+            <p class="status-note">Interoperable with Android PulseMesh v2.0 (PBKDF2 600,000 + AES-256-GCM).</p>
+            <div class="row-wrap">
+              <input type="password" id="backupPassphraseInput" placeholder="Backup passphrase (8+ chars)..." autocomplete="new-password" style="flex:1;" />
+              <button type="button" class="btn btn-emerald" id="exportBackupBtn">Export .pmbackup</button>
+              <label class="btn" for="importBackupFileInput">Import .pmbackup</label>
+              <input type="file" id="importBackupFileInput" accept=".pmbackup,.txt" hidden />
+            </div>
+            <p class="status-note" id="backupStatusNote">Ready to export or restore encrypted identity backup.</p>
+          </div>
+
+          <div class="card">
+            <h2 data-i18n="iosPushTitle">iOS 16.4+ &amp; Desktop Web Push (VAPID)</h2>
+            <p class="status-note" id="pushStatusNote" data-i18n="iosPushHint">On iPhone/iPad: tap Share -&gt; Add to Home Screen first, then enable Web Push for background notifications.</p>
+            <div class="row-wrap">
+              <button type="button" class="btn btn-emerald" id="enablePushBtn" data-i18n="enablePushBtn">Enable Background Web Push</button>
+              <button type="button" class="btn" id="disablePushBtn" data-i18n="disablePushBtn">Disable Web Push</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 data-i18n="iosCaTitle">Guided 1-Tap iOS .mobileconfig Root CA (Hotspot HTTPS Mic)</h2>
+            <div class="row-wrap">
+              <a class="btn btn-emerald" href="/ca.mobileconfig" download="PulseMesh-Root-CA.mobileconfig" data-i18n="downloadCaBtn">Download PulseMesh Root CA (.mobileconfig)</a>
+              <a class="btn" href="/api/ca.crt" download="PulseMesh-Root-CA.crt">Download .CRT</a>
+            </div>
+            <details>
+              <summary data-i18n="iosCaSummary">Step-by-step trust guide for green padlock &amp; Safari microphone on :8443</summary>
+              <ol style="padding-left:18px;font-size:12px;line-height:1.6;color:var(--text-sec);">
+                <li>Tap <strong>Download PulseMesh Root CA (.mobileconfig)</strong> above and tap <strong>Allow</strong> on iPhone/iPad.</li>
+                <li>Open iOS <strong>Settings &gt; Profile Downloaded</strong> (or <strong>General &gt; VPN &amp; Device Management</strong>) and tap <strong>Install</strong>.</li>
+                <li>Open <strong>Settings &gt; General &gt; About &gt; Certificate Trust Settings</strong> and toggle ON full trust for <strong>PulseMesh Local Root CA</strong>.</li>
+                <li>Open <code>https://192.168.43.1:8443</code> for trusted WebRTC Opus &amp; Acoustic 2.0 microphone streaming with zero internet.</li>
+              </ol>
+            </details>
+          </div>
+
+          <div class="card">
+            <h2 data-i18n="apkBeamTitle">Offline P2P APK Beaming (Zero Internet)</h2>
+            <div class="row-wrap">
+              <a class="btn btn-primary" href="/download/pulsemesh.apk" download="pulsemesh.apk" data-i18n="apkBeamBtn">Download Android APK</a>
+              <a class="btn" href="/download/pulsemesh.apk.sha256" target="_blank" rel="noopener">SHA-256 Checksum</a>
+            </div>
+            <p class="status-note" id="apkBeamInfoBox" data-i18n="apkBeamShaMissing">Host hotspot active; connect to Android host to beam APK.</p>
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Primary Navigation">
+        <button type="button" class="nav-btn active" data-tab="chats"><span aria-hidden="true">💬</span><span data-i18n="tabChats">Chats</span></button>
+        <button type="button" class="nav-btn" data-tab="map"><span aria-hidden="true">🗺</span><span data-i18n="tabMap">Map</span></button>
+        <button type="button" class="nav-btn" data-tab="voice"><span aria-hidden="true">🎙</span><span data-i18n="tabVoice">Voice</span></button>
+        <button type="button" class="nav-btn" data-tab="settings"><span aria-hidden="true">⚙</span><span data-i18n="tabSettings">Settings</span></button>
+      </nav>
     </div>
-    <div class="top-actions">
-      <span class="pill emerald" id="transportStatusPill">E2EE READY</span>
-      <button type="button" class="btn" id="topSetupBtn" data-i18n="settingsAccountBtn">Account &amp; @username</button>
-      <button type="button" class="btn btn-primary" id="topPingBtn" data-i18n="pingBtn">PING</button>
-      <button type="button" class="btn btn-danger" id="topSosBtn" data-i18n="sosBtn">SOS</button>
+  </div>
+
+  <!-- NATIVE MODAL DIALOG: QR CAMERA SCANNER & INVITE LINK CONNECT HUB -->
+  <dialog id="qrConnectDialog" closedby="any" aria-labelledby="qrConnectTitle">
+    <h2 id="qrConnectTitle">Connect &amp; Share (QR / Invite URI)</h2>
+    <p class="status-note" id="qrScannerStatus">Scan a PulseMesh QR code with your camera or paste a pulsemesh:// invite URI.</p>
+    <video id="qrCameraVideo" class="qr-video" playsinline muted hidden></video>
+    <div class="row-wrap">
+      <button type="button" class="btn btn-primary" id="startQrCamBtn" style="flex:1;">Start Camera Scanner</button>
+      <button type="button" class="btn" id="copyMyInviteBtn" style="flex:1;">Copy My Invite URI</button>
     </div>
-  </header>
+    <div class="row-wrap">
+      <input type="text" id="qrManualUriInput" placeholder="Paste pulsemesh://join?... or @user" style="flex:1;" />
+      <button type="button" class="btn btn-emerald" id="applyQrUriBtn">Connect</button>
+    </div>
+    <form method="dialog" style="margin:0;">
+      <button type="submit" value="close" class="btn" style="width:100%;">Close</button>
+    </form>
+  </dialog>
 
-  <main class="app-main">
-    <!-- TAB 1: OFFLINE TACTICAL MAP 2.0 -->
-    <section class="tab-pane map-pane active" id="pane-map" aria-label="Tactical Map">
-      <div class="map-canvas-wrap">
-        <canvas id="tacticalMapCanvas"></canvas>
-        <div class="map-hud">
-          <button type="button" class="btn" id="mapLayerDarkBtn" data-i18n="mapLayerDark">Dark</button>
-          <button type="button" class="btn" id="mapLayerTopoBtn" data-i18n="mapLayerTopo">Topo</button>
-          <button type="button" class="btn" id="mapLayerRadarBtn" data-i18n="mapLayerRadar">Radar</button>
-          <button type="button" class="btn" id="mapRulerBtn" data-i18n="mapRulerToggle">Ruler</button>
-          <button type="button" class="btn" id="mapExportGpxBtn" data-i18n="mapExportGpx">Export GPX</button>
-          <button type="button" class="btn" id="mapZoomInBtn" aria-label="Zoom in">+</button>
-          <button type="button" class="btn" id="mapZoomOutBtn" aria-label="Zoom out">-</button>
-          <span class="pill" id="mapStatusPill" data-i18n="mapDropHint">Tap map to place waypoint or measure ruler leg</span>
-        </div>
-      </div>
-    </section>
+  <!-- NATIVE MODAL DIALOG: OFFLINE EMERGENCY KIT & SOS -->
+  <dialog id="sosDialog" closedby="any" aria-labelledby="sosDialogTitle">
+    <h2 id="sosDialogTitle">Offline Emergency Kit &amp; SOS</h2>
+    <p class="status-note">Broadcast high-priority SOS over mesh/relay, trigger rescue siren, or send an "I'm Safe" check-in.</p>
+    <button type="button" class="btn btn-danger" id="sosBroadcastBtn">BROADCAST SOS BEACON</button>
+    <button type="button" class="btn" id="sosSirenBtn">Toggle Rescue Siren (Web Audio)</button>
+    <button type="button" class="btn btn-emerald" id="sosImSafeBtn">Send "I'm Safe" Check-In</button>
+    <form method="dialog" style="margin:0;">
+      <button type="submit" value="close" class="btn" style="width:100%;">Close</button>
+    </form>
+  </dialog>
 
-    <!-- TAB 2: CHATS, GROUPS, DOUBLE RATCHET DMs & LIVE PEERS -->
-    <section class="tab-pane" id="pane-chats" aria-label="Encrypted Chats">
-      <div class="chat-layout">
-        <div class="card">
-          <h2 data-i18n="chatsTitle">Encrypted Mesh Threads</h2>
-          <div class="row-wrap">
-            <input type="text" id="newDmTargetInput" data-i18n-placeholder="newDmPlaceholder" placeholder="DM @username or 0xNodeId..." style="flex:1;" />
-            <button type="button" class="btn btn-primary" id="startDmBtn">+</button>
-          </div>
-          <div class="thread-list" id="threadListContainer"></div>
-          <h3 data-i18n="peersOnlineTitle">Live Mesh Peers</h3>
-          <div class="peer-list" id="peerListContainer"></div>
-        </div>
-        <div class="card" style="flex:1;">
-          <div class="row-wrap" style="justify-content:space-between;">
-            <h2 id="activeThreadTitle">#Primary Tactical Mesh (PM2 AES-256-GCM)</h2>
-            <span class="pill emerald" id="activeThreadCryptoBadge">PM2 / PMDR2 E2EE</span>
-          </div>
-          <div class="message-log" id="messageLogContainer" style="flex:1;min-height:200px;"></div>
-          <form id="chatSendForm" class="row-wrap">
-            <input type="text" id="chatMessageInput" data-i18n-placeholder="chatInputPlaceholder" placeholder="Type E2EE message..." style="flex:1;" maxlength="500" />
-            <button type="submit" class="btn btn-emerald" data-i18n="sendBtn">Send</button>
-          </form>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 3: VOICE HUB, WEBRTC CALLS, PTT & ACOUSTIC MODEM 2.0 -->
-    <section class="tab-pane" id="pane-voice" aria-label="Voice Hub and Acoustic Modem">
-      <div class="card">
-        <h2 data-i18n="voiceHubTitle">Voice Hub &amp; Walkie-Talkie Deck</h2>
-        <div class="row-wrap">
-          <select id="voicePeerSelect" aria-label="Select peer for WebRTC voice call" style="flex:1;"></select>
-          <button type="button" class="btn btn-emerald" id="startWebRtcCallBtn" data-i18n="callPeerBtn">WebRTC Call</button>
-          <button type="button" class="btn btn-primary" id="pttHoldBtn" data-i18n="pttHoldBtn">HOLD TO TALK (PTT)</button>
-          <label class="btn" for="httpMicFileInput" data-i18n="pttSpeakClipBtn">Speak Clip (HTTP Mic fallback)</label>
-          <input type="file" id="httpMicFileInput" accept="audio/*" capture="user" hidden />
-        </div>
-        <p class="status-note" id="voiceStatusBox">WebRTC P2P Opus + Cloudflare Calls TURN ready.</p>
-        <audio id="remoteCallAudio" autoplay></audio>
-      </div>
-
-      <div class="card">
-        <h2 data-i18n="acousticTitle">Bell 202 Acoustic 2.0 (RS-FEC + AES-256-GCM)</h2>
-        <div class="row-wrap">
-          <input type="text" id="bell202MsgInput" maxlength="72" data-i18n-placeholder="acousticPlaceholder" placeholder="Short air-gap message (max 72 chars)..." style="flex:1;" />
-          <button type="button" class="btn btn-primary" id="bell202TxBtn" data-i18n="acousticTxBtn">Chirp V2 Encrypted</button>
-          <button type="button" class="btn btn-danger" id="bell202SosBtn" data-i18n="acousticSosBtn">Acoustic SOS</button>
-          <button type="button" class="btn" id="bell202RxToggleBtn" data-i18n="acousticRxOff">Acoustic RX: OFF</button>
-        </div>
-        <p class="status-note" id="bell202StatusBox">Reed-Solomon GF(2^8) (8 parity bytes, repairs up to 4 corrupted bytes) + AES-256-GCM.</p>
-      </div>
-    </section>
-
-    <!-- TAB 4: SETTINGS, VAPID WEB PUSH, GUIDED iOS ROOT CA & OFFLINE APK BEAMING -->
-    <section class="tab-pane" id="pane-settings" aria-label="Settings">
-      <div class="card">
-        <h2 data-i18n="tabSettings">Settings</h2>
-        <div class="row-wrap">
-          <div class="field" style="flex:1;">
-            <label for="setCallsignInput" data-i18n="callsignLabel">Operator Callsign</label>
-            <input type="text" id="setCallsignInput" maxlength="24" autocomplete="nickname" />
-          </div>
-          <div class="field" style="flex:1;">
-            <label for="setPassphraseInput" data-i18n="channelPassphraseLabel">Mesh Channel Passphrase (matches team)</label>
-            <input type="password" id="setPassphraseInput" maxlength="64" autocomplete="current-password" />
-          </div>
-        </div>
-        <div class="row-wrap">
-          <div class="field" style="flex:1;">
-            <label for="setThemeSelect" data-i18n="themeLabel">Theme</label>
-            <select id="setThemeSelect">
-              <option value="dark" data-i18n="themeDark">Dark Frutiger Aero</option>
-              <option value="light" data-i18n="themeLight">Daylight Aero</option>
-            </select>
-          </div>
-          <div class="field" style="flex:1;">
-            <label for="setLangSelect" data-i18n="languageLabel">Language / Γλώσσα</label>
-            <select id="setLangSelect">
-              <option value="en">English (EN)</option>
-              <option value="el">Ελληνικά (EL)</option>
-            </select>
-          </div>
-        </div>
-        <div class="row-wrap">
-          <button type="button" class="btn btn-emerald" id="saveSettingsBtn">Save Settings</button>
-          <button type="button" class="btn btn-primary" id="openAccountDialogBtn" data-i18n="usernameOptionalTitle">Optional (Recommended): Reserve or Sign In @username</button>
-          <button type="button" class="btn" id="purgePeersBtn" data-i18n="purgeBotsBtn">Purge Phantom / Stale Peers</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2 data-i18n="iosPushTitle">iOS 16.4+ &amp; Desktop Web Push (VAPID)</h2>
-        <p class="status-note" id="pushStatusNote" data-i18n="iosPushHint">On iPhone/iPad: tap Share -&gt; Add to Home Screen first, then enable Web Push for background notifications.</p>
-        <div class="row-wrap">
-          <button type="button" class="btn btn-emerald" id="enablePushBtn" data-i18n="enablePushBtn">Enable Background Web Push</button>
-          <button type="button" class="btn" id="disablePushBtn" data-i18n="disablePushBtn">Disable Web Push</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2 data-i18n="iosCaTitle">Guided 1-Tap iOS .mobileconfig Root CA (Hotspot HTTPS Mic)</h2>
-        <div class="row-wrap">
-          <a class="btn btn-emerald" href="/ca.mobileconfig" download="PulseMesh-Root-CA.mobileconfig" data-i18n="downloadCaBtn">Download PulseMesh Root CA (.mobileconfig)</a>
-          <a class="btn" href="/api/ca.crt" download="PulseMesh-Root-CA.crt">Download .CRT</a>
-        </div>
-        <details>
-          <summary data-i18n="iosCaSummary">Step-by-step trust guide for green padlock &amp; Safari microphone on :8443</summary>
-          <ol style="padding-left:18px;font-size:12px;line-height:1.6;color:var(--text-secondary);">
-            <li>Tap <strong>Download PulseMesh Root CA (.mobileconfig)</strong> above and tap <strong>Allow</strong> on iPhone/iPad.</li>
-            <li>Open iOS <strong>Settings &gt; Profile Downloaded</strong> (or <strong>General &gt; VPN &amp; Device Management</strong>) and tap <strong>Install</strong>.</li>
-            <li>Open <strong>Settings &gt; General &gt; About &gt; Certificate Trust Settings</strong> and toggle ON full trust for <strong>PulseMesh Local Root CA</strong>.</li>
-            <li>Open <code>https://192.168.43.1:8443</code> for trusted WebRTC Opus &amp; Acoustic 2.0 microphone streaming with zero internet.</li>
-          </ol>
-        </details>
-      </div>
-
-      <div class="card">
-        <h2 data-i18n="apkBeamTitle">Offline P2P APK Beaming (Zero Internet)</h2>
-        <div class="row-wrap">
-          <a class="btn btn-primary" href="/download/pulsemesh.apk" download="pulsemesh.apk" data-i18n="apkBeamBtn">Download Android APK</a>
-          <a class="btn" href="/download/pulsemesh.apk.sha256" target="_blank" rel="noopener">SHA-256 Checksum</a>
-        </div>
-        <p class="status-note" id="apkBeamInfoBox" data-i18n="apkBeamShaMissing">Host hotspot active; connect to Android host to beam APK.</p>
-      </div>
-    </section>
-  </main>
-
-  <nav class="bottom-nav" aria-label="Primary Navigation">
-    <button type="button" class="nav-btn active" data-tab="map"><span aria-hidden="true">🗺</span><span data-i18n="tabMap">Map</span></button>
-    <button type="button" class="nav-btn" data-tab="chats"><span aria-hidden="true">💬</span><span data-i18n="tabChats">Chats</span></button>
-    <button type="button" class="nav-btn" data-tab="voice"><span aria-hidden="true">🎙</span><span data-i18n="tabVoice">Voice</span></button>
-    <button type="button" class="nav-btn" data-tab="settings"><span aria-hidden="true">⚙</span><span data-i18n="tabSettings">Settings</span></button>
-  </nav>
+  <!-- NATIVE MODAL DIALOG: 60-DIGIT SAFETY NUMBER VERIFICATION -->
+  <dialog id="safetyNumberDialog" closedby="any" aria-labelledby="safetyNumberTitle">
+    <h2 id="safetyNumberTitle">Verify 60-Digit Safety Number</h2>
+    <p class="status-note" id="safetyPeerSubtitle">Compare these 12 five-digit blocks with your peer to verify end-to-end encryption.</p>
+    <div class="safety-grid" id="safetyNumberGrid"></div>
+    <form method="dialog" style="margin:0;">
+      <button type="submit" value="verified" class="btn btn-emerald" style="width:100%;">Done</button>
+    </form>
+  </dialog>
 
   <!-- NATIVE MODAL DIALOG: OPTIONAL (RECOMMENDED) @USERNAME ACCOUNT & QUICK SETUP -->
   <dialog id="accountDialog" closedby="any" aria-labelledby="accountDialogTitle">
@@ -213,7 +299,7 @@
   <dialog id="callDialog" closedby="closerequest" aria-labelledby="callDialogTitle">
     <h2 id="callDialogTitle">VOICE CALL</h2>
     <p id="callPeerLabel" style="font-size:18px;font-weight:800;">Peer</p>
-    <p id="callTimerLabel" style="font-family:var(--mono);font-size:22px;color:var(--cyan);">00:00</p>
+    <p id="callTimerLabel" style="font-family:var(--font-mono);font-size:22px;color:var(--cyan);">00:00</p>
     <div class="row-wrap">
       <button type="button" class="btn" id="callMuteBtn" style="flex:1;">Mute</button>
       <button type="button" class="btn btn-danger" id="callHangupBtn" style="flex:1;">End Call</button>
