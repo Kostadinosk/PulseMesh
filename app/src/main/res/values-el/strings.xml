@@ -29,7 +29,7 @@
 
     <!-- Tactical Map 2.0 -->
     <string name="map_layer_prefix">ΕΠΙΠΕΔΟ: %1$s</string>
-    <string name="map_layer_dark">Σκοτεινό</string>
+    <string name="map_layer_standard">Κανονικό</string>
     <string name="map_layer_topo">Τοπογραφικό</string>
     <string name="map_layer_satellite">Δορυφόρος</string>
     <string name="map_layer_radar">Ραντάρ</string>

@@ -29,7 +29,7 @@
 
     <!-- Tactical Map 2.0 -->
     <string name="map_layer_prefix">LAYER: %1$s</string>
-    <string name="map_layer_dark">Dark</string>
+    <string name="map_layer_standard">Standard</string>
     <string name="map_layer_topo">Topo</string>
     <string name="map_layer_satellite">Satellite</string>
     <string name="map_layer_radar">Radar</string>

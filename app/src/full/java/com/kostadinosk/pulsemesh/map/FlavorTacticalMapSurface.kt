@@ -67,16 +67,16 @@ fun FlavorTacticalMapSurface(
         // Base offline grid / Radar layer underneath or fallback if GL/network is unavailable
         Canvas(modifier = Modifier.fillMaxSize()) {
             val bgColor = when (layerStyle) {
-                MapLayerStyle.DARK -> Color(0xFF0A0F18)
-                MapLayerStyle.TOPO -> Color(0xFF131D17)
-                MapLayerStyle.SATELLITE -> Color(0xFF0D141F)
+                MapLayerStyle.STANDARD -> Color(0xFFECE8DF)
+                MapLayerStyle.TOPO -> Color(0xFFE6ECE3)
+                MapLayerStyle.SATELLITE -> Color(0xFF1C2A3A)
                 MapLayerStyle.RADAR -> Color(0xFF061310)
             }
             drawRect(bgColor)
             val gridColor = when (layerStyle) {
-                MapLayerStyle.DARK -> Color(0xFF1A2536)
-                MapLayerStyle.TOPO -> Color(0xFF233A2C)
-                MapLayerStyle.SATELLITE -> Color(0xFF1E2D42)
+                MapLayerStyle.STANDARD -> Color(0xFFD6D0C4)
+                MapLayerStyle.TOPO -> Color(0xFFCBD8C7)
+                MapLayerStyle.SATELLITE -> Color(0xFF283C52)
                 MapLayerStyle.RADAR -> Color(0xFF0F3D2E)
             }
             val step = 64.dp.toPx()
@@ -182,16 +182,16 @@ fun FlavorTacticalMapSurface(
 
 private fun buildLocalVectorOrRasterStyleJson(style: MapLayerStyle, online: Boolean): String {
     val bgHex = when (style) {
-        MapLayerStyle.DARK -> "#0A0F18"
-        MapLayerStyle.TOPO -> "#131D17"
-        MapLayerStyle.SATELLITE -> "#0D141F"
+        MapLayerStyle.STANDARD -> "#ECE8DF"
+        MapLayerStyle.TOPO -> "#E6ECE3"
+        MapLayerStyle.SATELLITE -> "#1C2A3A"
         MapLayerStyle.RADAR -> "#061310"
     }
     if (!online || style == MapLayerStyle.RADAR) {
         return """{"version":8,"name":"PulseMeshOffline","sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"$bgHex"}}]}"""
     }
     val tileUrl = when (style) {
-        MapLayerStyle.DARK -> "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        MapLayerStyle.STANDARD -> "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         MapLayerStyle.TOPO -> "https://a.tile.opentopomap.org/{z}/{x}/{y}.png"
         MapLayerStyle.SATELLITE -> "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
         MapLayerStyle.RADAR -> return """{"version":8,"name":"PulseMeshRadar","sources":{},"layers":[{"id":"bg","type":"background","paint":{"background-color":"$bgHex"}}]}"""

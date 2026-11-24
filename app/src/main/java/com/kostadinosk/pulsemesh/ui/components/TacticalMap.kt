@@ -117,7 +117,7 @@ fun TacticalMap(
     var pendingPinCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var selectedPinType by remember { mutableStateOf(WaypointType.RALLY) }
     var customPinTitle by remember { mutableStateOf("") }
-    var selectedLayerStyle by remember { mutableStateOf(externalLayerStyle ?: com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
+    var selectedLayerStyle by remember { mutableStateOf(externalLayerStyle ?: com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD) }
     LaunchedEffect(externalLayerStyle) {
         if (externalLayerStyle != null && externalLayerStyle != selectedLayerStyle) {
             selectedLayerStyle = externalLayerStyle
@@ -873,12 +873,14 @@ fun TacticalMap(
                     modifier = Modifier
                         .clickable {
                             val entries = com.kostadinosk.pulsemesh.map.MapLayerStyle.entries
-                            selectedLayerStyle = entries[(selectedLayerStyle.ordinal + 1) % entries.size]
+                            val nextStyle = entries[(selectedLayerStyle.ordinal + 1) % entries.size]
+                            selectedLayerStyle = nextStyle
+                            onLayerStyleChanged(nextStyle)
                         }
                         .testTag("map_layer_selector")
                 ) {
                     val layerRes = when (selectedLayerStyle) {
-                        com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK -> R.string.map_layer_dark
+                        com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD -> R.string.map_layer_standard
                         com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO -> R.string.map_layer_topo
                         com.kostadinosk.pulsemesh.map.MapLayerStyle.SATELLITE -> R.string.map_layer_satellite
                         com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR -> R.string.map_layer_radar

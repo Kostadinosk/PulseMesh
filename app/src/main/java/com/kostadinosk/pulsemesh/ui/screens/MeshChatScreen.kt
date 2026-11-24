@@ -180,6 +180,8 @@ private fun ConversationListView(
     var connectUsernameInput by remember { mutableStateOf("") }
     var connectFeedbackText by remember { mutableStateOf("") }
     var connectFeedbackSuccess by remember { mutableStateOf(false) }
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var isQuickStatusExpanded by remember { mutableStateOf(false) }
 
     val discoveredPeers = remember(state.nodes) {
         state.nodes.filter { !it.isSelf }
@@ -219,13 +221,10 @@ private fun ConversationListView(
         }
     }
 
-    // 3 Conversation Categories:
-    // 1) Public Mesh Broadcast (ALL) / Pinned Channels
     val pinnedChannels = filteredConversations.filter { it.isPinned && !it.isGroup }
-    // 2) Custom Multi-Mesh Group Chats
     val groupConversations = filteredConversations.filter { it.isGroup }
-    // 3) 1-on-1 Direct Chats
     val directMessages = filteredConversations.filter { !it.isPinned && !it.isGroup }
+    val showSearchControls = isSearchExpanded || state.searchQuery.isNotBlank() || selectedFilter != ChatListFilter.ALL
 
     Column(
         modifier = modifier
@@ -235,109 +234,94 @@ private fun ConversationListView(
             .navigationBarsPadding()
             .testTag("conversation_list_view")
     ) {
-        // Top Header with "@USER", "+ NEW GROUP" and "PING MESH"
-        Surface(
-            color = if (p.isAero) Color.Transparent else p.card,
+        // Clean, uncluttered top bar (Chats + 3 compact actions; Search & filters expand on tap)
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .aeroGlassPanel(p, cornerRadius = 0.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, p.border)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (p.isAero) {
-                            AeroGlossBadgeIcon(
-                                imageVector = Icons.AutoMirrored.Filled.Chat,
-                                accentColor = p.emerald,
-                                contentDescription = "Tactical Messaging",
-                                badgeSize = 26.dp,
-                                iconSize = 14.dp,
-                            )
-                        }
-                        Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "TACTICAL MESSAGING", "ΤΑΚΤΙΚΑ ΜΗΝΥΜΑΤΑ"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = p.emerald
-                            )
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
-                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
-                            state.appLanguage,
-                            "BROADCAST • GROUPS (${state.meshGroups.size}) • E2EE DMs • DTN: ${state.pendingDtnCount}/50",
-                            "ΕΚΠΟΜΠΗ • ΟΜΑΔΕΣ (${state.meshGroups.size}) • E2EE • DTN: ${state.pendingDtnCount}/50"
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.textSecondary
+                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Chats", "Συνομιλίες"),
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = p.textPrimary
                         )
                     )
+                    if (state.activePeerCount > 0) {
+                        Surface(
+                            color = p.emerald.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Text(
+                                text = "${state.activePeerCount} ${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "nearby", "κοντά")}",
+                                color = p.emerald,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
 
-                val actionFg = if (p.isLight || p.isAero) Color.White else Color.Black
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Connect by @username for distant friends
-                    Button(
+                    IconButton(
+                        onClick = {
+                            if (showSearchControls) {
+                                isSearchExpanded = false
+                                selectedFilter = ChatListFilter.ALL
+                                if (state.searchQuery.isNotBlank()) onSearchQueryChange("")
+                            } else {
+                                isSearchExpanded = true
+                            }
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (showSearchControls) p.emerald.copy(alpha = 0.16f) else p.surfaceVariant)
+                            .testTag("chat_search_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = if (showSearchControls) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = "Search Chats",
+                            tint = if (showSearchControls) p.emerald else p.textPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    IconButton(
                         onClick = {
                             connectUsernameInput = ""
                             connectFeedbackText = ""
                             showConnectUsernameDialog = true
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (p.isAero) Color.Transparent else p.amber,
-                            contentColor = actionFg
-                        ),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                        shape = btnShape,
                         modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 40.dp)
-                            .aeroGlossOverlay(p, p.amber, btnShape, cornerRadius = 18.dp)
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(p.surfaceVariant)
                             .testTag("chat_connect_username_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.AlternateEmail,
                             contentDescription = "Connect by Username",
-                            tint = actionFg,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "@USER", "@ΧΡΗΣΤΗΣ"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = actionFg,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            tint = p.textPrimary,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
-                    // Prominent "+ NEW GROUP" Button
-                    Button(
+                    IconButton(
                         onClick = {
                             newGroupName = ""
                             manualMemberNodeId = ""
@@ -347,89 +331,38 @@ private fun ConversationListView(
                             }
                             showCreateGroupDialog = true
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (p.isAero) Color.Transparent else p.cyan,
-                            contentColor = actionFg
-                        ),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                        shape = btnShape,
                         modifier = Modifier
-                            .weight(1.15f)
-                            .heightIn(min = 40.dp)
-                            .aeroGlossOverlay(p, p.cyan, btnShape, cornerRadius = 18.dp)
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(p.emerald.copy(alpha = 0.16f))
                             .testTag("create_new_group_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.GroupAdd,
                             contentDescription = "New Group",
-                            tint = actionFg,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "+ GROUP", "+ ΟΜΑΔΑ"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = actionFg,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        )
-                    }
-
-                    // Ping Mesh Now button
-                    Button(
-                        onClick = onBroadcastGpsPin,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (p.isAero) Color.Transparent else p.emerald,
-                            contentColor = actionFg
-                        ),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                        shape = btnShape,
-                        modifier = Modifier
-                            .weight(1.15f)
-                            .heightIn(min = 40.dp)
-                            .aeroGlossOverlay(p, p.emerald, btnShape, cornerRadius = 18.dp)
-                            .testTag("ping_mesh_now_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Sensors,
-                            contentDescription = "Ping Mesh",
-                            tint = actionFg,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "PING MESH", "ΣΑΡΩΣΗ MESH"),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = actionFg,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            tint = p.emerald,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
+            }
 
-                // Search Bar
+            if (showSearchControls) {
                 OutlinedTextField(
                     value = state.searchQuery,
                     onValueChange = onSearchQueryChange,
                     placeholder = {
                         Text(
-                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Search channels, groups & peers...", "Αναζήτηση καναλιών, ομάδων & κόμβων..."),
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Search chats & messages...", "Αναζήτηση συνομιλιών..."),
                             color = p.textMuted,
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace
+                            fontSize = 13.sp
                         )
                     },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search",
-                            tint = p.emerald,
+                            tint = p.textSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     },
@@ -449,15 +382,15 @@ private fun ConversationListView(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = p.emerald,
                         unfocusedBorderColor = p.border,
-                        focusedContainerColor = p.background,
-                        unfocusedContainerColor = p.background,
+                        focusedContainerColor = p.surfaceVariant,
+                        unfocusedContainerColor = p.surfaceVariant,
                         focusedTextColor = p.textPrimary,
                         unfocusedTextColor = p.textPrimary
                     ),
-                    shape = btnShape,
+                    shape = RoundedCornerShape(24.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 46.dp)
                         .testTag("chat_search_bar")
                 )
 
@@ -465,7 +398,7 @@ private fun ConversationListView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val unreadTotal = state.conversations.count { it.unreadCount > 0 }
                     val nearbyTotal = state.conversations.count { it.isPinned || (it.peerNodeId != null && nearbyNodeIds.contains(it.peerNodeId)) }
@@ -477,7 +410,7 @@ private fun ConversationListView(
                             else -> ""
                         }
                         Surface(
-                            color = if (isSel) p.emerald.copy(alpha = 0.2f) else p.surfaceVariant,
+                            color = if (isSel) p.emerald.copy(alpha = 0.18f) else p.surfaceVariant,
                             shape = RoundedCornerShape(50),
                             border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) p.emerald else p.border),
                             modifier = Modifier
@@ -488,8 +421,8 @@ private fun ConversationListView(
                             Text(
                                 text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, filter.labelEn, filter.labelEl) + suffix,
                                 color = if (isSel) p.emerald else p.textSecondary,
-                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp,
+                                fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
+                                fontSize = 12.sp,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
@@ -498,125 +431,16 @@ private fun ConversationListView(
             }
         }
 
-        // Conversation List
+        // Clean Conversation List
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 14.dp)
                 .testTag("conversation_list_lazy"),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(top = 10.dp, bottom = 76.dp)
+            contentPadding = PaddingValues(top = 2.dp, bottom = 76.dp)
         ) {
-            // 0-Peer Quick-Connect Onboarding Card (PulseMesh v1.4.5)
-            if (discoveredPeers.isEmpty() && state.searchQuery.isBlank()) {
-                item(key = "empty_peer_quick_connect") {
-                    Surface(
-                        color = p.card,
-                        shape = cardShape,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan.copy(alpha = 0.45f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("chat_zero_peer_connect_card")
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(Icons.Default.WifiTethering, contentDescription = null, tint = p.cyan, modifier = Modifier.size(18.dp))
-                                Text(
-                                    text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
-                                        state.appLanguage,
-                                        "No Nearby Mesh Peers Yet",
-                                        "Δεν Βρέθηκαν Κοντινοί Κόμβοι Ακόμα"
-                                    ),
-                                    color = p.textPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            }
-                            Text(
-                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
-                                    state.appLanguage,
-                                    "Nearby Android phones connect over BLE & Wi-Fi Aware automatically with no account needed. Optionally connect an iPhone/laptop via Web Portal or add a distant @username (recommended for Hybrid Relay):",
-                                    "Κοντινά Android συνδέονται αυτόματα μέσω BLE & Wi-Fi Aware χωρίς λογαριασμό. Προαιρετικά συνδέστε iPhone/laptop μέσω Πύλης Web ή προσθέστε @username (προτείνεται για Hybrid Relay):"
-                                ),
-                                color = p.textSecondary,
-                                fontSize = 12.sp
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Button(
-                                    onClick = onBroadcastGpsPin,
-                                    colors = ButtonDefaults.buttonColors(containerColor = p.emerald, contentColor = Color.Black),
-                                    shape = btnShape,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Scan Now", "Σάρωση"),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
-                                OutlinedButton(
-                                    onClick = onOpenWebPortal,
-                                    shape = btnShape,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, p.cyan),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "iPhone/Web", "iPhone/Web"),
-                                        color = p.cyan,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
-                                OutlinedButton(
-                                    onClick = { showConnectUsernameDialog = true },
-                                    shape = btnShape,
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, p.amber),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = "@username",
-                                        color = p.amber,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 1. Public Mesh Broadcast (ALL)
             if (pinnedChannels.isNotEmpty()) {
-                item {
-                    Text(
-                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "PUBLIC MESH BROADCAST (ALL)", "ΔΗΜΟΣΙΟ ΚΑΝΑΛΙ MESH (ΟΛΟΙ)"),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.textSecondary
-                        ),
-                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)
-                    )
-                }
-
                 items(pinnedChannels, key = { it.threadId }) { convo ->
                     ConversationItemCard(
                         conversation = convo,
@@ -626,91 +450,16 @@ private fun ConversationListView(
                 }
             }
 
-            // 2. Custom Multi-Mesh Group Chats
-            item {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            if (groupConversations.isNotEmpty()) {
+                item(key = "section_groups") {
                     Text(
-                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "MULTI-MESH GROUP CHATS (AES-256-GCM)", "ΟΜΑΔΙΚΕΣ ΣΥΝΟΜΙΛΙΕΣ MESH (AES-256-GCM)"),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.cyan
-                        )
-                    )
-                    Text(
-                        text = "${groupConversations.size} ${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "GROUPS", "ΟΜΑΔΕΣ")}",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.cyan
-                        )
+                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Groups", "Ομάδες"),
+                        color = p.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
                     )
                 }
-            }
-
-            if (groupConversations.isEmpty()) {
-                item {
-                    Surface(
-                        color = if (p.isAero) Color.Transparent else p.card,
-                        shape = cardShape,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aeroGlassPanel(p, cornerRadius = 22.dp)
-                            .clickable {
-                                newGroupName = ""
-                                manualMemberNodeId = ""
-                                selectedMemberIds.clear()
-                                discoveredPeers.forEach { peer ->
-                                    selectedMemberIds[peer.id] = true
-                                }
-                                showCreateGroupDialog = true
-                            }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "No Multi-Mesh Groups Yet", "Καμία Ομάδα Mesh Ακόμα"),
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = p.textPrimary
-                                    )
-                                )
-                                Text(
-                                    text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Tap '+ GROUP' above to select multiple peers and create an encrypted squad channel.", "Πατήστε '+ ΟΜΑΔΑ' επάνω για να επιλέξετε κόμβους και να φτιάξετε κρυπτογραφημένο κανάλι ομάδας."),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = p.textSecondary
-                                    )
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.GroupAdd,
-                                contentDescription = "Create Group",
-                                tint = p.cyan,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                }
-            } else {
                 items(groupConversations, key = { it.threadId }) { convo ->
                     ConversationItemCard(
                         conversation = convo,
@@ -720,82 +469,16 @@ private fun ConversationListView(
                 }
             }
 
-            // 3. Direct Messages Section
-            item {
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            if (directMessages.isNotEmpty()) {
+                item(key = "section_dms") {
                     Text(
-                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "1-ON-1 DIRECT CHATS (ACTIVE PEERS)", "ΑΜΕΣΕΣ ΣΥΝΟΜΙΛΙΕΣ 1-ΠΡΟΣ-1 (ΕΝΕΡΓΟΙ ΚΟΜΒΟΙ)"),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.textSecondary
-                        )
-                    )
-                    Text(
-                        text = "${state.activePeerCount} ${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "ONLINE", "ΕΝΕΡΓΟΙ")}",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            color = if (state.activePeerCount > 0) p.emerald else p.amber
-                        )
+                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Messages", "Μηνύματα"),
+                        color = p.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
                     )
                 }
-            }
-
-            if (directMessages.isEmpty()) {
-                item {
-                    Surface(
-                        color = if (p.isAero) Color.Transparent else p.card,
-                        shape = cardShape,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aeroGlassPanel(p, cornerRadius = 22.dp)
-                            .padding(vertical = 8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.WifiTetheringOff,
-                                contentDescription = "No Peers",
-                                tint = p.amber,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "NO DIRECT PEERS HEARD YET", "ΔΕΝ ΕΝΤΟΠΙΣΤΗΚΑΝ ΚΟΝΤΙΝΟΙ ΚΟΜΒΟΙ"),
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = p.textPrimary
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Tap 'PING MESH' above or launch second device on same channel. BLE/Wi-Fi auto-discovery will create direct 1-on-1 encrypted DM threads instantly.", "Πατήστε 'ΣΑΡΩΣΗ MESH' επάνω ή ανοίξτε δεύτερη συσκευή στο ίδιο κανάλι. Η αυτόματη εύρεση BLE/Wi-Fi θα ανοίξει αμέσως κρυπτογραφημένες συνομιλίες 1-προς-1."),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = p.textSecondary
-                                ),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            } else {
                 items(directMessages, key = { it.threadId }) { convo ->
                     ConversationItemCard(
                         conversation = convo,
@@ -805,7 +488,75 @@ private fun ConversationListView(
                 }
             }
 
-            // Tactical Quick-Status One-Tap Strip (Text + Voice TTS)
+            // Single concise empty-state hint when no direct/group chats exist yet
+            if (directMessages.isEmpty() && groupConversations.isEmpty() && state.searchQuery.isBlank()) {
+                item(key = "empty_peer_quick_connect") {
+                    Surface(
+                        color = p.card,
+                        shape = cardShape,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .testTag("chat_zero_peer_connect_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                                    state.appLanguage,
+                                    "No direct chats yet",
+                                    "Δεν υπάρχουν ιδιωτικές συνομιλίες ακόμα"
+                                ),
+                                color = p.textPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                                    state.appLanguage,
+                                    "Nearby phones appear automatically over Bluetooth & Wi-Fi. Tap @ above to message a friend anywhere.",
+                                    "Κοντινά τηλέφωνα εμφανίζονται αυτόματα μέσω Bluetooth & Wi-Fi. Πατήστε @ επάνω για φίλους σε απόσταση."
+                                ),
+                                color = p.textSecondary,
+                                fontSize = 12.sp
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onBroadcastGpsPin,
+                                    shape = RoundedCornerShape(20.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.testTag("ping_mesh_now_button")
+                                ) {
+                                    Icon(Icons.Default.Sensors, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Scan Nearby", "Σάρωση"),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenWebPortal,
+                                    shape = RoundedCornerShape(20.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "iPhone / Web",
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Collapsible Quick Status (kept 1 tap away without cluttering the chat list)
             item(key = "quick_status_strip") {
                 val isGreek = state.appLanguage == "el"
                 Column(
@@ -814,79 +565,95 @@ private fun ConversationListView(
                         .padding(top = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = if (isGreek) "ΤΑΧΕΙΑ ΚΑΤΑΣΤΑΣΗ (ΚΕΙΜΕΝΟ + ΦΩΝΗ)" else "QUICK-STATUS BEACON (TEXT + VOICE)",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = p.textSecondary
-                        ),
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        onClick = { isQuickStatusExpanded = !isQuickStatusExpanded },
+                        color = p.surfaceVariant,
+                        shape = RoundedCornerShape(20.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, p.border),
+                        modifier = Modifier.testTag("quick_status_expand_toggle")
                     ) {
-                        Surface(
-                            onClick = onToggleQuickStatusVoice,
-                            color = if (state.quickStatusVoiceEnabled) p.emeraldDim else p.surfaceVariant,
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (state.quickStatusVoiceEnabled) p.emerald else p.border
-                            ),
-                            modifier = Modifier.testTag("quick_status_voice_toggle")
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (state.quickStatusVoiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
-                                    contentDescription = "Voice Status Announcement",
-                                    tint = if (state.quickStatusVoiceEnabled) p.emerald else p.textMuted,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Text(
-                                    text = if (state.quickStatusVoiceEnabled) (if (isGreek) "ΦΩΝΗ ON" else "VOICE ON") else (if (isGreek) "ΦΩΝΗ OFF" else "VOICE"),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = if (state.quickStatusVoiceEnabled) p.emerald else p.textSecondary
-                                )
-                            }
+                            Icon(
+                                imageVector = if (isQuickStatusExpanded) Icons.Default.ExpandLess else Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = p.textSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (isGreek) "Ταχεία Κατάσταση" else "Quick Status",
+                                color = p.textSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
+                    }
 
-                        for (statusCode in com.kostadinosk.pulsemesh.model.QuickStatusCode.entries) {
-                            val isActive = state.lastQuickStatusCode == statusCode.name
-                            val accent = when (statusCode) {
-                                com.kostadinosk.pulsemesh.model.QuickStatusCode.ALL_OK -> p.emerald
-                                com.kostadinosk.pulsemesh.model.QuickStatusCode.NEED_HELP -> p.red
-                                com.kostadinosk.pulsemesh.model.QuickStatusCode.LOW_BATTERY,
-                                com.kostadinosk.pulsemesh.model.QuickStatusCode.NEED_WATER -> p.amber
-                                else -> p.cyan
-                            }
+                    if (isQuickStatusExpanded) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Surface(
-                                onClick = { onSendQuickStatus(statusCode) },
-                                color = if (isActive) accent.copy(alpha = 0.22f) else p.background,
-                                shape = RoundedCornerShape(10.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.65f)),
-                                modifier = Modifier.testTag("quick_status_${statusCode.name}")
+                                onClick = onToggleQuickStatusVoice,
+                                color = if (state.quickStatusVoiceEnabled) p.emeraldDim else p.surfaceVariant,
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (state.quickStatusVoiceEnabled) p.emerald else p.border
+                                ),
+                                modifier = Modifier.testTag("quick_status_voice_toggle")
                             ) {
-                                Text(
-                                    text = if (isGreek) statusCode.labelEl else statusCode.labelEn,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = accent,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (state.quickStatusVoiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                                        contentDescription = "Voice Status Announcement",
+                                        tint = if (state.quickStatusVoiceEnabled) p.emerald else p.textMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = if (state.quickStatusVoiceEnabled) (if (isGreek) "Φωνή ON" else "Voice On") else (if (isGreek) "Φωνή" else "Voice"),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (state.quickStatusVoiceEnabled) p.emerald else p.textSecondary
+                                    )
+                                }
+                            }
+
+                            for (statusCode in com.kostadinosk.pulsemesh.model.QuickStatusCode.entries) {
+                                val isActive = state.lastQuickStatusCode == statusCode.name
+                                val accent = when (statusCode) {
+                                    com.kostadinosk.pulsemesh.model.QuickStatusCode.ALL_OK -> p.emerald
+                                    com.kostadinosk.pulsemesh.model.QuickStatusCode.NEED_HELP -> p.red
+                                    com.kostadinosk.pulsemesh.model.QuickStatusCode.LOW_BATTERY,
+                                    com.kostadinosk.pulsemesh.model.QuickStatusCode.NEED_WATER -> p.amber
+                                    else -> p.cyan
+                                }
+                                Surface(
+                                    onClick = { onSendQuickStatus(statusCode) },
+                                    color = if (isActive) accent.copy(alpha = 0.2f) else p.surfaceVariant,
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isActive) accent else p.border),
+                                    modifier = Modifier.testTag("quick_status_${statusCode.name}")
+                                ) {
+                                    Text(
+                                        text = if (isGreek) statusCode.labelEl else statusCode.labelEn,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = accent,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1660,13 +1427,13 @@ private fun ConversationThreadView(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
+                var showThreadMenu by remember { mutableStateOf(false) }
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = threadTitle,
                             style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
                                 color = p.textPrimary
                             ),
                             maxLines = 1,
@@ -1684,7 +1451,7 @@ private fun ConversationThreadView(
                             tint = when {
                                 isGroup -> p.cyan
                                 isEncrypted -> p.emerald
-                                else -> p.cyan
+                                else -> p.textSecondary
                             },
                             modifier = Modifier.size(14.dp)
                         )
@@ -1692,55 +1459,32 @@ private fun ConversationThreadView(
 
                     Text(
                         text = when {
-                            isGroup && state.isSimpleMode -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "ENCRYPTED GROUP CHAT • ${currentConvo?.memberIds?.size ?: 0} MEMBERS", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΟΜΑΔΑ • ${currentConvo?.memberIds?.size ?: 0} ΜΕΛΗ")
-                            isGroup -> "ECDH-WRAPPED AES-256-GCM • ${currentConvo?.memberIds?.size ?: 0} ${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "MEMBERS", "ΜΕΛΗ")} (${currentConvo?.memberIds?.joinToString(", ") ?: ""})"
-                            isDm && state.isSimpleMode -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "ENCRYPTED DIRECT CHAT", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΗ ΙΔΙΩΤΙΚΗ ΣΥΝΟΜΙΛΙΑ")
-                            isDm -> "ECDH P-256 TOFU • ${currentConvo?.safetyFingerprint?.ifBlank { com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "KEY PENDING", "ΕΚΚΡΕΜΕΙ ΚΛΕΙΔΙ") } ?: ""}"
-                            isEncrypted -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "E2EE ENCRYPTED • AES-256-GCM CHANNEL", "ΚΡΥΠΤΟΓΡΑΦΗΜΕΝΟ • ΚΑΝΑΛΙ AES-256-GCM")
-                            else -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "PUBLIC MESH BROADCAST (ALL)", "ΔΗΜΟΣΙΟ ΚΑΝΑΛΙ MESH (ΟΛΟΙ)")
+                            isGroup -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Encrypted group · ${currentConvo?.memberIds?.size ?: 0} members", "Κρυπτογραφημένη ομάδα · ${currentConvo?.memberIds?.size ?: 0} μέλη")
+                            isDm -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "End-to-end encrypted", "Κρυπτογραφημένη συνομιλία")
+                            isEncrypted -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Encrypted channel", "Κρυπτογραφημένο κανάλι")
+                            else -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Public mesh channel", "Δημόσιο κανάλι mesh")
                         },
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = when {
-                                currentConvo?.isKeyChangedWarning == true -> p.red
-                                isGroup -> p.cyan
-                                isEncrypted -> p.emerald
-                                else -> p.textSecondary
-                            }
+                            fontSize = 11.sp,
+                            color = if (currentConvo?.isKeyChangedWarning == true) p.red else p.textSecondary
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // If 1-to-1 DM, show Safety Number shield + Direct Call button!
+                // Direct Call button for 1-to-1 DMs
                 val dmPeerId = currentConvo?.peerNodeId.orEmpty()
                 if (isDm && dmPeerId.isNotBlank()) {
                     val peerNode = state.nodes.find { it.id == dmPeerId }
                         ?: com.kostadinosk.pulsemesh.model.MeshNode(id = dmPeerId, callsign = currentConvo.title)
 
-                    // Interactive Safety Number Verification Button
-                    IconButton(
-                        onClick = { onOpenSafetyNumber(dmPeerId, currentConvo.title) },
-                        modifier = Modifier.size(34.dp).testTag("chat_safety_number_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VerifiedUser,
-                            contentDescription = "Safety Number",
-                            tint = if (currentConvo.isKeyChangedWarning) p.red else p.emerald,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // Direct Call Button
                     IconButton(
                         onClick = { onStartCall(peerNode) },
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(p.emeraldDim)
-                            .border(1.dp, p.emerald.copy(alpha = 0.6f), CircleShape)
                             .testTag("chat_direct_call_button")
                     ) {
                         Icon(
@@ -1750,7 +1494,6 @@ private fun ConversationThreadView(
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 if (isGroup && !currentConvo?.groupId.isNullOrBlank()) {
@@ -1761,18 +1504,77 @@ private fun ConversationThreadView(
                         Icon(
                             imageVector = Icons.Default.ManageAccounts,
                             contentDescription = "Manage Group",
-                            tint = p.cyan
+                            tint = p.textPrimary
                         )
                     }
                 }
 
-                // Quick GPS Pin broadcast
-                IconButton(onClick = onBroadcastGpsPin) {
-                    Icon(
-                        imageVector = Icons.Default.MyLocation,
-                        contentDescription = "Broadcast GPS Pin",
-                        tint = p.emerald
-                    )
+                // Compact overflow menu for secondary thread actions (Search, Burn Timer, GPS Pin, Safety Number)
+                Box {
+                    IconButton(
+                        onClick = { showThreadMenu = true },
+                        modifier = Modifier.testTag("chat_thread_more_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Chat Options",
+                            tint = p.textPrimary
+                        )
+                    }
+                    val burnLabel = when (activeThreadBurnSec) {
+                        0 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing: Off", "Αυτοκαταστροφή: Όχι")
+                        60 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing: 1m", "Αυτοκαταστροφή: 1λ")
+                        300 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing: 5m", "Αυτοκαταστροφή: 5λ")
+                        3600 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing: 1h", "Αυτοκαταστροφή: 1ω")
+                        86400 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing: 24h", "Αυτοκαταστροφή: 24ω")
+                        else -> "${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Disappearing", "Αυτοκαταστροφή")}: ${activeThreadBurnSec}s"
+                    }
+                    DropdownMenu(
+                        expanded = showThreadMenu,
+                        onDismissRequest = { showThreadMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Search messages", "Αναζήτηση μηνυμάτων")) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            modifier = Modifier.testTag("chat_thread_search_toggle"),
+                            onClick = {
+                                showThreadMenu = false
+                                showThreadSearch = !showThreadSearch
+                                if (!showThreadSearch) {
+                                    threadSearchQuery = ""
+                                    onSearchActiveThread("")
+                                }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(burnLabel) },
+                            leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                            onClick = {
+                                val opts = listOf(0, 60, 300, 3600, 86400)
+                                val next = opts[(opts.indexOf(activeThreadBurnSec).coerceAtLeast(0) + 1) % opts.size]
+                                onSetThreadBurnTtl(threadId, next)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Share GPS Pin", "Αποστολή Στίγματος GPS")) },
+                            leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
+                            onClick = {
+                                showThreadMenu = false
+                                onBroadcastGpsPin()
+                            }
+                        )
+                        if (isDm && dmPeerId.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Safety Number", "Αριθμός Ασφαλείας")) },
+                                leadingIcon = { Icon(Icons.Default.VerifiedUser, contentDescription = null) },
+                                modifier = Modifier.testTag("chat_safety_number_btn"),
+                                onClick = {
+                                    showThreadMenu = false
+                                    onOpenSafetyNumber(dmPeerId, currentConvo.title)
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1805,11 +1607,10 @@ private fun ConversationThreadView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "KEY CHANGED — VERIFY FINGERPRINT (${currentConvo.safetyFingerprint})", "ΑΛΛΑΓΗ ΚΛΕΙΔΙΟΥ — ΕΠΑΛΗΘΕΥΣΗ (${currentConvo.safetyFingerprint})"),
+                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Key changed, verify safety number (${currentConvo.safetyFingerprint})", "Αλλαγή κλειδιού, επαλήθευση (${currentConvo.safetyFingerprint})"),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = p.red,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
+                                fontWeight = FontWeight.Bold
                             )
                         )
                     }
@@ -1817,83 +1618,30 @@ private fun ConversationThreadView(
                         onClick = { onVerifyFingerprint(currentConvo.peerNodeId) }
                     ) {
                         Text(
-                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "TRUST KEY", "ΕΜΠΙΣΤΟΣΥΝΗ ΚΛΕΙΔΙΟΥ"),
+                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Trust", "Εμπιστοσύνη"),
                             color = p.amber,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace
+                            fontSize = 11.sp
                         )
                     }
                 }
             }
         }
 
-        // Thread Utility Strip: Search Toggle + Per-Chat Burn Timer + Pinned Message Banner
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(p.surface.copy(alpha = 0.72f))
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Surface(
-                color = if (showThreadSearch) p.cyanDim else p.surfaceVariant,
-                shape = RoundedCornerShape(6.dp),
-                border = androidx.compose.foundation.BorderStroke(0.8.dp, if (showThreadSearch) p.cyan else p.border),
+        if (pinnedPacket != null) {
+            Row(
                 modifier = Modifier
-                    .clickable {
-                        showThreadSearch = !showThreadSearch
-                        if (!showThreadSearch) {
-                            threadSearchQuery = ""
-                            onSearchActiveThread("")
-                        }
-                    }
-                    .testTag("chat_thread_search_toggle")
+                    .fillMaxWidth()
+                    .background(p.surface.copy(alpha = 0.72f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                Icon(Icons.Default.PushPin, contentDescription = null, tint = p.emerald, modifier = Modifier.size(14.dp))
                 Text(
-                    text = if (showThreadSearch) com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "✕ SEARCH", "✕ ΑΝΑΖΗΤΗΣΗ") else com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "🔍 SEARCH", "🔍 ΑΝΑΖΗΤΗΣΗ"),
-                    color = if (showThreadSearch) p.cyan else p.textSecondary,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                )
-            }
-            val burnLabel = when (activeThreadBurnSec) {
-                0 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN: OFF", "ΚΑΥΣΗ: OFF")
-                60 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN: 1m", "ΚΑΥΣΗ: 1λ")
-                300 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN: 5m", "ΚΑΥΣΗ: 5λ")
-                3600 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN: 1h", "ΚΑΥΣΗ: 1ω")
-                86400 -> com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN: 24h", "ΚΑΥΣΗ: 24ω")
-                else -> "${com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "BURN", "ΚΑΥΣΗ")}: ${activeThreadBurnSec}s"
-            }
-            Surface(
-                color = if (activeThreadBurnSec > 0) p.amberDim else p.surfaceVariant,
-                shape = RoundedCornerShape(6.dp),
-                border = androidx.compose.foundation.BorderStroke(0.8.dp, if (activeThreadBurnSec > 0) p.amber else p.border),
-                modifier = Modifier.clickable {
-                    val opts = listOf(0, 60, 300, 3600, 86400)
-                    val next = opts[(opts.indexOf(activeThreadBurnSec).coerceAtLeast(0) + 1) % opts.size]
-                    onSetThreadBurnTtl(threadId, next)
-                }
-            ) {
-                Text(
-                    text = "🔥 $burnLabel",
-                    color = if (activeThreadBurnSec > 0) p.amber else p.textSecondary,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                )
-            }
-            if (pinnedPacket != null) {
-                Text(
-                    text = "📌 ${pinnedPacket.content.take(36)}",
-                    color = p.emerald,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
+                    text = pinnedPacket.content.take(48),
+                    color = p.textPrimary,
+                    fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)

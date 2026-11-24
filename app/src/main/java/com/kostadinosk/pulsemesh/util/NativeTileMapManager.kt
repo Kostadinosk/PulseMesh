@@ -46,11 +46,10 @@ object NativeTileMapManager {
     )
 
     fun buildTileUrlsForStyle(style: MapLayerStyle, z: Int, x: Int, y: Int): List<String> = when (style) {
-        MapLayerStyle.DARK -> listOf(
-            "https://a.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
-            "https://b.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
-            "https://c.basemaps.cartocdn.com/dark_all/$z/$x/$y.png",
-            "https://tile.openstreetmap.org/$z/$x/$y.png"
+        MapLayerStyle.STANDARD -> listOf(
+            "https://tile.openstreetmap.org/$z/$x/$y.png",
+            "https://a.tile.openstreetmap.fr/hot/$z/$x/$y.png",
+            "https://b.tile.openstreetmap.fr/hot/$z/$x/$y.png"
         )
         MapLayerStyle.TOPO -> listOf(
             "https://a.tile.opentopomap.org/$z/$x/$y.png",
@@ -126,7 +125,7 @@ object NativeTileMapManager {
         z: Int,
         x: Int,
         y: Int,
-        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+        layerStyle: MapLayerStyle = MapLayerStyle.STANDARD
     ): File {
         val styleDir = layerStyle.name.lowercase()
         return File(context.filesDir, "osm_tiles/$styleDir/$z/$x/$y.png")
@@ -146,14 +145,14 @@ object NativeTileMapManager {
         z: Int,
         x: Int,
         y: Int,
-        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+        layerStyle: MapLayerStyle = MapLayerStyle.STANDARD
     ): Boolean {
         val primary = getTileFile(context, z, x, y, layerStyle)
         if (primary.exists() && primary.length() > 0L) return true
         val rootLegacy = getLegacyRootTileFile(context, z, x, y)
-        if (layerStyle == MapLayerStyle.DARK && rootLegacy.exists() && rootLegacy.length() > 0L) return true
+        if (layerStyle == MapLayerStyle.STANDARD && rootLegacy.exists() && rootLegacy.length() > 0L) return true
         val legacy = getLegacyCacheTileFile(context, z, x, y)
-        return layerStyle == MapLayerStyle.DARK && legacy.exists() && legacy.length() > 0L
+        return layerStyle == MapLayerStyle.STANDARD && legacy.exists() && legacy.length() > 0L
     }
 
     /**
@@ -165,7 +164,7 @@ object NativeTileMapManager {
         z: Int,
         x: Int,
         y: Int,
-        layerStyle: MapLayerStyle = MapLayerStyle.DARK
+        layerStyle: MapLayerStyle = MapLayerStyle.STANDARD
     ): ImageBitmap? {
         if (layerStyle == MapLayerStyle.RADAR) return null
         return tileCache.get("${layerStyle.name}/$z/$x/$y")
@@ -182,7 +181,7 @@ object NativeTileMapManager {
         y: Int,
         scope: CoroutineScope,
         isInternetEnabled: Boolean,
-        layerStyle: MapLayerStyle = MapLayerStyle.DARK,
+        layerStyle: MapLayerStyle = MapLayerStyle.STANDARD,
         onTileLoaded: (z: Int, x: Int, y: Int, bitmap: ImageBitmap) -> Unit
     ) {
         if (layerStyle == MapLayerStyle.RADAR) return
@@ -201,8 +200,8 @@ object NativeTileMapManager {
                 val canFetchOnline = isInternetEnabled || hasActiveDeviceInternet(context)
                 // Check per-style persistent disk cache first (off main thread)
                 val primaryFile = getTileFile(context, z, x, y, layerStyle)
-                val legacyRootFile = if (layerStyle == MapLayerStyle.DARK && !canFetchOnline) getLegacyRootTileFile(context, z, x, y) else null
-                val legacyFile = if (layerStyle == MapLayerStyle.DARK && !canFetchOnline) getLegacyCacheTileFile(context, z, x, y) else null
+                val legacyRootFile = if (layerStyle == MapLayerStyle.STANDARD) getLegacyRootTileFile(context, z, x, y) else null
+                val legacyFile = if (layerStyle == MapLayerStyle.STANDARD) getLegacyCacheTileFile(context, z, x, y) else null
                 val existingFile = when {
                     primaryFile.exists() && primaryFile.length() > 0L -> primaryFile
                     legacyRootFile != null && legacyRootFile.exists() && legacyRootFile.length() > 0L -> legacyRootFile
@@ -255,7 +254,7 @@ object NativeTileMapManager {
                     try {
                         val url = URL(urlStr)
                         conn = (url.openConnection() as HttpURLConnection).apply {
-                            setRequestProperty("User-Agent", "PulseMesh-Android/2.0.1 (+https://github.com/Kostadinosk/PulseMesh)")
+                            setRequestProperty("User-Agent", "PulseMesh-Android/2.0.2 (+https://github.com/Kostadinosk/PulseMesh)")
                             setRequestProperty("Accept", "image/png,image/*;q=0.8")
                             connectTimeout = 4000
                             readTimeout = 4500

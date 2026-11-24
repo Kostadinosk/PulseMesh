@@ -15,7 +15,7 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 enum class MapLayerStyle(val label: String) {
-    DARK("Dark"),
+    STANDARD("Standard"),
     TOPO("Topo"),
     SATELLITE("Satellite"),
     RADAR("Radar")

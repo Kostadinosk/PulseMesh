@@ -277,10 +277,14 @@ class V200UiAndFeaturesTest {
     }
 
     @Test
-    fun `v201 map styles use isolated per-style tile servers and caches and skip raster in radar mode`() {
+    fun `v202 map styles remove dark mode and isolate per-style tile servers and caches`() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        val darkUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
-            com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK, 12, 2318, 1580
+        assertTrue(
+            "Dark map mode must be removed",
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.entries.none { it.name.equals("DARK", ignoreCase = true) }
+        )
+        val standardUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
+            com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD, 12, 2318, 1580
         )
         val topoUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
             com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO, 12, 2318, 1580
@@ -291,15 +295,15 @@ class V200UiAndFeaturesTest {
         val radarUrls = com.kostadinosk.pulsemesh.util.NativeTileMapManager.buildTileUrlsForStyle(
             com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR, 12, 2318, 1580
         )
-        assertTrue(darkUrls.first().contains("dark_all"))
+        assertTrue(standardUrls.first().contains("openstreetmap.org"))
         assertTrue(topoUrls.first().contains("opentopomap"))
         assertTrue(satUrls.first().contains("World_Imagery"))
         assertTrue("Radar mode must not fetch raster tiles", radarUrls.isEmpty())
 
-        val darkFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK)
+        val standardFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD)
         val topoFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.TOPO)
         val satFile = com.kostadinosk.pulsemesh.util.NativeTileMapManager.getTileFile(app, 12, 1, 2, com.kostadinosk.pulsemesh.map.MapLayerStyle.SATELLITE)
-        assertTrue(darkFile.path != topoFile.path && topoFile.path != satFile.path)
+        assertTrue(standardFile.path != topoFile.path && topoFile.path != satFile.path)
     }
 
     @Test
@@ -348,5 +352,33 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("radios_settings_screen").assertExists()
         composeTestRule.onNodeWithTag("security_settings_screen").assertExists()
         composeTestRule.onNodeWithTag("safety_settings_screen").assertExists()
+    }
+
+    @Test
+    fun `v202 simplified messaging and calling screens render uncluttered controls`() {
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.PRACTICAL_TACTICAL, themeBrightness = ThemeBrightness.DARK) {
+                com.kostadinosk.pulsemesh.ui.screens.MeshChatScreen(
+                    state = MeshUiState(selectedThreadId = null),
+                    onSendMessage = {},
+                    onBroadcastGpsPin = {}
+                )
+                PulseVoiceHubScreen(
+                    state = MeshUiState(),
+                    duplexCallState = com.kostadinosk.pulsemesh.service.DuplexCallState(),
+                    onStartCall = {}, onStartGroupCall = {}, onEndCall = {}, onToggleMute = {},
+                    onToggleSpeaker = {}, onStartPtt = {}, onStopPtt = {}, onAcceptCall = {},
+                    onDeclineCall = {}, onReplayLastRx = {}, onSelectAudioRoute = {},
+                    onJoinPttChannel = {}, onToggleCourtesyBeep = {}, onToggleConferenceMute = {},
+                    onKickConferencePeer = {}
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("chat_search_toggle_button").assertExists()
+        composeTestRule.onNodeWithTag("chat_connect_username_button").assertExists()
+        composeTestRule.onNodeWithTag("create_new_group_button").assertExists()
+        composeTestRule.onNodeWithTag("quick_status_expand_toggle").assertExists()
+        composeTestRule.onNodeWithTag("voice_quick_route_pill").assertExists()
+        composeTestRule.onNodeWithTag("phone_dialer_page").assertExists()
     }
 }

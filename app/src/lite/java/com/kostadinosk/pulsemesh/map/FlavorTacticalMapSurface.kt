@@ -35,17 +35,17 @@ fun FlavorTacticalMapSurface(
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val bgColor = when (layerStyle) {
-            MapLayerStyle.DARK -> Color(0xFF0A0F18)
-            MapLayerStyle.TOPO -> Color(0xFF131D17)
-            MapLayerStyle.SATELLITE -> Color(0xFF0D141F)
+            MapLayerStyle.STANDARD -> Color(0xFFECE8DF)
+            MapLayerStyle.TOPO -> Color(0xFFE6ECE3)
+            MapLayerStyle.SATELLITE -> Color(0xFF1C2A3A)
             MapLayerStyle.RADAR -> Color(0xFF061310)
         }
         drawRect(bgColor)
 
         val gridColor = when (layerStyle) {
-            MapLayerStyle.DARK -> Color(0xFF1A2536)
-            MapLayerStyle.TOPO -> Color(0xFF233A2C)
-            MapLayerStyle.SATELLITE -> Color(0xFF1E2D42)
+            MapLayerStyle.STANDARD -> Color(0xFFD6D0C4)
+            MapLayerStyle.TOPO -> Color(0xFFCBD8C7)
+            MapLayerStyle.SATELLITE -> Color(0xFF283C52)
             MapLayerStyle.RADAR -> Color(0xFF0F3D2E)
         }
 

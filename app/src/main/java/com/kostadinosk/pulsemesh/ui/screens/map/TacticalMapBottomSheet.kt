@@ -72,7 +72,7 @@ import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 @Composable
 fun TacticalMapOverlaySheet(
     state: MeshUiState,
-    selectedLayerStyle: com.kostadinosk.pulsemesh.map.MapLayerStyle = com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK,
+    selectedLayerStyle: com.kostadinosk.pulsemesh.map.MapLayerStyle = com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD,
     onSelectLayerStyle: (com.kostadinosk.pulsemesh.map.MapLayerStyle) -> Unit = {},
     onSelectPeer: (MeshNode) -> Unit,
     onImportMapPack: () -> Unit,

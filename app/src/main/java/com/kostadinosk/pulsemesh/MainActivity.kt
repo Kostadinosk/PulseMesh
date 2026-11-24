@@ -113,7 +113,7 @@ class MainActivity : FragmentActivity() {
                 var showEmergencySosSheet by remember { mutableStateOf(false) }
                 var safetyNumberPeer by remember { mutableStateOf<Pair<String, String>?>(null) }
                 var activeSettingsDest by remember { mutableStateOf<com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination?>(null) }
-                var activeMapLayerStyle by remember { mutableStateOf(com.kostadinosk.pulsemesh.map.MapLayerStyle.DARK) }
+                var activeMapLayerStyle by remember { mutableStateOf(com.kostadinosk.pulsemesh.map.MapLayerStyle.STANDARD) }
                 var pendingBackupPassphrase by remember { mutableStateOf("") }
 
                 val backupExportLauncher = rememberLauncherForActivityResult(
