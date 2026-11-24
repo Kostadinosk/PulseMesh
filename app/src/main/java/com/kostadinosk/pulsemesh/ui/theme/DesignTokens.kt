@@ -62,6 +62,63 @@ data class PulseDesignTokens(
         get() = if (useMonospaceLabels) FontFamily.Monospace else FontFamily.SansSerif
 }
 
+// Liquid Glass Palettes (Frosted translucent glass, specular rims & luminous depth)
+private val LiquidGlassDarkPalette = PulseMeshPalette(
+    isLight = false,
+    isOriginal = false,
+    isAero = false,
+    isDarkAero = false,
+    isLiquidGlass = true,
+    background = Color(0xFF070B14),
+    card = Color(0xA6121E33),
+    surface = Color(0xB8182640),
+    surfaceVariant = Color(0xC2213252),
+    border = Color(0x40E2F1FF),
+    borderBright = Color(0x88E2F1FF),
+    emerald = Color(0xFF34D399),
+    emeraldDim = Color(0x880E3D2F),
+    cyan = Color(0xFF38BDF8),
+    cyanDim = Color(0x880E3654),
+    amber = Color(0xFFFBBF24),
+    amberDim = Color(0x884A320C),
+    red = Color(0xFFFB7185),
+    redDim = Color(0x884F1424),
+    textPrimary = Color(0xFFF8FAFC),
+    textSecondary = Color(0xFFCBD5E1),
+    textMuted = Color(0xFF94A3B8),
+    outgoingBubbleBg = Color(0xB80E4A3E),
+    incomingBubbleBg = Color(0xB81A2A44),
+    topBarBg = Color(0xCC0A1221)
+)
+
+private val LiquidGlassLightPalette = PulseMeshPalette(
+    isLight = true,
+    isOriginal = false,
+    isAero = false,
+    isDarkAero = false,
+    isLiquidGlass = true,
+    background = Color(0xFFEBF1F9),
+    card = Color(0xCCFFFFFF),
+    surface = Color(0xDCFFFFFF),
+    surfaceVariant = Color(0xCCEEF5FF),
+    border = Color(0xD6FFFFFF),
+    borderBright = Color(0xFF7DD3FC),
+    emerald = Color(0xFF059669),
+    emeraldDim = Color(0xCCD1FAE5),
+    cyan = Color(0xFF0284C7),
+    cyanDim = Color(0xCCD9F1FF),
+    amber = Color(0xFFD97706),
+    amberDim = Color(0xCCFEF3C7),
+    red = Color(0xFFE11D48),
+    redDim = Color(0xCCFFE4E6),
+    textPrimary = Color(0xFF0B1220),
+    textSecondary = Color(0xFF334155),
+    textMuted = Color(0xFF64748B),
+    outgoingBubbleBg = Color(0xD4D1FAE5),
+    incomingBubbleBg = Color(0xE0FFFFFF),
+    topBarBg = Color(0xD8F4F8FF)
+)
+
 // Clean Messenger Palettes (Signal / WhatsApp minimalist clarity)
 private val CleanMessengerDarkPalette = PulseMeshPalette(
     isLight = false,
@@ -166,6 +223,8 @@ fun resolvePulseTokens(
     isDark: Boolean = true
 ): PulseDesignTokens {
     val palette = when (preset) {
+        ThemePreset.LIQUID_GLASS ->
+            if (isDark) LiquidGlassDarkPalette else LiquidGlassLightPalette
         ThemePreset.PRACTICAL_TACTICAL ->
             if (isDark) PracticalTacticalDarkPalette else PracticalTacticalLightPalette
         ThemePreset.CLEAN_MESSENGER ->
@@ -177,6 +236,29 @@ fun resolvePulseTokens(
     }
 
     return when (preset) {
+        ThemePreset.LIQUID_GLASS -> PulseDesignTokens(
+            preset = preset,
+            brightness = brightness,
+            isDark = isDark,
+            palette = palette,
+            cardShape = RoundedCornerShape(24.dp),
+            buttonShape = RoundedCornerShape(20.dp),
+            pillShape = RoundedCornerShape(50),
+            sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            cardElevation = if (isDark) 0.dp else 2.dp,
+            borderWidth = 1.dp,
+            sectionSpacing = 12.dp,
+            contentPadding = 16.dp,
+            useMonospaceLabels = false,
+            showHudTelemetryBadges = false,
+            useGlassSheen = true,
+            accentPrimary = palette.cyan,
+            accentSecondary = palette.emerald,
+            statusOnline = palette.emerald,
+            statusMesh = palette.cyan,
+            statusWarning = palette.amber,
+            statusDanger = palette.red
+        )
         ThemePreset.PRACTICAL_TACTICAL -> PulseDesignTokens(
             preset = preset,
             brightness = brightness,
@@ -273,7 +355,7 @@ fun resolvePulseTokens(
 }
 
 val LocalPulseTokens = staticCompositionLocalOf {
-    resolvePulseTokens(ThemePreset.PRACTICAL_TACTICAL, ThemeBrightness.DARK, isDark = true)
+    resolvePulseTokens(ThemePreset.LIQUID_GLASS, ThemeBrightness.DARK, isDark = true)
 }
 
 @Composable
@@ -285,16 +367,47 @@ fun Modifier.pulseSurfaceCard(
     val resolvedShape = shape ?: tokens.cardShape
     val borderColor = accentBorder ?: tokens.palette.border
     val base = this.clip(resolvedShape)
-    return if (tokens.useGlassSheen) {
-        val sheenTop = if (tokens.isDark) Color(0x3070D8FF) else Color(0xB8FFFFFF)
-        val sheenBottom = tokens.palette.card
-        base
-            .background(Brush.verticalGradient(listOf(sheenTop, sheenBottom)), resolvedShape)
-            .border(BorderStroke(tokens.borderWidth, borderColor), resolvedShape)
-    } else {
-        base
-            .background(tokens.palette.card, resolvedShape)
-            .border(BorderStroke(tokens.borderWidth, borderColor), resolvedShape)
+    return when {
+        tokens.palette.isLiquidGlass -> {
+            val topHighlight = if (tokens.isDark) Color(0x28FFFFFF) else Color(0xE8FFFFFF)
+            val midGlass = tokens.palette.card
+            val bottomGlass = if (tokens.isDark) Color(0x9E0B1324) else Color(0xB8E8F1FC)
+            val rimBrush = if (accentBorder != null) {
+                Brush.linearGradient(
+                    listOf(
+                        accentBorder.copy(alpha = 0.85f),
+                        Color(if (tokens.isDark) 0x44FFFFFF else 0xCCFFFFFF),
+                        accentBorder.copy(alpha = 0.35f)
+                    )
+                )
+            } else {
+                Brush.linearGradient(
+                    if (tokens.isDark) {
+                        listOf(Color(0x66FFFFFF), Color(0x1EFFFFFF), Color(0x3838BDF8))
+                    } else {
+                        listOf(Color(0xFFFFFFFF), Color(0x88FFFFFF), Color(0x5593C5FD))
+                    }
+                )
+            }
+            base
+                .background(
+                    Brush.linearGradient(listOf(topHighlight, midGlass, bottomGlass)),
+                    resolvedShape
+                )
+                .border(BorderStroke(tokens.borderWidth, rimBrush), resolvedShape)
+        }
+        tokens.useGlassSheen -> {
+            val sheenTop = if (tokens.isDark) Color(0x3070D8FF) else Color(0xB8FFFFFF)
+            val sheenBottom = tokens.palette.card
+            base
+                .background(Brush.verticalGradient(listOf(sheenTop, sheenBottom)), resolvedShape)
+                .border(BorderStroke(tokens.borderWidth, borderColor), resolvedShape)
+        }
+        else -> {
+            base
+                .background(tokens.palette.card, resolvedShape)
+                .border(BorderStroke(tokens.borderWidth, borderColor), resolvedShape)
+        }
     }
 }
 
@@ -377,6 +490,18 @@ fun PreviewCleanMessengerLight() {
 @Composable
 fun PreviewFieldOpsHudDark() {
     PulseThemeSampleCard(ThemePreset.FIELD_OPS_HUD, isDark = true)
+}
+
+@Preview(name = "Liquid Glass Dark", showBackground = true)
+@Composable
+fun PreviewLiquidGlassDark() {
+    PulseThemeSampleCard(ThemePreset.LIQUID_GLASS, isDark = true)
+}
+
+@Preview(name = "Liquid Glass Light", showBackground = true)
+@Composable
+fun PreviewLiquidGlassLight() {
+    PulseThemeSampleCard(ThemePreset.LIQUID_GLASS, isDark = false)
 }
 
 @Preview(name = "Frutiger Aero Light", showBackground = true)

@@ -20,11 +20,102 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Full-screen Frutiger Aero sky, sunlit water bokeh, and aurora glass horizon backdrop.
- * Supports both Light Aero (sunlit aqua sky) and Dark Aero (midnight sapphire & teal aurora glass).
+ * Full-screen atmospheric backdrop for Liquid Glass and Frutiger Aero themes.
+ * Supports Liquid Glass (Dark obsidian sapphire & Light pearlescent ice refractions)
+ * as well as Frutiger Aero (sunlit aqua sky / midnight aurora).
  * Falls back cleanly to flat [PulseMeshPalette.background] when another theme is selected.
  */
 fun Modifier.aeroCanvasBackground(palette: PulseMeshPalette): Modifier {
+    if (palette.isLiquidGlass) {
+        if (!palette.isLight) {
+            return this.drawBehind {
+                // Deep obsidian-indigo Liquid Glass ambient depth
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.00f to Color(0xFF060A14),
+                            0.42f to Color(0xFF0B1426),
+                            0.78f to Color(0xFF0A172B),
+                            1.00f to Color(0xFF060C18),
+                        )
+                    )
+                )
+                // Diffused refractive sapphire glow (upper left)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x4038BDF8), Color(0x0038BDF8)),
+                        center = Offset(size.width * 0.14f, size.height * 0.12f),
+                        radius = size.minDimension * 0.68f,
+                    ),
+                    radius = size.minDimension * 0.68f,
+                    center = Offset(size.width * 0.14f, size.height * 0.12f),
+                )
+                // Soft indigo-violet refraction (mid right)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x36818CF8), Color(0x00818CF8)),
+                        center = Offset(size.width * 0.88f, size.height * 0.36f),
+                        radius = size.minDimension * 0.62f,
+                    ),
+                    radius = size.minDimension * 0.62f,
+                    center = Offset(size.width * 0.88f, size.height * 0.36f),
+                )
+                // Subtle emerald-teal ambient bloom (lower left)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x2E34D399), Color(0x0034D399)),
+                        center = Offset(size.width * 0.24f, size.height * 0.86f),
+                        radius = size.minDimension * 0.64f,
+                    ),
+                    radius = size.minDimension * 0.64f,
+                    center = Offset(size.width * 0.24f, size.height * 0.86f),
+                )
+            }
+        }
+        return this.drawBehind {
+            // Pearlescent silver-ice Liquid Glass Light canvas
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0.00f to Color(0xFFE3EEF9),
+                        0.45f to Color(0xFFF0F5FC),
+                        0.82f to Color(0xFFE7F0FA),
+                        1.00f to Color(0xFFDDEAF7),
+                    )
+                )
+            )
+            // Luminous pure-white refractive highlight (top left)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xCCFFFFFF), Color(0x00FFFFFF)),
+                    center = Offset(size.width * 0.15f, size.height * 0.10f),
+                    radius = size.minDimension * 0.65f,
+                ),
+                radius = size.minDimension * 0.65f,
+                center = Offset(size.width * 0.15f, size.height * 0.10f),
+            )
+            // Soft sky-blue glass orb (upper right)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0x4D38BDF8), Color(0x0038BDF8)),
+                    center = Offset(size.width * 0.88f, size.height * 0.28f),
+                    radius = size.minDimension * 0.58f,
+                ),
+                radius = size.minDimension * 0.58f,
+                center = Offset(size.width * 0.88f, size.height * 0.28f),
+            )
+            // Gentle lavender-mint prism orb (lower left)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0x3D6366F1), Color(0x006366F1)),
+                    center = Offset(size.width * 0.22f, size.height * 0.84f),
+                    radius = size.minDimension * 0.60f,
+                ),
+                radius = size.minDimension * 0.60f,
+                center = Offset(size.width * 0.22f, size.height * 0.84f),
+            )
+        }
+    }
     if (!palette.isAero) {
         return this.drawBehind {
             drawRect(color = palette.background)

@@ -12,7 +12,8 @@ import com.kostadinosk.pulsemesh.model.LocationShareMode
 import java.security.SecureRandom
 
 enum class ThemePreset(val displayName: String, val subtitle: String) {
-    PRACTICAL_TACTICAL("Practical Tactical", "Modern Material 3 Expressive default"),
+    LIQUID_GLASS("Liquid Glass", "Frosted translucent glass, specular rims & ambient glow"),
+    PRACTICAL_TACTICAL("Practical Tactical", "Modern Material 3 Expressive tactical"),
     CLEAN_MESSENGER("Clean Messenger", "Minimal everyday Signal/WhatsApp clarity"),
     FIELD_OPS_HUD("Field Ops HUD", "High-density ATAK console & telemetry"),
     FRUTIGER_AERO("Frutiger Aero", "Luminous crystal glass & aqua highlights")
@@ -25,6 +26,8 @@ enum class ThemeBrightness(val displayName: String) {
 }
 
 enum class AppTheme(val displayName: String) {
+    LIQUID_GLASS("Liquid Glass"),
+    LIQUID_GLASS_DARK("Liquid Glass Dark"),
     ORIGINAL("Original Classic"),
     FRUTIGER_AERO("Frutiger Aero"),
     FRUTIGER_AERO_DARK("Frutiger Aero Dark"),
@@ -33,6 +36,7 @@ enum class AppTheme(val displayName: String) {
     TACTICAL_LIGHT("Daylight Light");
 
     fun toThemePreset(): ThemePreset = when (this) {
+        LIQUID_GLASS, LIQUID_GLASS_DARK -> ThemePreset.LIQUID_GLASS
         ORIGINAL -> ThemePreset.FIELD_OPS_HUD
         FRUTIGER_AERO, FRUTIGER_AERO_DARK -> ThemePreset.FRUTIGER_AERO
         MATERIAL3 -> ThemePreset.CLEAN_MESSENGER
@@ -40,13 +44,15 @@ enum class AppTheme(val displayName: String) {
     }
 
     fun toThemeBrightness(): ThemeBrightness = when (this) {
-        FRUTIGER_AERO, TACTICAL_LIGHT -> ThemeBrightness.LIGHT
+        LIQUID_GLASS, FRUTIGER_AERO, TACTICAL_LIGHT -> ThemeBrightness.LIGHT
         MATERIAL3 -> ThemeBrightness.SYSTEM
-        ORIGINAL, FRUTIGER_AERO_DARK, TACTICAL_DARK -> ThemeBrightness.DARK
+        LIQUID_GLASS_DARK, ORIGINAL, FRUTIGER_AERO_DARK, TACTICAL_DARK -> ThemeBrightness.DARK
     }
 
     companion object {
         fun fromPresetAndBrightness(preset: ThemePreset, brightness: ThemeBrightness): AppTheme = when (preset) {
+            ThemePreset.LIQUID_GLASS ->
+                if (brightness == ThemeBrightness.LIGHT) LIQUID_GLASS else LIQUID_GLASS_DARK
             ThemePreset.PRACTICAL_TACTICAL ->
                 if (brightness == ThemeBrightness.LIGHT) TACTICAL_LIGHT else TACTICAL_DARK
             ThemePreset.CLEAN_MESSENGER -> MATERIAL3
@@ -100,7 +106,7 @@ class DevicePreferences(context: Context) {
             val saved = prefs.getString("theme_preset_v2", null)
             if (saved != null) {
                 return runCatching { ThemePreset.valueOf(saved) }
-                    .getOrDefault(ThemePreset.PRACTICAL_TACTICAL)
+                    .getOrDefault(ThemePreset.LIQUID_GLASS)
             }
             return appTheme.toThemePreset()
         }
@@ -129,9 +135,9 @@ class DevicePreferences(context: Context) {
 
     var appTheme: AppTheme
         get() {
-            val saved = prefs.getString("app_theme", AppTheme.TACTICAL_DARK.name)
-            return runCatching { AppTheme.valueOf(saved ?: AppTheme.TACTICAL_DARK.name) }
-                .getOrDefault(AppTheme.TACTICAL_DARK)
+            val saved = prefs.getString("app_theme", AppTheme.LIQUID_GLASS_DARK.name)
+            return runCatching { AppTheme.valueOf(saved ?: AppTheme.LIQUID_GLASS_DARK.name) }
+                .getOrDefault(AppTheme.LIQUID_GLASS_DARK)
         }
         set(value) {
             prefs.edit()

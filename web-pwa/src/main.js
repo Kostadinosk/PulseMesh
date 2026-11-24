@@ -673,7 +673,7 @@ async function boot() {
   }
 
   function applyThemePreset(preset, persist = true) {
-    const valid = ["practical", "messenger", "field-ops", "aero"].includes(preset) ? preset : "practical";
+    const valid = ["liquid-glass", "practical", "messenger", "field-ops", "aero"].includes(preset) ? preset : "liquid-glass";
     document.documentElement.dataset.preset = valid;
     if (persist) {
       try { localStorage.setItem("pulsemesh_theme_preset", valid); } catch {}
@@ -683,12 +683,12 @@ async function boot() {
 
   try {
     applyColorScheme(localStorage.getItem("color-scheme") || "system", false);
-    applyThemePreset(localStorage.getItem("pulsemesh_theme_preset") || "practical", false);
+    applyThemePreset(localStorage.getItem("pulsemesh_theme_preset") || "liquid-glass", false);
   } catch {}
 
   window.addEventListener("storage", (ev) => {
     if (ev.key === "color-scheme") applyColorScheme(ev.newValue || "system", false);
-    if (ev.key === "pulsemesh_theme_preset") applyThemePreset(ev.newValue || "practical", false);
+    if (ev.key === "pulsemesh_theme_preset") applyThemePreset(ev.newValue || "liquid-glass", false);
   });
 
   // v2.0.0 Emergency SOS Kit Dialog (Broadcast SOS, Web Audio Rescue Siren, "I am Safe" Check-In)
@@ -950,13 +950,13 @@ async function boot() {
     }
   });
 
-  // Settings Controls (4 ThemePresets + 3-state color-scheme + Language)
+  // Settings Controls (5 ThemePresets + 3-state color-scheme + Language)
   setPresetSelect?.addEventListener("change", () => applyThemePreset(setPresetSelect.value, true));
   setThemeSelect?.addEventListener("change", () => applyColorScheme(setThemeSelect.value, true));
   document.getElementById("saveSettingsBtn").addEventListener("click", () => {
     state.callsign = setCallsignInput.value.trim() || state.callsign;
     state.passphrase = setPassphraseInput.value.trim() || "pulsemesh-tactical";
-    applyThemePreset(setPresetSelect?.value || "practical", true);
+    applyThemePreset(setPresetSelect?.value || "liquid-glass", true);
     applyColorScheme(setThemeSelect?.value || "system", true);
     state.lang = setLangSelect.value === "el" ? "el" : "en";
     setLanguage(state.lang);

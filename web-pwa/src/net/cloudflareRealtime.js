@@ -127,9 +127,10 @@ export async function recoverUsernameAccount({
   const norm = normalizeUsername(username);
   if (norm.length < 3) throw new Error("Username must be 3-24 characters");
   const cleanSecret = String(secret || "").trim();
-  if (!cleanSecret) throw new Error("Enter your Password, PIN, or Recovery Key");
-
   const isRecoveryKey = /^PMRK-/i.test(cleanSecret);
+  if (!cleanSecret || (!isRecoveryKey && !isValidUniversalAccountSecret(cleanSecret))) {
+    throw new Error("Password (6+ chars), 4-8 digit PIN, or PMRK-... Recovery Key is required");
+  }
   const unlockSecret = isRecoveryKey ? normalizeRecoveryKey(cleanSecret) : cleanSecret;
   const unlockProof = await deriveVaultUnlockProof(norm, unlockSecret);
 

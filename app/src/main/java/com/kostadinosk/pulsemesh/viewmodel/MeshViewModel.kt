@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 data class MeshUiState(
@@ -77,8 +78,8 @@ data class MeshUiState(
     val x25519PublicKey: String = "",
     val showSetupWizard: Boolean = false,
     val isSimpleMode: Boolean = true,
-    val appTheme: com.kostadinosk.pulsemesh.util.AppTheme = com.kostadinosk.pulsemesh.util.AppTheme.TACTICAL_DARK,
-    val themePreset: com.kostadinosk.pulsemesh.util.ThemePreset = com.kostadinosk.pulsemesh.util.ThemePreset.PRACTICAL_TACTICAL,
+    val appTheme: com.kostadinosk.pulsemesh.util.AppTheme = com.kostadinosk.pulsemesh.util.AppTheme.LIQUID_GLASS_DARK,
+    val themePreset: com.kostadinosk.pulsemesh.util.ThemePreset = com.kostadinosk.pulsemesh.util.ThemePreset.LIQUID_GLASS,
     val themeBrightness: com.kostadinosk.pulsemesh.util.ThemeBrightness = com.kostadinosk.pulsemesh.util.ThemeBrightness.SYSTEM,
     val hardwareReport: com.kostadinosk.pulsemesh.util.HardwareCapabilityReport? = null,
     val meshChannel: String = "pulsemesh_live_primary",
@@ -2766,6 +2767,20 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val cleanPin = pin.trim()
         val cleanRecovery = recoveryKeyInput.trim()
 
+        // Strictly REQUIRE a valid Password (6-64 chars) or 4-8 digit PIN (or PMRK-... Recovery Key in recovery mode)
+        val hasValidPasswordOrPin = TacticalE2eeManager.isValidUniversalAccountSecret(cleanPin)
+        val hasRecoveryKey = isRecoveryMode && cleanRecovery.isNotBlank()
+        if (!hasValidPasswordOrPin && !hasRecoveryKey) {
+            val err = if (isRecoveryMode) {
+                "Password (6+ chars), 4-8 digit PIN, or PMRK-... Recovery Key is required to sign in to @$norm."
+            } else {
+                "Password (6+ chars) or 4-8 digit PIN is required to reserve @$norm."
+            }
+            _uiState.update { it.copy(usernameAuthStatus = err, isReservingUsername = false) }
+            onResult?.invoke(false, err)
+            return
+        }
+
         fun migrateLocalNodeIdInGroups(oldNodeId: String, newNodeId: String) {
             val oldNorm = normalizeId(oldNodeId)
             val newNorm = normalizeId(newNodeId)
@@ -3588,8 +3603,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!threadId.isNullOrBlank()) {
+            val hadUnread = (unreadCountsByThread[threadId] ?: 0) > 0
             unreadCountsByThread[threadId] = 0
             notificationManager.cancelChatNotificationForThread(threadId)
+            if (threadId.startsWith("dm_") && hadUnread) {
+                sendReadReceiptsForDmThread(threadId)
+            }
         }
         _uiState.update { current ->
             val packets = if (threadId != null) persistentChatManager.getPacketsForThread(threadId) else emptyList()
@@ -3740,7 +3759,22 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         scheduleAccountBackupSync()
         triggerHaptic(30)
 
-        if (!canTransmitWire) return
+        if (!canTransmitWire) {
+            // If a DM is waiting for a peer's ECDH public key and we have Internet, auto-fetch the peer's claim & flush
+            if (isDm && recipientClaim != null && canDirectInboxOnline) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val fetched = meshNetworkService.pollUsernameClaim(recipientClaim.username, allowDirectLookup = true)
+                    if (fetched != null && TacticalE2eeManager.isValidEcPublicKeyBase64(fetched.publicKeyBase64)) {
+                        prefs.saveUsernameClaim(fetched)
+                        prefs.verifyOrTrustPeerPublicKey(targetDest, fetched.publicKeyBase64)
+                        withContext(Dispatchers.Main) {
+                            flushPendingKeyExchangeDmsForPeer(targetDest)
+                        }
+                    }
+                }
+            }
+            return
+        }
 
         val wirePacket = com.kostadinosk.pulsemesh.service.WireMeshPacket(
             packetId = pktId,
@@ -3786,17 +3820,17 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             offGridBleEngine.broadcastShortChatInScanResponse(trimmed)
         }
 
-        // Smart 2-step Automatic Chat Retry (1.2s and 3.5s) if no CHAT_ACK has arrived yet and peers/internet are active
+        // Progressive Multi-Radio Automatic Retry (1.2s, 3.2s, 6.0s): escalates across ALL active radios without cancelling failover
         viewModelScope.launch(Dispatchers.IO) {
-            val retryDelays = longArrayOf(1_200L, 2_300L)
+            val retryDelays = longArrayOf(1_200L, 2_000L, 2_800L)
             for (waitMs in retryDelays) {
                 delay(waitMs)
                 if (pendingChatAcks[pktId] == true) break
                 val cur = _uiState.value
-                val hasActiveRoute = cur.activePeerCount > 0 || cur.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink()
+                val hasActiveRoute = cur.activePeerCount > 0 || cur.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink() || hasValidatedOsInternet()
                 if (!hasActiveRoute) break
                 if (!inboxOnlyWithoutEcdh) {
-                    sendOmniPacket(wirePacket)
+                    sendPacketAllTransports(wirePacket)
                 }
                 if (isDm && recipientClaim != null && (cur.isInternetEnabled || hasValidatedOsInternet())) {
                     meshNetworkService.sendDirectPacketToUsername(
@@ -4391,6 +4425,55 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         pulseMeshWebServer.notifyStateChanged()
     }
 
+    /**
+     * Fans out an unacknowledged chat retry across EVERY active transport (BLE, Wi-Fi/Hotspot, Internet Relay, LoRa)
+     * without cancelling pending link-cost failover telemetry.
+     */
+    private fun sendPacketAllTransports(packet: com.kostadinosk.pulsemesh.service.WireMeshPacket) {
+        val state = _uiState.value
+        val useCompact = linkCostRouter.peerSupportsPmb2(packet.dstNodeId)
+        offGridBleEngine.broadcastPacketChunked(packet, useCompactBinary = useCompact)
+        autoHotspotNegotiator.sendCompactPacket(packet, useCompactBinary = useCompact)
+        if (state.isInternetEnabled) {
+            meshNetworkService.broadcastPacket(packet)
+        }
+        if (loraBridge.state.value.isConnected && packet.type == "CHAT" && packet.payload.length in 1..180) {
+            loraBridge.sendTextFrame(packet.payload)
+        }
+        pulseMeshWebServer.notifyStateChanged()
+    }
+
+    /**
+     * Sends lightweight `CHAT_READ` receipts when the user opens a DM thread with unread incoming messages.
+     */
+    private fun sendReadReceiptsForDmThread(threadId: String) {
+        val state = _uiState.value
+        val peerNodeId = threadId.removePrefix("dm_")
+        if (peerNodeId.isBlank()) return
+        val peerUsername = prefs.findUsernameClaimByNodeId(peerNodeId)?.username.orEmpty()
+        val recentIncoming = persistentChatManager.getPacketsForThread(threadId)
+            .filter { it.isIncoming && it.id.isNotBlank() }
+            .takeLast(3)
+        for (incoming in recentIncoming) {
+            val readPkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
+                packetId = "read_${incoming.id}_${state.localNodeId}_${System.currentTimeMillis() and 0xFFFF}",
+                srcNodeId = state.localNodeId,
+                srcCallsign = state.operatorCallsign,
+                dstNodeId = peerNodeId,
+                type = "CHAT_READ",
+                payload = incoming.id,
+                ttl = 5,
+                hops = 0,
+                srcUsername = state.claimedUsername,
+                dstUsername = peerUsername
+            )
+            sendMeshPacket(readPkt)
+            if (peerUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
+                meshNetworkService.sendDirectPacketToUsername(peerUsername, readPkt, allowDirectSend = true)
+            }
+        }
+    }
+
     private fun dispatchPacketOnTier(
         tier: com.kostadinosk.pulsemesh.service.LinkCostRouter.TransportTier,
         packet: com.kostadinosk.pulsemesh.service.WireMeshPacket,
@@ -4936,12 +5019,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         // Do not relay unicast packets that have already reached their final destination (self),
         // and never flood-relay broadcast CHAT_ACK packets.
         val isBroadcastDst = normDst.isBlank() || normDst == "ALL" || normDst == "BROADCAST"
-        if (packet.type == "CHAT_ACK" && (isBroadcastDst || normDst == normSelf)) return null
+        if ((packet.type == "CHAT_ACK" || packet.type == "CHAT_READ") && (isBroadcastDst || normDst == normSelf)) return null
         if ((packet.type == "E2EE_DM" || packet.type == "TILE_REQ") && normDst == normSelf) return null
 
         val allowedRelayType = packet.type == "CHAT" ||
             packet.type == "E2EE_DM" ||
             packet.type == "CHAT_ACK" ||
+            packet.type == "CHAT_READ" ||
             packet.type == "GROUP_INVITE" ||
             packet.type == "GROUP_CHAT" ||
             packet.type == "WAYPOINT" ||
@@ -5440,6 +5524,44 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     pulseMeshWebServer.notifyStateChanged()
                 }
             }
+            "CHAT_READ" -> {
+                val readId = packet.payload.trim()
+                if (readId.isNotBlank()) {
+                    pendingChatAcks[readId] = true
+                    pendingAckFailoverJobs.remove(readId)?.cancel()
+                    val remainingDtn = dtnController.onCustodyAckReceived(readId)
+                    val updated = persistentChatManager.markPacketRead(readId)
+                    _uiState.update { cur ->
+                        val updatedPkts = cur.packets.map { mp ->
+                            if (mp.id == readId) {
+                                mp.copy(
+                                    isDelivered = true,
+                                    deliveryStatus = "READ",
+                                    ackedByCallsign = effectiveCallsign.ifBlank { mp.ackedByCallsign }
+                                )
+                            } else mp
+                        }
+                        val updatedThreadPkts = cur.activeThreadPackets.map { mp ->
+                            if (mp.id == readId) {
+                                mp.copy(
+                                    isDelivered = true,
+                                    deliveryStatus = "READ",
+                                    ackedByCallsign = effectiveCallsign.ifBlank { mp.ackedByCallsign }
+                                )
+                            } else mp
+                        }
+                        cur.copy(
+                            packets = updatedPkts,
+                            activeThreadPackets = updatedThreadPkts,
+                            pendingDtnCount = remainingDtn
+                        )
+                    }
+                    if (updated) {
+                        refreshConversationsList()
+                    }
+                    pulseMeshWebServer.notifyStateChanged()
+                }
+            }
             "HOTSPOT_INFO", "HOTSPOT_AUTO_JOIN", "HOTSPOT_CREDENTIALS" -> {
                 val inner = runCatching { org.json.JSONObject(packet.payload) }.getOrNull()
                 if (inner != null) {
@@ -5593,8 +5715,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (isPublic || isEncryptedChannel || isDirectedToMe) {
-                    // Immediately send back a lightweight CHAT_ACK to the sender (multi-hop TTL=5 + direct inbox if online)
+                    // Immediately send back a lightweight CHAT_ACK to the sender (fans out across all active radios + direct inbox if online)
                     if (packet.packetId.isNotBlank()) {
+                        val ackTargetUsername = packet.srcUsername.ifBlank {
+                            prefs.findUsernameClaimByNodeId(packet.srcNodeId)?.username.orEmpty()
+                        }
                         val ackPkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
                             packetId = "ack_${packet.packetId}_${state.localNodeId}_${System.currentTimeMillis() and 0xFFFF}",
                             srcNodeId = state.localNodeId,
@@ -5605,11 +5730,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                             ttl = 5,
                             hops = 0,
                             srcUsername = state.claimedUsername,
-                            dstUsername = packet.srcUsername
+                            dstUsername = ackTargetUsername
                         )
                         sendMeshPacket(ackPkt)
-                        if (packet.srcUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
-                            meshNetworkService.sendDirectPacketToUsername(packet.srcUsername, ackPkt, allowDirectSend = true)
+                        if (ackTargetUsername.isNotBlank() && (state.isInternetEnabled || hasValidatedOsInternet())) {
+                            meshNetworkService.sendDirectPacketToUsername(ackTargetUsername, ackPkt, allowDirectSend = true)
                         }
                     }
 

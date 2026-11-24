@@ -19,10 +19,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCode2
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -269,14 +272,26 @@ fun RadiosSettingsScreen(
     onScanLoraDevices: () -> Unit,
     onToggleAcousticModem: () -> Unit,
     onToggleCotBridge: (Boolean) -> Unit,
+    onOpenConnectHub: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
     val lang = state.appLanguage
+    val context = LocalContext.current
 
     var channelDraft by remember(state.meshChannel) { mutableStateOf(state.meshChannel) }
     var passDraft by remember(state.meshPassphrase) { mutableStateOf(state.meshPassphrase) }
+    var copiedHostNotice by remember { mutableStateOf("") }
+
+    fun copyHostUrl(url: String) {
+        if (url.isBlank()) return
+        runCatching {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("PulseMesh Host Link", url))
+            copiedHostNotice = AppStrings.tr(lang, "Copied: $url", "Αντιγράφηκε: $url")
+        }
+    }
 
     Column(
         modifier = modifier
@@ -286,6 +301,164 @@ fun RadiosSettingsScreen(
             .testTag("radios_settings_screen"),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Dedicated Hotspot Link Host Card (HTTP + HTTPS links, 1-tap Copy & QR Share)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pulseSurfaceCard()
+                .padding(14.dp)
+                .testTag("settings_hotspot_host_card"),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val portal = state.webPortalStatus
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Link, contentDescription = null, tint = tokens.accentPrimary)
+                    Column {
+                        Text(
+                            text = AppStrings.tr(lang, "Hotspot Link Host", "Σύνδεσμος Hotspot (Host)"),
+                            color = p.textPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = if (portal.isRunning) {
+                                AppStrings.tr(lang, "Hosting Web PWA & APK · ${portal.activeClientCount} clients", "Ενεργός Host · ${portal.activeClientCount} συσκευές")
+                            } else {
+                                AppStrings.tr(lang, "Turn on to share a local browser link over Hotspot or Wi-Fi", "Ενεργοποιήστε για τοπικό σύνδεσμο browser μέσω Hotspot ή Wi-Fi")
+                            },
+                            color = if (portal.isRunning) tokens.statusOnline else p.textSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Switch(
+                    checked = portal.isRunning,
+                    onCheckedChange = { onToggleWebPortal() },
+                    modifier = Modifier.testTag("settings_hotspot_host_switch")
+                )
+            }
+
+            if (portal.isRunning) {
+                val primaryUrl = portal.portalUrl.ifBlank { "http://${portal.hostIp.ifBlank { "192.168.43.1" }}:${portal.port}" }
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = tokens.buttonShape,
+                    border = BorderStroke(1.dp, tokens.accentPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = AppStrings.tr(lang, "Local Host Link (HTTP)", "Τοπικός Σύνδεσμος (HTTP)"),
+                                color = p.textSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = primaryUrl,
+                                color = tokens.accentPrimary,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                modifier = Modifier.testTag("settings_hotspot_host_url")
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { copyHostUrl(primaryUrl) },
+                            shape = tokens.pillShape,
+                            modifier = Modifier.testTag("settings_hotspot_copy_btn")
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy Host Link", modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(AppStrings.tr(lang, "Copy", "Αντιγραφή"), fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                if (portal.httpsPortalUrl.isNotBlank()) {
+                    Surface(
+                        color = p.surfaceVariant,
+                        shape = tokens.buttonShape,
+                        border = BorderStroke(1.dp, p.border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = AppStrings.tr(lang, "iPhone HTTPS Link (Mic & PWA)", "Σύνδεσμος HTTPS (iPhone)"),
+                                    color = p.textSecondary,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = portal.httpsPortalUrl,
+                                    color = p.textPrimary,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { copyHostUrl(portal.httpsPortalUrl) },
+                                shape = tokens.pillShape
+                            ) {
+                                Text(AppStrings.tr(lang, "Copy", "Αντιγραφή"), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
+                if (portal.labeledReachableUrls.size > 1) {
+                    portal.labeledReachableUrls.drop(1).take(3).forEach { (altUrl, iface) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { copyHostUrl(altUrl) }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(altUrl, color = p.textSecondary, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                            Text(iface, color = p.textMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+
+                if (copiedHostNotice.isNotBlank()) {
+                    Text(copiedHostNotice, color = tokens.statusOnline, fontSize = 11.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenConnectHub,
+                    shape = tokens.buttonShape,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(AppStrings.tr(lang, "Open QR Code & iPhone Share Guide", "Άνοιγμα QR & Οδηγού iPhone"), fontSize = 12.sp)
+                }
+            }
+        }
+
         // Smart Battery & Mesh Power Profiles
         Column(
             modifier = Modifier

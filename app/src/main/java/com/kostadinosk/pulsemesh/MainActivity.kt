@@ -34,6 +34,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -353,7 +355,7 @@ class MainActivity : FragmentActivity() {
                 val isWideTablet = maxWidth >= 720.dp
 
                 Scaffold(
-                    containerColor = if (p.isAero) Color.Transparent else p.background,
+                    containerColor = if (p.isAero || p.isLiquidGlass) Color.Transparent else p.background,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -448,25 +450,35 @@ class MainActivity : FragmentActivity() {
                     bottomBar = {
                         if (!isWideTablet && !isImeVisible && !isInsideChatThread) {
                             NavigationBar(
-                                containerColor = if (p.isAero) {
-                                    if (p.isDarkAero) Color(0xDF071C2E) else Color(0xDCF2FAFF)
-                                } else {
-                                    p.card
+                                containerColor = when {
+                                    p.isAero -> if (p.isDarkAero) Color(0xDF071C2E) else Color(0xDCF2FAFF)
+                                    p.isLiquidGlass -> if (p.isLight) Color(0xDCF4F8FF) else Color(0xCC0A1324)
+                                    else -> p.card
                                 },
                                 contentColor = p.textSecondary,
-                                tonalElevation = 6.dp,
+                                tonalElevation = if (p.isLiquidGlass) 0.dp else 6.dp,
                                 windowInsets = WindowInsets(0, 0, 0, 0),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .then(
-                                        if (p.isAero) {
-                                            Modifier.aeroGlassPanel(
+                                        when {
+                                            p.isAero -> Modifier.aeroGlassPanel(
                                                 p,
                                                 cornerRadius = 0.dp,
                                                 tint = if (p.isDarkAero) Color(0xDF071C2E) else Color(0xE6F4FBFF)
                                             )
-                                        } else {
-                                            Modifier
+                                            p.isLiquidGlass -> {
+                                                val topRim = if (p.isLight) Color(0xE0FFFFFF) else Color(0x4AE2F1FF)
+                                                Modifier.drawBehind {
+                                                    drawLine(
+                                                        color = topRim,
+                                                        start = Offset(0f, 0f),
+                                                        end = Offset(size.width, 0f),
+                                                        strokeWidth = 1.dp.toPx()
+                                                    )
+                                                }
+                                            }
+                                            else -> Modifier
                                         }
                                     )
                                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
@@ -541,7 +553,11 @@ class MainActivity : FragmentActivity() {
                                             )
                                         },
                                         colors = NavigationBarItemDefaults.colors(
-                                            indicatorColor = if (p.isAero) p.cyanDim else p.surfaceVariant,
+                                            indicatorColor = when {
+                                                p.isAero -> p.cyanDim
+                                                p.isLiquidGlass -> p.cyan.copy(alpha = if (p.isLight) 0.16f else 0.22f)
+                                                else -> p.surfaceVariant
+                                            },
                                         ),
                                     )
                                 }
@@ -588,7 +604,6 @@ class MainActivity : FragmentActivity() {
                                 .weight(1f)
                                 .fillMaxHeight(),
                         ) {
-                        var proSettingsSubTab by remember { mutableIntStateOf(0) }
                         when (state.selectedTabIndex) {
                             0 -> Box(modifier = Modifier.fillMaxSize()) {
                                 var mapCompassRotate by remember { mutableStateOf(false) }
@@ -917,7 +932,8 @@ class MainActivity : FragmentActivity() {
                                                     onSelectLoraProtocol = { viewModel.selectLoraProtocol(it) },
                                                     onScanLoraDevices = { viewModel.scanLoraDevices() },
                                                     onToggleAcousticModem = { viewModel.toggleBell202Modem() },
-                                                    onToggleCotBridge = { viewModel.setCotBridgeEnabled(it) }
+                                                    onToggleCotBridge = { viewModel.setCotBridgeEnabled(it) },
+                                                    onOpenConnectHub = { showConnectHub = true }
                                                 )
                                             com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.SECURITY ->
                                                 com.kostadinosk.pulsemesh.ui.screens.settings.SecuritySettingsScreen(

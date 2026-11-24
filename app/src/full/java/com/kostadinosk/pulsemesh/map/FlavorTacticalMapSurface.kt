@@ -116,7 +116,15 @@ fun FlavorTacticalMapSurface(
             }
         }
 
-        if (mapLibreReady && layerStyle != MapLayerStyle.RADAR) {
+        // Only mount heavy MapLibre GL MapView when local offline vector packs are installed;
+        // standard/topo/satellite raster tiles are rendered directly at 60fps on the Compose Canvas
+        // (eliminating double tile fetching and OpenGL camera lag on every pan frame).
+        val hasVectorPacks = remember(context) {
+            OfflineMapPackManager.listInstalledPacks(context).any {
+                it.fileName.endsWith(".pmtiles", ignoreCase = true)
+            }
+        }
+        if (mapLibreReady && hasVectorPacks && layerStyle != MapLayerStyle.RADAR) {
             val lifecycleOwner = LocalLifecycleOwner.current
             var mapController by remember { mutableStateOf<MapLibreMap?>(null) }
             val mapView = remember {

@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.kostadinosk.pulsemesh.map.MapLayerStyle
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -21,9 +23,10 @@ import kotlin.math.*
 
 object NativeTileMapManager {
 
-    // 192-tile in-memory cache
-    private val tileCache = object : LruCache<String, ImageBitmap>(192) {}
+    // 320-tile in-memory cache + concurrency cap so fast panning stays 60fps
+    private val tileCache = object : LruCache<String, ImageBitmap>(320) {}
     private val inFlightKeys = mutableSetOf<String>()
+    private val networkFetchSemaphore = Semaphore(6)
 
     /**
      * Optional Wi-Fi Direct / Hotspot HTTP proxy URL of an internet-connected Gateway Peer
@@ -249,38 +252,40 @@ object NativeTileMapManager {
                 } else {
                     listOf("$gwProxyBase/api/tiles/$z/$x/$y.png?fetch=1")
                 }
-                for (urlStr in candidateUrls) {
-                    var conn: HttpURLConnection? = null
-                    try {
-                        val url = URL(urlStr)
-                        conn = (url.openConnection() as HttpURLConnection).apply {
-                            setRequestProperty("User-Agent", "PulseMesh-Android/2.0.2 (+https://github.com/Kostadinosk/PulseMesh)")
-                            setRequestProperty("Accept", "image/png,image/*;q=0.8")
-                            connectTimeout = 4000
-                            readTimeout = 4500
-                            instanceFollowRedirects = true
-                        }
+                networkFetchSemaphore.withPermit {
+                    for (urlStr in candidateUrls) {
+                        var conn: HttpURLConnection? = null
+                        try {
+                            val url = URL(urlStr)
+                            conn = (url.openConnection() as HttpURLConnection).apply {
+                                setRequestProperty("User-Agent", "PulseMesh-Android/2.0.3 (+https://github.com/Kostadinosk/PulseMesh)")
+                                setRequestProperty("Accept", "image/png,image/*;q=0.8")
+                                connectTimeout = 4000
+                                readTimeout = 4500
+                                instanceFollowRedirects = true
+                            }
 
-                        if (conn.responseCode in 200..299) {
-                            val bytes = conn.inputStream.use { it.readBytes() }
-                            if (bytes.isNotEmpty()) {
-                                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                if (bmp != null) {
-                                    loadedBitmap = bmp
-                                    runCatching {
-                                        primaryFile.parentFile?.mkdirs()
-                                        FileOutputStream(primaryFile).use { out ->
-                                            out.write(bytes)
+                            if (conn.responseCode in 200..299) {
+                                val bytes = conn.inputStream.use { it.readBytes() }
+                                if (bytes.isNotEmpty()) {
+                                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                    if (bmp != null) {
+                                        loadedBitmap = bmp
+                                        runCatching {
+                                            primaryFile.parentFile?.mkdirs()
+                                            FileOutputStream(primaryFile).use { out ->
+                                                out.write(bytes)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            if (loadedBitmap != null) break
+                        } catch (_: Exception) {
+                            // Try next mirror
+                        } finally {
+                            runCatching { conn?.disconnect() }
                         }
-                        if (loadedBitmap != null) break
-                    } catch (_: Exception) {
-                        // Try next mirror
-                    } finally {
-                        runCatching { conn?.disconnect() }
                     }
                 }
 

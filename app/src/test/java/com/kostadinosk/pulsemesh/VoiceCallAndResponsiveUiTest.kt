@@ -1896,7 +1896,7 @@ class VoiceCallAndResponsiveUiTest {
             vmB.toggleInternetEnabled(true)
             vmB.setUsernameRelayUrl(baseUrl)
             assertEquals("", vmB.uiState.value.claimedUsername)
-            assertEquals(com.kostadinosk.pulsemesh.util.AppTheme.TACTICAL_DARK, vmB.uiState.value.appTheme)
+            assertEquals(com.kostadinosk.pulsemesh.util.AppTheme.LIQUID_GLASS_DARK, vmB.uiState.value.appTheme)
 
             var pinLoginDone = false
             var pinLoginOk = false

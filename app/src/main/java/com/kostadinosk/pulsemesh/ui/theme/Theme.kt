@@ -31,6 +31,7 @@ data class PulseMeshPalette(
     val isOriginal: Boolean = false,
     val isAero: Boolean = false,
     val isDarkAero: Boolean = false,
+    val isLiquidGlass: Boolean = false,
     val background: Color,
     val card: Color,
     val surface: Color,
@@ -294,6 +295,60 @@ val DarkAeroColorScheme = darkColorScheme(
     outlineVariant = DarkAeroCrystalBorderBright
 )
 
+val LiquidGlassDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF38BDF8),
+    onPrimary = Color(0xFF04131E),
+    primaryContainer = Color(0xFF10324A),
+    onPrimaryContainer = Color(0xFFE0F2FE),
+    secondary = Color(0xFF34D399),
+    onSecondary = Color(0xFF031F16),
+    secondaryContainer = Color(0xFF0D3B2E),
+    onSecondaryContainer = Color(0xFFD1FAE5),
+    tertiary = Color(0xFFA78BFA),
+    onTertiary = Color(0xFF1A0E38),
+    tertiaryContainer = Color(0xFF2B1F54),
+    onTertiaryContainer = Color(0xFFEDE9FE),
+    error = Color(0xFFFB7185),
+    onError = Color(0xFF2E050D),
+    errorContainer = Color(0xFF4C1120),
+    onErrorContainer = Color(0xFFFFE4E6),
+    background = Color(0xFF070B14),
+    onBackground = Color(0xFFF8FAFC),
+    surface = Color(0xFF111A2B),
+    onSurface = Color(0xFFF8FAFC),
+    surfaceVariant = Color(0xFF1B2940),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    outline = Color(0x52FFFFFF),
+    outlineVariant = Color(0x2EFFFFFF)
+)
+
+val LiquidGlassLightColorScheme = lightColorScheme(
+    primary = Color(0xFF0284C7),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFD9F1FF),
+    onPrimaryContainer = Color(0xFF082F49),
+    secondary = Color(0xFF059669),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFD1FAE5),
+    onSecondaryContainer = Color(0xFF064E3B),
+    tertiary = Color(0xFF6366F1),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE0E7FF),
+    onTertiaryContainer = Color(0xFF1E1B4B),
+    error = Color(0xFFE11D48),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFE4E6),
+    onErrorContainer = Color(0xFF881337),
+    background = Color(0xFFEBF1F9),
+    onBackground = Color(0xFF0B1220),
+    surface = Color(0xE6FFFFFF),
+    onSurface = Color(0xFF0B1220),
+    surfaceVariant = Color(0xCCE6EFFA),
+    onSurfaceVariant = Color(0xFF334155),
+    outline = Color(0x9994A3B8),
+    outlineVariant = Color(0xCCFFFFFF)
+)
+
 val Material3FallbackDarkColorScheme = darkColorScheme(
     primary = Color(0xFF7AD9C1),
     onPrimary = Color(0xFF00382C),
@@ -402,6 +457,7 @@ fun PulseMeshTheme(
     )
 
     val colorScheme = when (resolvedPreset) {
+        ThemePreset.LIQUID_GLASS -> if (isDark) LiquidGlassDarkColorScheme else LiquidGlassLightColorScheme
         ThemePreset.FRUTIGER_AERO -> if (isDark) DarkAeroColorScheme else AeroColorScheme
         ThemePreset.CLEAN_MESSENGER -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

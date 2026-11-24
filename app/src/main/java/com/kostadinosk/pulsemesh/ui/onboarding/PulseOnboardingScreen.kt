@@ -264,10 +264,19 @@ fun PulseOnboardingScreen(
                             OutlinedTextField(
                                 value = passphraseInput,
                                 onValueChange = { passphraseInput = it.take(64) },
-                                label = { Text(AppStrings.tr(lang, "Password (6+ chars) or 4-8 Digit PIN", "Κωδικός (6+ χαρακτήρες) ή PIN 4-8 ψηφίων")) },
+                                label = { Text(AppStrings.tr(lang, "Required: Password (6+ chars) or 4-8 Digit PIN", "Απαιτείται: Κωδικός (6+ χαρ.) ή PIN 4-8 ψηφίων")) },
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                                 singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().testTag("onboarding_username_secret_input")
                             )
+                            val secretValid = com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret(passphraseInput)
+                            if (!secretValid) {
+                                Text(
+                                    text = AppStrings.tr(lang, "A password (6+ chars) or 4-8 digit PIN is required to reserve or sign in to @$usernameInput (or clear @username to continue off-grid).", "Απαιτείται κωδικός (6+ χαρ.) ή PIN 4-8 ψηφίων για το @$usernameInput."),
+                                    color = tokens.statusWarning,
+                                    fontSize = 11.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -468,11 +477,16 @@ fun PulseOnboardingScreen(
                     ) {
                         Text(AppStrings.tr(lang, "Back", "Πίσω"))
                     }
+                    val step1CanAdvance = stepIndex != 1 || usernameInput.length < 3 ||
+                        com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret(passphraseInput)
                     Button(
+                        enabled = step1CanAdvance,
                         onClick = {
                             if (stepIndex == 1) {
                                 if (callsignInput.isNotBlank()) onUpdateCallsign(callsignInput.trim())
-                                if (usernameInput.length >= 3) onReserveUsername(usernameInput.trim(), passphraseInput)
+                                if (usernameInput.length >= 3 && com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret(passphraseInput)) {
+                                    onReserveUsername(usernameInput.trim(), passphraseInput.trim())
+                                }
                             }
                             if (track == OnboardingTrack.CUSTOM_5_STEP && stepIndex == 4 && iceInput.isNotBlank()) {
                                 onSaveIceInfo(iceInput.trim())

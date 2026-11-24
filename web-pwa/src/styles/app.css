@@ -131,7 +131,65 @@
   scrollbar-color: var(--scroll-thumb) var(--scroll-track);
 }
 
-/* 4 Matching Android ThemePresets */
+/* 5 Matching Android ThemePresets (Liquid Glass Default) */
+:root[data-preset="liquid-glass"] {
+  --bg-light: #ebf1f9;
+  --bg-dark: #070b14;
+  --card-light: rgb(255 255 255 / 0.78);
+  --card-dark: rgb(18 30 51 / 0.68);
+  --surface-light: rgb(246 250 255 / 0.84);
+  --surface-dark: rgb(13 22 39 / 0.78);
+  --surface-alt-light: rgb(232 241 252 / 0.80);
+  --surface-alt-dark: rgb(29 44 72 / 0.72);
+  --border-light: rgb(148 163 184 / 0.45);
+  --border-dark: rgb(226 241 255 / 0.24);
+  --accent-light: #0284c7;
+  --accent-dark: #38bdf8;
+  --radius-card: 24px;
+  --radius-btn: 18px;
+  --card-blur: blur(18px) saturate(160%);
+  --card-shadow: 0 8px 28px rgb(2 12 27 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.24);
+}
+
+:root[data-preset="liquid-glass"] body {
+  background-image:
+    radial-gradient(circle at 14% 12%, rgb(56 189 248 / 0.22), transparent 46%),
+    radial-gradient(circle at 88% 34%, rgb(129 140 248 / 0.18), transparent 48%),
+    radial-gradient(circle at 24% 86%, rgb(52 211 153 / 0.16), transparent 46%);
+}
+
+:root[data-preset="liquid-glass"] .top-bar,
+:root[data-preset="liquid-glass"] .bottom-nav,
+:root[data-preset="liquid-glass"] .card {
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
+}
+
+@media (prefers-contrast: more) {
+  :root[data-preset="liquid-glass"] {
+    --card-light: #ffffff;
+    --card-dark: #10192b;
+    --surface-light: #ffffff;
+    --surface-dark: #0d1525;
+    --border-light: #475569;
+    --border-dark: #94a3b8;
+  }
+}
+
+@media (forced-colors: active) {
+  :root[data-preset="liquid-glass"] body {
+    background-image: none;
+  }
+  :root[data-preset="liquid-glass"] .top-bar,
+  :root[data-preset="liquid-glass"] .bottom-nav,
+  :root[data-preset="liquid-glass"] .card {
+    background: Canvas;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+}
+
 :root[data-preset="messenger"] {
   --bg-light: #f7f8fa;
   --bg-dark: #0b1117;

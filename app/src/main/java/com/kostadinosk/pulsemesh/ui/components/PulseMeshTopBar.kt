@@ -50,7 +50,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -99,7 +101,25 @@ fun PulseMeshTopBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(p.topBarBg)
+            .then(
+                if (p.isLiquidGlass) {
+                    val topGloss = if (tokens.isDark) Color(0x26FFFFFF) else Color(0xF2FFFFFF)
+                    val baseGlass = p.topBarBg
+                    val rimLine = if (tokens.isDark) Color(0x45E2F1FF) else Color(0xCCFFFFFF)
+                    Modifier
+                        .background(Brush.verticalGradient(listOf(topGloss, baseGlass)))
+                        .drawBehind {
+                            drawLine(
+                                color = rimLine,
+                                start = Offset(0f, size.height - 1f),
+                                end = Offset(size.width, size.height - 1f),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+                } else {
+                    Modifier.background(p.topBarBg)
+                }
+            )
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
     ) {
         val showSosBanner = state.isSosActive || state.incomingSosAlert.isNotBlank()

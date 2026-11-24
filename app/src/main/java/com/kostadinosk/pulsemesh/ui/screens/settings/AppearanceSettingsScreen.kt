@@ -41,8 +41,8 @@ import com.kostadinosk.pulsemesh.util.ThemeBrightness
 import com.kostadinosk.pulsemesh.util.ThemePreset
 
 /**
- * PulseMesh v2.0 Appearance & Language Sub-Screen:
- * - 4 selectable Design-Token ThemePresets (Practical Tactical, Clean Messenger, Field Ops HUD, Frutiger Aero)
+ * PulseMesh v2.0.3 Appearance & Language Sub-Screen:
+ * - 5 selectable Design-Token ThemePresets (Liquid Glass, Practical Tactical, Clean Messenger, Field Ops HUD, Frutiger Aero)
  * - Brightness mode selector (System, Dark, Light)
  * - Language switcher (English / Ελληνικά)
  */
@@ -229,13 +229,13 @@ fun AppearanceSettingsScreen(
     }
 }
 
-@Preview(name = "Appearance Settings Dark", showBackground = true)
+@Preview(name = "Appearance Settings Liquid Glass Dark", showBackground = true)
 @Composable
 fun PreviewAppearanceSettingsDark() {
-    PulseMeshTheme(themePreset = ThemePreset.PRACTICAL_TACTICAL, themeBrightness = ThemeBrightness.DARK) {
+    PulseMeshTheme(themePreset = ThemePreset.LIQUID_GLASS, themeBrightness = ThemeBrightness.DARK) {
         Surface(color = LocalPulseTokens.current.palette.background) {
             AppearanceSettingsScreen(
-                selectedPreset = ThemePreset.PRACTICAL_TACTICAL,
+                selectedPreset = ThemePreset.LIQUID_GLASS,
                 selectedBrightness = ThemeBrightness.DARK,
                 appLanguage = "en",
                 onSelectPreset = {},

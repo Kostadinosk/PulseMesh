@@ -43,6 +43,8 @@ import com.kostadinosk.pulsemesh.model.WaypointType
 import com.kostadinosk.pulsemesh.service.LiveMeshNetworkService
 import com.kostadinosk.pulsemesh.service.TacticalSensorService
 import com.kostadinosk.pulsemesh.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.kostadinosk.pulsemesh.R
 import com.kostadinosk.pulsemesh.util.AppStrings
 import com.kostadinosk.pulsemesh.util.NativeTileMapManager
@@ -184,8 +186,58 @@ fun TacticalMap(
         )
 
         // -----------------------------------------------------------------
-        // SLIPPY STREET MAP CANVAS
+        // SLIPPY STREET MAP CANVAS (Zero per-frame allocations & stable pointerInput)
         // -----------------------------------------------------------------
+        val latestNodes by rememberUpdatedState(nodes)
+        val latestCenterLat by rememberUpdatedState(centerLat)
+        val latestCenterLon by rememberUpdatedState(centerLon)
+        val latestZoomLevel by rememberUpdatedState(zoomLevel)
+        val latestIsRulerMode by rememberUpdatedState(isRulerMode)
+        val paintText = remember {
+            Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 27f
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                isAntiAlias = true
+            }
+        }
+        val paintTextHalo = remember {
+            Paint().apply {
+                color = android.graphics.Color.argb(190, 8, 12, 20)
+                textSize = 27f
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                isAntiAlias = true
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+            }
+        }
+        val paintSub = remember {
+            Paint().apply {
+                color = android.graphics.Color.rgb(0, 230, 118)
+                textSize = 21f
+                typeface = Typeface.MONOSPACE
+                isAntiAlias = true
+            }
+        }
+        val tileRedrawGateMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+        val tileRedrawQueued = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+        val scheduleTileRedraw: () -> Unit = remember(coroutineScope) {
+            {
+                val now = android.os.SystemClock.uptimeMillis()
+                val prev = tileRedrawGateMs.get()
+                if (now - prev >= 55L && tileRedrawGateMs.compareAndSet(prev, now)) {
+                    tileRefreshCounter++
+                } else if (tileRedrawQueued.compareAndSet(false, true)) {
+                    coroutineScope.launch {
+                        delay(55L)
+                        tileRedrawQueued.set(false)
+                        tileRedrawGateMs.set(android.os.SystemClock.uptimeMillis())
+                        tileRefreshCounter++
+                    }
+                }
+            }
+        }
+
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -200,18 +252,21 @@ fun TacticalMap(
                         centerLon = centerLon.coerceIn(-180.0, 180.0)
                     }
                 }
-                .pointerInput(nodes, centerLat, centerLon, zoomLevel, isRulerMode) {
+                .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = { tapOffset ->
-                            val intZoom = zoomLevel.toInt()
-                            val (curTileX, curTileY) = NativeTileMapManager.latLonToTileCoords(centerLat, centerLon, intZoom)
-                            val subScale = 2.0.pow((zoomLevel - intZoom).toDouble()).toFloat()
+                            val curLat = latestCenterLat
+                            val curLon = latestCenterLon
+                            val curZoom = latestZoomLevel
+                            val intZoom = curZoom.toInt()
+                            val (curTileX, curTileY) = NativeTileMapManager.latLonToTileCoords(curLat, curLon, intZoom)
+                            val subScale = 2.0.pow((curZoom - intZoom).toDouble()).toFloat()
                             val tileSizePx = 256f * subScale
                             val viewCenterX = size.width / 2f
                             val viewCenterY = size.height / 2f
 
                             // Detect tap on peer pins
-                            for (node in nodes) {
+                            for (node in latestNodes) {
                                 val (nodeTileX, nodeTileY) = NativeTileMapManager.latLonToTileCoords(node.latitude, node.longitude, intZoom)
                                 val px = viewCenterX + ((nodeTileX - curTileX) * tileSizePx).toFloat()
                                 val py = viewCenterY + ((nodeTileY - curTileY) * tileSizePx).toFloat()
@@ -227,13 +282,13 @@ fun TacticalMap(
                             val dx = longPressOffset.x - (size.width / 2f)
                             val dy = longPressOffset.y - (size.height / 2f)
                             val (tappedLat, tappedLon) = com.kostadinosk.pulsemesh.map.MapCoordinateMath.pixelOffsetToLatLon(
-                                centerLat = centerLat,
-                                centerLon = centerLon,
-                                zoomLevel = zoomLevel,
+                                centerLat = latestCenterLat,
+                                centerLon = latestCenterLon,
+                                zoomLevel = latestZoomLevel,
                                 dxPx = dx,
                                 dyPx = dy
                             )
-                            if (isRulerMode) {
+                            if (latestIsRulerMode) {
                                 if (rulerPointA == null || rulerPointB != null) {
                                     rulerPointA = Pair(tappedLat, tappedLon)
                                     rulerPointB = null
@@ -270,7 +325,7 @@ fun TacticalMap(
 
             val maxWorldTiles = 1 shl intZoom
 
-            // 1. Draw per-style raster map tiles (DARK = Carto Dark Matter, TOPO = OpenTopoMap/Esri Topo, SATELLITE = Esri Imagery; RADAR skips raster completely!)
+            // 1. Draw per-style raster map tiles cleanly (no wireframe grid clutter; RADAR skips raster completely)
             if (selectedLayerStyle != com.kostadinosk.pulsemesh.map.MapLayerStyle.RADAR) {
                 for (tx in minTileX..maxTileX) {
                     for (ty in minTileY..maxTileY) {
@@ -285,22 +340,9 @@ fun TacticalMap(
                             drawImage(
                                 image = cachedBmp,
                                 dstOffset = IntOffset(tileLeft.toInt(), tileTop.toInt()),
-                                dstSize = IntSize(ceil(tileSizePx).toInt(), ceil(tileSizePx).toInt())
-                            )
-                            drawRect(
-                                color = EmeraldMesh.copy(alpha = 0.22f),
-                                topLeft = Offset(tileLeft, tileTop),
-                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
-                                style = Stroke(width = 0.75f)
+                                dstSize = IntSize(ceil(tileSizePx).toInt() + 1, ceil(tileSizePx).toInt() + 1)
                             )
                         } else {
-                            drawRect(
-                                color = Color(0xFF222D3D).copy(alpha = 0.28f),
-                                topLeft = Offset(tileLeft, tileTop),
-                                size = androidx.compose.ui.geometry.Size(tileSizePx, tileSizePx),
-                                style = Stroke(width = 0.75f)
-                            )
-
                             // Fetch style-specific tile asynchronously (checks per-style offline disk cache & .mbtiles first on IO)
                             NativeTileMapManager.fetchTileAsync(
                                 context = context,
@@ -311,7 +353,7 @@ fun TacticalMap(
                                 isInternetEnabled = isInternetEnabled,
                                 layerStyle = selectedLayerStyle
                             ) { _, _, _, _ ->
-                                tileRefreshCounter++
+                                scheduleTileRedraw()
                             }
                         }
                     }
@@ -402,22 +444,7 @@ fun TacticalMap(
                 }
             }
 
-            // 2. Draw Real Peer GPS Pin Markers with Live Distance, Compass Bearing Arrow & Altitude ASL
-            val paintText = Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 28f
-                typeface = Typeface.MONOSPACE
-                isAntiAlias = true
-                setShadowLayer(4f, 0f, 2f, android.graphics.Color.BLACK)
-            }
-            val paintSub = Paint().apply {
-                color = android.graphics.Color.rgb(0, 230, 118)
-                textSize = 22f
-                typeface = Typeface.MONOSPACE
-                isAntiAlias = true
-                setShadowLayer(3f, 0f, 1f, android.graphics.Color.BLACK)
-            }
-
+            // 2. Draw Real Peer GPS Pin Markers using pre-allocated Paints (zero per-frame GC / shadow-layer stalls)
             nodes.forEach { node ->
                 if (node.latitude != 0.0 && node.longitude != 0.0) {
                     val (nodeTileX, nodeTileY) = NativeTileMapManager.latLonToTileCoords(node.latitude, node.longitude, intZoom)
@@ -468,6 +495,12 @@ fun TacticalMap(
                     val altMeters = if (isSelf) (barometricAltitudeMeters ?: node.altitudeM).toInt() else node.altitudeM.toInt()
                     val sub = "${node.id}$distStr$bearingStr • ${altMeters}m ASL • ${node.batteryPercent}%"
 
+                    drawContext.canvas.nativeCanvas.drawText(
+                        title,
+                        px + 22f,
+                        py - 6f,
+                        paintTextHalo
+                    )
                     drawContext.canvas.nativeCanvas.drawText(
                         title,
                         px + 22f,

@@ -448,9 +448,9 @@ class LiveMeshNetworkService(
                         .put("type", "PM_CHANNEL_FRAME")
                         .put("envelope", encryptedEnvelope)
                         .toString()
-                    if (realtimeClient.sendText(wsFrame)) {
-                        return@launch
-                    }
+                    // Send on realtime WS as a fast path, AND always continue to HTTP channel relay
+                    // because realtimeClient may be connected to a private inbox:<user> room rather than the shared channel.
+                    runCatching { realtimeClient.sendText(wsFrame) }
                 }
                 val url = URL(currentTopicUrl())
                 var conn: HttpURLConnection? = null
@@ -518,9 +518,9 @@ class LiveMeshNetworkService(
                         .put("type", "PM_CHANNEL_FRAME")
                         .put("envelope", encryptedEnvelope)
                         .toString()
-                    if (realtimeClient.sendText(wsFrame)) {
-                        return@launch
-                    }
+                    // Send on realtime WS as a fast path, AND always continue to HTTP channel relay
+                    // because realtimeClient may be connected to a private inbox:<user> room rather than the shared channel.
+                    runCatching { realtimeClient.sendText(wsFrame) }
                 }
                 val url = URL(currentTopicUrl())
                 var conn: HttpURLConnection? = null
@@ -1323,26 +1323,51 @@ class LiveMeshNetworkService(
                 )
                 if (encryptedEnvelope.isBlank()) return@launch
                 val customBase = activeUsernameRelayBaseUrl()
-                val url = if (customBase.isNotEmpty()) {
+                val primaryUrl = if (customBase.isNotEmpty()) {
                     URL("$customBase/v1/inbox/$normRecipient")
                 } else {
                     val topic = deriveEncryptedInboxFallbackTopic(normRecipient)
                     URL("$RELAY_BASE_URL/$topic")
                 }
-                withRelayConnectionFallback(url) { conn ->
-                    conn.apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 8000
-                        readTimeout = 8000
-                        setRequestProperty("Content-Type", "text/plain; charset=utf-8")
-                        setRequestProperty("Cache-Control", "no-cache")
+                val primaryCode = runCatching {
+                    withRelayConnectionFallback(primaryUrl) { conn ->
+                        conn.apply {
+                            requestMethod = "POST"
+                            doOutput = true
+                            connectTimeout = 8000
+                            readTimeout = 8000
+                            setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                            setRequestProperty("Cache-Control", "no-cache")
+                        }
+                        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+                            writer.write(encryptedEnvelope)
+                            writer.flush()
+                        }
+                        conn.responseCode
                     }
-                    OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
-                        writer.write(encryptedEnvelope)
-                        writer.flush()
+                }.getOrDefault(-1)
+
+                // If the custom Cloudflare Worker relay failed or timed out, automatically fail over to encrypted ntfy.sh inbox
+                if (customBase.isNotEmpty() && primaryCode !in 200..299) {
+                    val fallbackTopic = deriveEncryptedInboxFallbackTopic(normRecipient)
+                    val fallbackUrl = URL("$RELAY_BASE_URL/$fallbackTopic")
+                    runCatching {
+                        withRelayConnectionFallback(fallbackUrl) { conn ->
+                            conn.apply {
+                                requestMethod = "POST"
+                                doOutput = true
+                                connectTimeout = 8000
+                                readTimeout = 8000
+                                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                                setRequestProperty("Cache-Control", "no-cache")
+                            }
+                            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+                                writer.write(encryptedEnvelope)
+                                writer.flush()
+                            }
+                            conn.responseCode
+                        }
                     }
-                    conn.responseCode
                 }
             } catch (_: Exception) {
                 // Silent catch for offline environments

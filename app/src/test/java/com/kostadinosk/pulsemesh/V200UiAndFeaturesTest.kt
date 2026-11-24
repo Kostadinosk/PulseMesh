@@ -50,7 +50,7 @@ class V200UiAndFeaturesTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun `design tokens resolve all 4 ThemePresets cleanly and map AppTheme bidirectionally`() {
+    fun `design tokens resolve all 5 ThemePresets cleanly and map AppTheme bidirectionally`() {
         ThemePreset.entries.forEach { preset ->
             val darkTokens = resolvePulseTokens(preset, ThemeBrightness.DARK, isDark = true)
             val lightTokens = resolvePulseTokens(preset, ThemeBrightness.LIGHT, isDark = false)
@@ -58,8 +58,15 @@ class V200UiAndFeaturesTest {
             assertTrue(darkTokens.isDark)
             assertFalse(lightTokens.isDark)
             assertEquals(preset == ThemePreset.FIELD_OPS_HUD, darkTokens.useMonospaceLabels)
-            assertEquals(preset == ThemePreset.FRUTIGER_AERO, darkTokens.useGlassSheen)
+            assertEquals(
+                preset == ThemePreset.FRUTIGER_AERO || preset == ThemePreset.LIQUID_GLASS,
+                darkTokens.useGlassSheen
+            )
+            assertEquals(preset == ThemePreset.LIQUID_GLASS, darkTokens.palette.isLiquidGlass)
+            assertEquals(preset == ThemePreset.LIQUID_GLASS, lightTokens.palette.isLiquidGlass)
         }
+        assertEquals(ThemePreset.LIQUID_GLASS, AppTheme.LIQUID_GLASS.toThemePreset())
+        assertEquals(ThemePreset.LIQUID_GLASS, AppTheme.LIQUID_GLASS_DARK.toThemePreset())
         assertEquals(ThemePreset.FIELD_OPS_HUD, AppTheme.ORIGINAL.toThemePreset())
         assertEquals(ThemePreset.FRUTIGER_AERO, AppTheme.FRUTIGER_AERO.toThemePreset())
         assertEquals(ThemePreset.CLEAN_MESSENGER, AppTheme.MATERIAL3.toThemePreset())
@@ -414,5 +421,80 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("map_center_gps_button").assertExists()
         composeTestRule.onNodeWithTag("map_location_share_selector").assertDoesNotExist()
         composeTestRule.onNodeWithTag("map_cot_toggle").assertDoesNotExist()
+    }
+
+    @Test
+    fun `v203 ack fanout, mandatory login secret, hotspot link host card, and Liquid Glass theme`() {
+        // 1. CHAT_ACK and CHAT_READ must always fan out across active transports
+        val router = com.kostadinosk.pulsemesh.service.LinkCostRouter()
+        val ackPacket = com.kostadinosk.pulsemesh.service.WireMeshPacket(
+            packetId = "ACK#1",
+            srcNodeId = "0xAAAA",
+            srcCallsign = "Alice",
+            dstNodeId = "0xBBBB",
+            type = "CHAT_ACK",
+            payload = "PKT#1"
+        )
+        val readPacket = ackPacket.copy(packetId = "READ#1", type = "CHAT_READ")
+        val ackDecision = router.planRoute(ackPacket, hasLocalWifiOrNan = true, hasBleL2cap = true, hasBleGatt = true, isInternetEnabled = true)
+        val readDecision = router.planRoute(readPacket, hasLocalWifiOrNan = true, hasBleL2cap = true, hasBleGatt = true, isInternetEnabled = true)
+        assertTrue("CHAT_ACK should fan out on all active transports", ackDecision.fanOutAll)
+        assertTrue("CHAT_READ should fan out on all active transports", readDecision.fanOutAll)
+
+        // 2. Login / claim strictly requires a PIN or password (no blank secret bypass)
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = MeshViewModel(app)
+        var reserveOk = true
+        var reserveMsg = ""
+        vm.claimOrRecoverUsername("alice_v203", pin = "", recoveryKeyInput = "", isRecoveryMode = false) { ok, msg ->
+            reserveOk = ok
+            reserveMsg = msg
+        }
+        assertFalse("Blank secret must be rejected on registration", reserveOk)
+        assertTrue("Error should mention PIN or password", reserveMsg.contains("PIN", ignoreCase = true))
+
+        var loginOk = true
+        var loginMsg = ""
+        vm.claimOrRecoverUsername("alice_v203", pin = "", recoveryKeyInput = "", isRecoveryMode = true) { ok, msg ->
+            loginOk = ok
+            loginMsg = msg
+        }
+        assertFalse("Blank secret must be rejected on login", loginOk)
+        assertTrue("Error should mention PIN or password", loginMsg.contains("PIN", ignoreCase = true))
+        vm.meshNetworkService.stop()
+
+        // 3. RadiosSettingsScreen renders Hotspot Link Host card under Liquid Glass theme
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.LIQUID_GLASS, themeBrightness = ThemeBrightness.DARK) {
+                com.kostadinosk.pulsemesh.ui.screens.settings.RadiosSettingsScreen(
+                    state = MeshUiState(
+                        webPortalStatus = com.kostadinosk.pulsemesh.service.WebPortalStatus(
+                            isRunning = true,
+                            portalUrl = "http://192.168.43.1:8080",
+                            httpsPortalUrl = "https://192.168.43.1:8443",
+                            allReachableUrls = listOf("http://192.168.43.1:8080", "http://10.0.0.5:8080"),
+                            activeClientCount = 2
+                        )
+                    ),
+                    onSetBatteryPowerProfile = {},
+                    onToggleInternetMode = {},
+                    onToggleWebPortal = {},
+                    onToggleBleCodedPhy = {},
+                    onToggleWifiAware = {},
+                    onToggleBackgroundRelay = {},
+                    onUpdateChannelAndPassphrase = { _, _ -> },
+                    onToggleLoraBridge = {},
+                    onSelectLoraProtocol = {},
+                    onScanLoraDevices = {},
+                    onToggleAcousticModem = {},
+                    onToggleCotBridge = {},
+                    onOpenConnectHub = {}
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("settings_hotspot_host_card").assertExists()
+        composeTestRule.onNodeWithTag("settings_hotspot_host_switch").assertExists()
+        composeTestRule.onNodeWithTag("settings_hotspot_host_url").assertExists()
+        composeTestRule.onNodeWithTag("settings_hotspot_copy_btn").assertExists()
     }
 }

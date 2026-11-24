@@ -116,8 +116,12 @@ object OfflineRegionDownloader {
     var lastCachedRegion: TacticalRegion? = null
         private set
 
+    @Volatile
+    private var lastCachedRegionChecked: Boolean = false
+
     fun getOrLoadLastCachedRegion(context: Context): TacticalRegion? {
-        lastCachedRegion?.let { return it }
+        if (lastCachedRegionChecked) return lastCachedRegion
+        lastCachedRegionChecked = true
         return runCatching {
             val prefs = context.getSharedPreferences("pulsemesh_production_v11", Context.MODE_PRIVATE)
             if (!prefs.getBoolean("cached_region_exists", false)) return null
@@ -137,6 +141,7 @@ object OfflineRegionDownloader {
     }
 
     private fun saveCachedRegionToPrefs(context: Context, region: TacticalRegion?) {
+        lastCachedRegionChecked = true
         runCatching {
             val prefs = context.getSharedPreferences("pulsemesh_production_v11", Context.MODE_PRIVATE)
             if (region == null) {
