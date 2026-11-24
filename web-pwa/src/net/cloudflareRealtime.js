@@ -25,6 +25,15 @@ export function normalizeRecoveryKey(raw) {
   return String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+/**
+ * Universal account secret validator shared identically with Android TacticalE2eeManager:
+ * accepts either a 4-8 digit numeric PIN OR a 6-64 character password.
+ */
+export function isValidUniversalAccountSecret(raw) {
+  const s = String(raw || "").trim();
+  return /^\d{4,8}$/.test(s) || (s.length >= 6 && s.length <= 64);
+}
+
 export function randomHex(byteCount = 16) {
   const arr = globalThis.crypto.getRandomValues(new Uint8Array(byteCount));
   return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -60,7 +69,9 @@ export async function claimUsernameAccount({
   const norm = normalizeUsername(username);
   if (norm.length < 3) throw new Error("Username must be 3-24 characters");
   const cleanPin = String(pin || "").trim();
-  if (!/^\d{4,6}$/.test(cleanPin)) throw new Error("PIN must be 4-6 digits");
+  if (!isValidUniversalAccountSecret(cleanPin)) {
+    throw new Error("Enter a 4-8 digit PIN or a password (6-64 characters)");
+  }
 
   const saltHex = randomHex(16);
   const recoveryKey = generateRecoveryKey();
@@ -116,10 +127,10 @@ export async function recoverUsernameAccount({
   const norm = normalizeUsername(username);
   if (norm.length < 3) throw new Error("Username must be 3-24 characters");
   const cleanSecret = String(secret || "").trim();
-  if (!cleanSecret) throw new Error("Enter your PIN or Recovery Key");
+  if (!cleanSecret) throw new Error("Enter your Password, PIN, or Recovery Key");
 
-  const isPin = /^\d{4,6}$/.test(cleanSecret);
-  const unlockSecret = isPin ? cleanSecret : normalizeRecoveryKey(cleanSecret);
+  const isRecoveryKey = /^PMRK-/i.test(cleanSecret);
+  const unlockSecret = isRecoveryKey ? normalizeRecoveryKey(cleanSecret) : cleanSecret;
   const unlockProof = await deriveVaultUnlockProof(norm, unlockSecret);
 
   const res = await fetch(`${relayBase}/v1/users/${encodeURIComponent(norm)}/vault`, {
@@ -136,14 +147,14 @@ export async function recoverUsernameAccount({
   }
 
   let vault = null;
-  if (data.pinVault && isPin) {
+  if (data.pinVault && !isRecoveryKey) {
     vault = await decryptAccountVault(norm, data.saltHex, cleanSecret, data.pinVault);
   }
   if (!vault && data.recoveryVault) {
     vault = await decryptAccountVault(norm, data.saltHex, normalizeRecoveryKey(cleanSecret), data.recoveryVault);
   }
   if (!vault) {
-    throw new Error("Incorrect PIN or Recovery Key");
+    throw new Error("Incorrect Password, PIN, or Recovery Key");
   }
   return { username: norm, vault };
 }

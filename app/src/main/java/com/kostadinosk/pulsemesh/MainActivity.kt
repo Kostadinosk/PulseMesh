@@ -591,6 +591,9 @@ class MainActivity : FragmentActivity() {
                         var proSettingsSubTab by remember { mutableIntStateOf(0) }
                         when (state.selectedTabIndex) {
                             0 -> Box(modifier = Modifier.fillMaxSize()) {
+                                var mapCompassRotate by remember { mutableStateOf(false) }
+                                var mapRulerMode by remember { mutableStateOf(false) }
+                                var mapOfflineDownloadTrigger by remember { mutableIntStateOf(0) }
                                 TacticalMap(
                                     userLat = state.userLatitude,
                                     userLon = state.userLongitude,
@@ -633,6 +636,10 @@ class MainActivity : FragmentActivity() {
                                     onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
                                     externalLayerStyle = activeMapLayerStyle,
                                     onLayerStyleChanged = { activeMapLayerStyle = it },
+                                    compactHudMode = true,
+                                    externalCompassRotateEnabled = mapCompassRotate,
+                                    externalRulerMode = mapRulerMode,
+                                    openDownloadDialogTrigger = mapOfflineDownloadTrigger,
                                 )
                                 com.kostadinosk.pulsemesh.ui.screens.map.TacticalMapOverlaySheet(
                                     state = state,
@@ -643,7 +650,13 @@ class MainActivity : FragmentActivity() {
                                     onImportGpxKml = { gpxKmlPicker.launch(arrayOf("*/*")) },
                                     onExportGpx = { viewModel.exportBreadcrumbsAsGpx() },
                                     onToggleCotBridge = { enabled -> viewModel.setCotBridgeEnabled(enabled) },
-                                    onBroadcastGpsPin = { viewModel.pingMeshNow() }
+                                    onBroadcastGpsPin = { viewModel.pingMeshNow() },
+                                    onSelectLocationShareMode = { viewModel.setLocationShareMode(it) },
+                                    compassRotateEnabled = mapCompassRotate,
+                                    onToggleCompassRotate = { mapCompassRotate = !mapCompassRotate },
+                                    isRulerMode = mapRulerMode,
+                                    onToggleRulerMode = { mapRulerMode = !mapRulerMode },
+                                    onOpenOfflineDownload = { mapOfflineDownloadTrigger++ }
                                 )
                                 state.selectedNode?.let { selNode ->
                                     TelemetryHudCard(

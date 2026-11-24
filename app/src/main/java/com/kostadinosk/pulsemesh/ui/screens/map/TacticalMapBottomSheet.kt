@@ -80,18 +80,24 @@ fun TacticalMapOverlaySheet(
     onExportGpx: () -> Unit,
     onToggleCotBridge: (Boolean) -> Unit,
     onBroadcastGpsPin: () -> Unit,
+    onSelectLocationShareMode: (com.kostadinosk.pulsemesh.model.LocationShareMode) -> Unit = {},
+    compassRotateEnabled: Boolean = false,
+    onToggleCompassRotate: () -> Unit = {},
+    isRulerMode: Boolean = false,
+    onToggleRulerMode: () -> Unit = {},
+    onOpenOfflineDownload: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
     val lang = state.appLanguage
 
-    // 0 = Collapsed, 1 = Half (Peers & Waypoints), 2 = Expanded (Packs, GPX, CoT)
+    // 0 = Collapsed, 1 = Half (Layer & Peers), 2 = Expanded (Offline Download, Location Privacy, GPX, CoT)
     var sheetLevel by remember { mutableIntStateOf(0) }
     val peers = remember(state.nodes) { state.nodes.filter { !it.isSelf } }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Minimal Floating Top Coordinate Pill
+        // Single Clean Floating Top Pill (GPS status + Coordinates + 1-Tap Map Style chip)
         Surface(
             color = p.surface.copy(alpha = 0.92f),
             shape = tokens.pillShape,
@@ -102,7 +108,7 @@ fun TacticalMapOverlaySheet(
                 .testTag("map_top_coord_pill")
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -120,59 +126,38 @@ fun TacticalMapOverlaySheet(
                     },
                     color = p.textPrimary,
                     fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     fontSize = 11.sp
                 )
-                if (state.isCotBridgeEnabled) {
-                    Surface(
-                        color = tokens.statusOnline.copy(alpha = 0.18f),
-                        shape = tokens.pillShape
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = tokens.pillShape,
+                    modifier = Modifier
+                        .clip(tokens.pillShape)
+                        .clickable {
+                            val entries = com.kostadinosk.pulsemesh.map.MapLayerStyle.entries
+                            onSelectLayerStyle(entries[(selectedLayerStyle.ordinal + 1) % entries.size])
+                        }
+                        .testTag("map_quick_layer_pill")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Icon(Icons.Default.Layers, contentDescription = "Map Style", tint = tokens.accentPrimary, modifier = Modifier.size(12.dp))
                         Text(
-                            text = "ATAK CoT",
-                            color = tokens.statusOnline,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = selectedLayerStyle.label,
+                            color = p.textPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp
                         )
                     }
                 }
             }
         }
 
-        // Minimal Right-Side FAB Stack (Layers / Pin / My Location)
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            SmallFloatingActionButton(
-                onClick = { sheetLevel = 2 },
-                containerColor = p.surface,
-                contentColor = tokens.accentSecondary
-            ) {
-                Icon(Icons.Default.Layers, contentDescription = "Map Layers & Packs", modifier = Modifier.size(18.dp))
-            }
-            SmallFloatingActionButton(
-                onClick = onBroadcastGpsPin,
-                containerColor = p.surface,
-                contentColor = tokens.accentPrimary
-            ) {
-                Icon(Icons.Default.MyLocation, contentDescription = "Broadcast GPS Pin", modifier = Modifier.size(18.dp))
-            }
-            FloatingActionButton(
-                onClick = { sheetLevel = if (sheetLevel == 0) 1 else 0 },
-                containerColor = tokens.accentPrimary,
-                contentColor = if (tokens.isDark) Color.Black else Color.White,
-                modifier = Modifier.size(46.dp)
-            ) {
-                Icon(Icons.Default.AddLocationAlt, contentDescription = "Field Sheet", modifier = Modifier.size(20.dp))
-            }
-        }
-
-        // 3-State Bottom Sheet anchored to bottom of Map
+        // Clean Collapsible Bottom Sheet (zero duplicate floating FABs!)
         Surface(
             color = p.surface.copy(alpha = 0.96f),
             shape = tokens.sheetShape,
@@ -207,22 +192,21 @@ fun TacticalMapOverlaySheet(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "${peers.size} ${AppStrings.tr(lang, "Peers", "Κόμβοι")} • ${state.waypoints.size} ${AppStrings.tr(lang, "Waypoints", "Σημεία")}",
+                            text = "${peers.size} ${AppStrings.tr(lang, "Peers", "Κόμβοι")} · ${state.waypoints.size} ${AppStrings.tr(lang, "Pins", "Σημεία")}",
                             color = p.textPrimary,
-                            fontFamily = tokens.labelFontFamily,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = when (sheetLevel) {
-                                0 -> AppStrings.tr(lang, "Expand", "Ανάπτυξη")
-                                1 -> AppStrings.tr(lang, "Tools", "Εργαλεία")
-                                else -> AppStrings.tr(lang, "Collapse", "Σύμπτυξη")
+                                0 -> AppStrings.tr(lang, "Map & Peers", "Χάρτης & Κόμβοι")
+                                1 -> AppStrings.tr(lang, "More Tools", "Εργαλεία")
+                                else -> AppStrings.tr(lang, "Close", "Κλείσιμο")
                             },
                             color = tokens.accentPrimary,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Icon(
@@ -234,7 +218,7 @@ fun TacticalMapOverlaySheet(
                     }
                 }
 
-                // State 1+: Map Style Mode Switcher + Peers & Waypoints List
+                // State 1+: Map Style Mode Switcher + Peers List
                 AnimatedVisibility(visible = sheetLevel >= 1) {
                     Column(
                         modifier = Modifier
@@ -259,9 +243,9 @@ fun TacticalMapOverlaySheet(
                                         .testTag("map_sheet_layer_${style.name.lowercase()}")
                                 ) {
                                     Text(
-                                        text = style.name.lowercase().replaceFirstChar { it.uppercase() },
+                                        text = style.label,
                                         color = if (active) (if (tokens.isDark) Color.Black else Color.White) else p.textSecondary,
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.SemiBold,
                                         fontSize = 11.sp,
                                         modifier = Modifier.padding(vertical = 7.dp),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -271,7 +255,7 @@ fun TacticalMapOverlaySheet(
                         }
                         if (peers.isEmpty()) {
                             Text(
-                                text = AppStrings.tr(lang, "No remote peers on radar yet. Tap My Location FAB to broadcast a GPS ping.", "Δεν υπάρχουν κόμβοι στο ραντάρ ακόμη."),
+                                text = AppStrings.tr(lang, "No nearby peers on map yet. Long-press anywhere on the map to drop a pin.", "Δεν υπάρχουν κόμβοι στον χάρτη ακόμη. Πατήστε παρατεταμένα για νέο σημείο."),
                                 color = p.textSecondary,
                                 fontSize = 11.sp
                             )
@@ -288,39 +272,132 @@ fun TacticalMapOverlaySheet(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(peer.callsign, color = p.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                    Text("${peer.rssiDbm} dBm • ${peer.hopCount}h", color = tokens.statusOnline, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                    Text(
+                                        text = if (peer.hopCount <= 1) AppStrings.tr(lang, "Nearby", "Κοντά") else "${peer.hopCount} hops",
+                                        color = tokens.statusOnline,
+                                        fontSize = 11.sp
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // State 2: Offline Map Packs, GPX/KML & ATAK CoT
+                // State 2: Location Privacy, Offline Download, Ruler, Compass, Packs, GPX & ATAK CoT
                 AnimatedVisibility(visible = sheetLevel == 2) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Location Sharing Privacy selector
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Text(
+                                text = AppStrings.tr(lang, "Share GPS:", "GPS:"),
+                                color = p.textSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            com.kostadinosk.pulsemesh.model.LocationShareMode.entries.forEach { mode ->
+                                val active = state.locationShareMode == mode
+                                Surface(
+                                    color = if (active) tokens.accentPrimary else p.surfaceVariant,
+                                    shape = tokens.pillShape,
+                                    border = BorderStroke(1.dp, if (active) tokens.accentPrimary else p.border),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(tokens.pillShape)
+                                        .clickable { onSelectLocationShareMode(mode) }
+                                ) {
+                                    Text(
+                                        text = mode.label,
+                                        color = if (active) (if (tokens.isDark) Color.Black else Color.White) else p.textSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Quick Map Tools Row (Ruler, Compass Heading-Up, Broadcast Ping)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onToggleRulerMode,
+                                shape = tokens.pillShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (isRulerMode) "Ruler: On" else "Ruler", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onToggleCompassRotate,
+                                shape = tokens.pillShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (compassRotateEnabled) "Heading Up" else "North Up", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onBroadcastGpsPin,
+                                shape = tokens.pillShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Ping GPS", fontSize = 11.sp)
+                            }
+                        }
+
+                        // Offline Map Region Download + Import Packs / GPX
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onOpenOfflineDownload,
+                                shape = tokens.buttonShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Offline Area", fontSize = 11.sp)
+                            }
                             OutlinedButton(
                                 onClick = onImportMapPack,
                                 shape = tokens.buttonShape,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text(".mbtiles/.pmtiles", fontSize = 11.sp)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Map Pack", fontSize = 11.sp)
                             }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             OutlinedButton(
                                 onClick = onImportGpxKml,
                                 shape = tokens.buttonShape,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text("Import GPX/KML", fontSize = 11.sp)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Import GPX", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onExportGpx,
+                                shape = tokens.buttonShape,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Export GPX", fontSize = 11.sp)
                             }
                         }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -337,19 +414,6 @@ fun TacticalMapOverlaySheet(
                                 }
                             }
                             Switch(checked = state.isCotBridgeEnabled, onCheckedChange = onToggleCotBridge)
-                        }
-                        Button(
-                            onClick = onExportGpx,
-                            shape = tokens.buttonShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = tokens.accentPrimary,
-                                contentColor = if (tokens.isDark) Color.Black else Color.White
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(AppStrings.tr(lang, "Export Breadcrumbs & Waypoints (GPX)", "Εξαγωγή Διαδρομής (GPX)"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }

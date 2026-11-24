@@ -263,8 +263,8 @@ fun PulseOnboardingScreen(
                         if (usernameInput.length >= 3) {
                             OutlinedTextField(
                                 value = passphraseInput,
-                                onValueChange = { passphraseInput = it },
-                                label = { Text(AppStrings.tr(lang, "Vault Passphrase (8+ chars, optional)", "Κωδικός Vault (8+ χαρακτήρες)")) },
+                                onValueChange = { passphraseInput = it.take(64) },
+                                label = { Text(AppStrings.tr(lang, "Password (6+ chars) or 4-8 Digit PIN", "Κωδικός (6+ χαρακτήρες) ή PIN 4-8 ψηφίων")) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )

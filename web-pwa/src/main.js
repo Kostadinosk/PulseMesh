@@ -976,10 +976,13 @@ async function boot() {
 
   // Optional (Recommended) @username Account Dialog — Defaults to Reserve / Claim New!
   const accountDialog = document.getElementById("accountDialog");
+  const accountAuthForm = document.getElementById("accountAuthForm");
   const modeReserveBtn = document.getElementById("modeReserveBtn");
   const modeRecoverBtn = document.getElementById("modeRecoverBtn");
   const accountUsernameInput = document.getElementById("accountUsernameInput");
   const accountSecretInput = document.getElementById("accountSecretInput");
+  const toggleAccountSecretBtn = document.getElementById("toggleAccountSecretBtn");
+  const closeAccountDialogBtn = document.getElementById("closeAccountDialogBtn");
   const accountSubmitBtn = document.getElementById("accountSubmitBtn");
   const accountStatusBox = document.getElementById("accountStatusBox");
   let accountRecoverMode = false;
@@ -991,15 +994,29 @@ async function boot() {
     accountSecretInput.setAttribute("autocomplete", accountRecoverMode ? "current-password" : "new-password");
     accountSubmitBtn.textContent = accountRecoverMode ? t("signInSubmitBtn") : t("claimSubmitBtn");
     accountStatusBox.textContent = accountRecoverMode
-      ? "Mode: Recover / Sign In with PIN or PMRK-... Recovery Key"
-      : "Mode: Reserve / Claim New @username (Optional, Recommended)";
+      ? "Mode: Sign In / Recover with Password, 4-8 Digit PIN, or PMRK-... Key"
+      : "Mode: Reserve New @username with Password (6+ chars) or 4-8 Digit PIN";
   }
 
   function openAccountDialog() {
     setAccountMode(false);
     accountUsernameInput.value = state.claimedUsername || "";
     accountSecretInput.value = "";
+    accountSecretInput.type = "password";
+    if (toggleAccountSecretBtn) toggleAccountSecretBtn.textContent = "Show";
     accountDialog.showModal();
+  }
+
+  if (toggleAccountSecretBtn) {
+    toggleAccountSecretBtn.addEventListener("click", () => {
+      const showing = accountSecretInput.type === "text";
+      accountSecretInput.type = showing ? "password" : "text";
+      toggleAccountSecretBtn.textContent = showing ? "Show" : "Hide";
+      toggleAccountSecretBtn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+    });
+  }
+  if (closeAccountDialogBtn) {
+    closeAccountDialogBtn.addEventListener("click", () => accountDialog.close("close"));
   }
 
   document.getElementById("topSetupBtn").addEventListener("click", openAccountDialog);
@@ -1007,7 +1024,8 @@ async function boot() {
   modeReserveBtn.addEventListener("click", () => setAccountMode(false));
   modeRecoverBtn.addEventListener("click", () => setAccountMode(true));
 
-  accountSubmitBtn.addEventListener("click", async () => {
+  accountAuthForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
     const uname = normalizeUsername(accountUsernameInput.value);
     const secret = accountSecretInput.value.trim();
     accountStatusBox.textContent = accountRecoverMode ? `Unlocking @${uname}...` : `Reserving @${uname}...`;

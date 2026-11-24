@@ -4456,8 +4456,8 @@ fun SettingsScreen(
                     if (!accountDialogRecoveryMode || !accountDialogRecoveryWithKey) {
                         OutlinedTextField(
                             value = accountPinInput,
-                            onValueChange = { ch -> accountPinInput = ch.filter { it.isDigit() }.take(6) },
-                            label = { Text(if (accountDialogRecoveryMode) "Enter 4-6 Digit PIN" else "Create 4-6 Digit PIN", color = p.textSecondary) },
+                            onValueChange = { ch -> accountPinInput = ch.take(64) },
+                            label = { Text(if (accountDialogRecoveryMode) "Enter Password or PIN" else "Create Password or 4-8 Digit PIN", color = p.textSecondary) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = p.emerald,

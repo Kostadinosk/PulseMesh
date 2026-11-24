@@ -202,15 +202,22 @@ fun ProfileSettingsScreen(
             )
             OutlinedTextField(
                 value = pinDraft,
-                onValueChange = { pinDraft = it.take(42) },
-                label = { Text(if (isRecoverMode) "PIN or PMRK-... Recovery Key" else "4-6 Digit PIN") },
+                onValueChange = { pinDraft = it.take(64) },
+                label = { Text(if (isRecoverMode) "Password, PIN, or PMRK-... Key" else "Password (6+ chars) or 4-8 Digit PIN") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().testTag("profile_username_secret_input")
+            )
+            Text(
+                text = AppStrings.tr(lang, "Works identically across Android, iPhone, and Web with either a password or a 4-8 digit PIN.", "Λειτουργεί παντού (Android, iPhone, Web) με κωδικό ή PIN 4-8 ψηφίων."),
+                color = p.textSecondary,
+                fontSize = 11.sp
             )
             if (statusFeedback.isNotBlank()) {
                 Text(statusFeedback, color = tokens.accentSecondary, fontSize = 11.sp)
             }
+            val secretReady = pinDraft.startsWith("PMRK-", ignoreCase = true) ||
+                com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret(pinDraft)
             Button(
                 onClick = {
                     val isKey = pinDraft.startsWith("PMRK-", ignoreCase = true)
@@ -221,7 +228,7 @@ fun ProfileSettingsScreen(
                         isRecoverMode
                     ) { _, msg -> statusFeedback = msg }
                 },
-                enabled = usernameDraft.length >= 3 && pinDraft.length >= 4 && !state.isReservingUsername,
+                enabled = usernameDraft.length >= 3 && secretReady && !state.isReservingUsername,
                 shape = tokens.buttonShape,
                 colors = ButtonDefaults.buttonColors(containerColor = tokens.statusOnline, contentColor = Color.Black),
                 modifier = Modifier.fillMaxWidth()

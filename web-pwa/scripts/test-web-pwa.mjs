@@ -18,15 +18,18 @@ import {
   modulateFrameToFloat32
 } from "../src/acoustic/bell202v2.js";
 import {
+  decryptAccountVault,
   decryptDmEcdh,
   doubleRatchetDecrypt,
   doubleRatchetEncrypt,
   ecdhSharedBits,
+  encryptAccountVault,
   encryptDmEcdh,
   generateIdentityKeyPair,
   initDoubleRatchetInitiator,
   initDoubleRatchetResponder
 } from "../src/crypto/doubleRatchet.js";
+import { isValidUniversalAccountSecret } from "../src/net/cloudflareRealtime.js";
 import {
   buildVerificationQrPayload,
   compute60DigitSafetyNumber,
@@ -214,9 +217,34 @@ async function testSafetyNumberAndBackup() {
   console.log(`PASS testSafetyNumberAndBackup (SN=${snA.slice(0, 17)}...)`);
 }
 
+async function testUniversalUsernameSecretAndVault() {
+  assert.equal(isValidUniversalAccountSecret("1234"), true);
+  assert.equal(isValidUniversalAccountSecret("202601"), true);
+  assert.equal(isValidUniversalAccountSecret("12345678"), true);
+  assert.equal(isValidUniversalAccountSecret("myPass"), true);
+  assert.equal(isValidUniversalAccountSecret("PulseMesh!2026"), true);
+  assert.equal(isValidUniversalAccountSecret("123"), false);
+  assert.equal(isValidUniversalAccountSecret("short"), false);
+
+  const kp = await generateIdentityKeyPair();
+  const payload = { priv: kp.privKeyB64, pub: kp.pubKeyB64, nid: "0xABCD1234", dn: "@kostas", tok: "tok123", ep: 1 };
+  const saltHex = "0123456789abcdef0123456789abcdef";
+
+  const pinVault = await encryptAccountVault("kostas", saltHex, "2026", payload);
+  const decPin = await decryptAccountVault("kostas", saltHex, "2026", pinVault);
+  assert.equal(decPin.nid, "0xABCD1234");
+
+  const passVault = await encryptAccountVault("kostas", saltHex, "StrongPass!2026", payload);
+  const decPass = await decryptAccountVault("kostas", saltHex, "StrongPass!2026", passVault);
+  assert.equal(decPass.nid, "0xABCD1234");
+  assert.equal(await decryptAccountVault("kostas", saltHex, "wrong", passVault), null);
+  console.log("PASS testUniversalUsernameSecretAndVault");
+}
+
 await testReedSolomon();
 await testAcousticV2();
 await testDoubleRatchetAndZeroTrustDm();
 await testSafetyNumberAndBackup();
+await testUniversalUsernameSecretAndVault();
 testCompiledBundleParity();
 console.log("ALL WEB PWA TESTS PASSED.");

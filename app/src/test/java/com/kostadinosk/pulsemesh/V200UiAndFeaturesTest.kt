@@ -381,4 +381,38 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("voice_quick_route_pill").assertExists()
         composeTestRule.onNodeWithTag("phone_dialer_page").assertExists()
     }
+
+    @Test
+    fun `v202 universal username secret accepts both PIN and password and compact map hides clutter`() {
+        // Universal secret accepts 4-8 digit PINs OR 6-64 char passwords
+        assertTrue(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("1234"))
+        assertTrue(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("202601"))
+        assertTrue(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("12345678"))
+        assertTrue(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("myPass"))
+        assertTrue(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("PulseMesh!2026"))
+        assertFalse(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("123"))
+        assertFalse(com.kostadinosk.pulsemesh.crypto.TacticalE2eeManager.isValidUniversalAccountSecret("abc"))
+
+        // Compact map mode removes floating top-left chip clutter while keeping essential zoom/pin/GPS controls
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.PRACTICAL_TACTICAL, themeBrightness = ThemeBrightness.DARK) {
+                com.kostadinosk.pulsemesh.ui.components.TacticalMap(
+                    userLat = 37.9838,
+                    userLon = 23.7275,
+                    isGpsLocked = true,
+                    nodes = emptyList(),
+                    selectedNode = null,
+                    onSelectNode = {},
+                    onSetManualLocation = { _, _ -> },
+                    onRequestGps = {},
+                    compactHudMode = true
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("map_zoom_in_button").assertExists()
+        composeTestRule.onNodeWithTag("map_drop_waypoint_button").assertExists()
+        composeTestRule.onNodeWithTag("map_center_gps_button").assertExists()
+        composeTestRule.onNodeWithTag("map_location_share_selector").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("map_cot_toggle").assertDoesNotExist()
+    }
 }

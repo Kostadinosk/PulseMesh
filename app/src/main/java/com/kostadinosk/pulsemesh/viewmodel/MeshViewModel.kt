@@ -2872,9 +2872,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (!pinMatches && !recoveryMatches) {
                     val err = if (isRecoveryMode) {
-                        "Invalid PIN or Recovery Key for @$norm."
+                        "Invalid password, PIN, or Recovery Key for @$norm."
                     } else {
-                        "Username @$norm is already reserved. Enter your PIN or Recovery Key to recover."
+                        "Username @$norm is already reserved. Enter your password, PIN, or Recovery Key to sign in."
                     }
                     _uiState.update { it.copy(usernameAuthStatus = err, isReservingUsername = false) }
                     onResult?.invoke(false, err)
@@ -3006,8 +3006,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 return
             }
 
-            if (!TacticalE2eeManager.isValidVaultPassphrase(cleanPin)) {
-                val err = "Create a strong passphrase (at least 8 characters) to protect @$norm."
+            if (!TacticalE2eeManager.isValidUniversalAccountSecret(cleanPin)) {
+                val err = "Enter a 4-8 digit PIN or a password (6+ characters) to protect @$norm."
                 _uiState.update { it.copy(usernameAuthStatus = err, isReservingUsername = false) }
                 onResult?.invoke(false, err)
                 return

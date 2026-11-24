@@ -308,7 +308,7 @@ fun TacticalDeviceWizardScreen(
                                     OutlinedTextField(
                                         value = pinInput,
                                         onValueChange = { if (it.length <= 64) pinInput = it },
-                                        label = { Text("Vault Passphrase (8+ chars)") },
+                                        label = { Text("Password (6+ chars) or 4-8 Digit PIN") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -323,7 +323,7 @@ fun TacticalDeviceWizardScreen(
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
-                                            enabled = !isReservingUsername && usernameInput.length >= 3 && (TacticalE2eeManager.isValidVaultPassphrase(pinInput) || (isRecoveryMode && recoveryKeyInput.isNotBlank())),
+                                            enabled = !isReservingUsername && usernameInput.length >= 3 && (TacticalE2eeManager.isValidUniversalAccountSecret(pinInput) || (isRecoveryMode && recoveryKeyInput.isNotBlank())),
                                             onClick = {
                                                 onClaimOrRecoverUsername(usernameInput, pinInput, recoveryKeyInput, isRecoveryMode) { ok, msg ->
                                                     accountFeedback = msg

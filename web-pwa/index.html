@@ -278,21 +278,24 @@
       <button type="button" class="btn btn-emerald" id="modeReserveBtn" style="flex:1;" data-i18n="modeReserveBtn">Reserve New @username (Default)</button>
       <button type="button" class="btn" id="modeRecoverBtn" style="flex:1;" data-i18n="modeRecoverBtn">Recover / Sign In</button>
     </div>
-    <div class="field">
-      <label for="accountUsernameInput" data-i18n="usernameInputLabel">@username (3-24 chars)</label>
-      <input type="text" id="accountUsernameInput" placeholder="@kostas" maxlength="25" autocomplete="username" autofocus />
-    </div>
-    <div class="field">
-      <label for="accountSecretInput" data-i18n="pinInputLabel">4-6 Digit PIN or PMRK-... Recovery Key</label>
-      <input type="password" id="accountSecretInput" placeholder="4-6 digit PIN or PMRK-..." maxlength="42" autocomplete="new-password" />
-    </div>
-    <p class="status-note" id="accountStatusBox">Mode: Reserve / Claim New @username</p>
-    <div class="row-wrap">
-      <button type="button" class="btn btn-emerald" id="accountSubmitBtn" style="flex:1;" data-i18n="claimSubmitBtn">Claim New @username</button>
-      <form method="dialog" style="margin:0;">
-        <button type="submit" value="close" class="btn" data-i18n="skipSetupBtn">Continue Without Setup</button>
-      </form>
-    </div>
+    <form id="accountAuthForm" novalidate>
+      <div class="field">
+        <label for="accountUsernameInput" data-i18n="usernameInputLabel">@username (3-24 chars)</label>
+        <input type="text" id="accountUsernameInput" name="username" placeholder="@kostas" minlength="3" maxlength="25" autocomplete="username" spellcheck="false" autocorrect="off" autocapitalize="none" enterkeyhint="next" required autofocus />
+      </div>
+      <div class="field">
+        <label for="accountSecretInput" data-i18n="pinInputLabel">Password (6+ chars), 4-8 Digit PIN, or PMRK-... Key</label>
+        <div class="row-wrap" style="gap:6px;align-items:center;">
+          <input type="password" id="accountSecretInput" name="password" placeholder="Password, 4-8 digit PIN, or PMRK-..." minlength="4" maxlength="64" autocomplete="new-password" enterkeyhint="done" required style="flex:1;" />
+          <button type="button" class="btn" id="toggleAccountSecretBtn" aria-label="Show password" style="min-height:44px;padding:0 12px;">Show</button>
+        </div>
+      </div>
+      <p class="status-note" id="accountStatusBox">Mode: Reserve / Claim New @username</p>
+      <div class="row-wrap">
+        <button type="submit" class="btn btn-emerald" id="accountSubmitBtn" style="flex:1;" data-i18n="claimSubmitBtn">Claim New @username</button>
+        <button type="button" class="btn" id="closeAccountDialogBtn" data-i18n="skipSetupBtn">Continue Without Setup</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- NATIVE MODAL DIALOG: ACTIVE VOICE CALL -->

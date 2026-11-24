@@ -95,6 +95,10 @@ fun TacticalMap(
     onImportGpxKml: () -> Unit = {},
     externalLayerStyle: com.kostadinosk.pulsemesh.map.MapLayerStyle? = null,
     onLayerStyleChanged: (com.kostadinosk.pulsemesh.map.MapLayerStyle) -> Unit = {},
+    compactHudMode: Boolean = false,
+    externalCompassRotateEnabled: Boolean? = null,
+    externalRulerMode: Boolean? = null,
+    openDownloadDialogTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -114,6 +118,11 @@ fun TacticalMap(
 
     var tileRefreshCounter by remember { mutableIntStateOf(0) }
     var showDownloadDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(openDownloadDialogTrigger) {
+        if (openDownloadDialogTrigger > 0) {
+            showDownloadDialog = true
+        }
+    }
     var pendingPinCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var selectedPinType by remember { mutableStateOf(WaypointType.RALLY) }
     var customPinTitle by remember { mutableStateOf("") }
@@ -128,10 +137,22 @@ fun TacticalMap(
         onLayerStyleChanged(selectedLayerStyle)
         tileRefreshCounter++
     }
-    var compassRotateEnabled by remember { mutableStateOf(false) }
-    var isRulerMode by remember { mutableStateOf(false) }
+    var compassRotateEnabled by remember { mutableStateOf(externalCompassRotateEnabled ?: false) }
+    LaunchedEffect(externalCompassRotateEnabled) {
+        if (externalCompassRotateEnabled != null) compassRotateEnabled = externalCompassRotateEnabled
+    }
+    var isRulerMode by remember { mutableStateOf(externalRulerMode ?: false) }
     var rulerPointA by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var rulerPointB by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    LaunchedEffect(externalRulerMode) {
+        if (externalRulerMode != null) {
+            isRulerMode = externalRulerMode
+            if (!isRulerMode) {
+                rulerPointA = null
+                rulerPointB = null
+            }
+        }
+    }
     var gpxStatusBanner by remember { mutableStateOf("") }
 
     val downloadProgress by OfflineRegionDownloader.downloadState.collectAsState()
@@ -568,8 +589,70 @@ fun TacticalMap(
         }
 
         // -----------------------------------------------------------------
-        // MAP CONTROLS OVERLAY (ZOOM +/- & CENTER GPS BUTTONS)
+        // MAP CONTROLS OVERLAY (Clean minimal right controls in compactHudMode)
         // -----------------------------------------------------------------
+        if (compactHudMode) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(end = 12.dp, bottom = 84.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    color = DeepCarbon.copy(alpha = 0.88f),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { zoomLevel = (zoomLevel + 1.0f).coerceAtMost(19.0f) },
+                            modifier = Modifier.size(38.dp).testTag("map_zoom_in_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Zoom In", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                        HorizontalDivider(modifier = Modifier.width(24.dp), color = TacticalBorder)
+                        IconButton(
+                            onClick = { zoomLevel = (zoomLevel - 1.0f).coerceAtLeast(3.0f) },
+                            modifier = Modifier.size(38.dp).testTag("map_zoom_out_button")
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Zoom Out", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+                SmallFloatingActionButton(
+                    onClick = { pendingPinCoords = Pair(centerLat, centerLon) },
+                    containerColor = DeepCarbon.copy(alpha = 0.90f),
+                    contentColor = CyanGateway,
+                    shape = CircleShape,
+                    modifier = Modifier.testTag("map_drop_waypoint_button")
+                ) {
+                    Icon(Icons.Default.AddLocationAlt, contentDescription = "Drop Waypoint", modifier = Modifier.size(19.dp))
+                }
+                SmallFloatingActionButton(
+                    onClick = {
+                        if (userLat != null && userLon != null) {
+                            centerLat = userLat
+                            centerLon = userLon
+                            zoomLevel = 15.0f
+                        } else {
+                            onRequestGps()
+                        }
+                    },
+                    containerColor = DeepCarbon.copy(alpha = 0.90f),
+                    contentColor = if (isGpsLocked) EmeraldMesh else AmberRootBoost,
+                    shape = CircleShape,
+                    modifier = Modifier.testTag("map_center_gps_button")
+                ) {
+                    Icon(
+                        imageVector = if (isGpsLocked) Icons.Default.MyLocation else Icons.Default.LocationSearching,
+                        contentDescription = "Center GPS",
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            }
+        } else {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -681,15 +764,17 @@ fun TacticalMap(
                 )
             }
         }
+        }
 
-        // Top Status HUD Overlay (GPS + Compass Heading + Barometric Altitude ASL + BLE Location Privacy Opt-In)
+        // Top Status HUD Overlay (Hidden in compactHudMode except active alerts / ruler readout)
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .padding(12.dp),
+                .padding(top = if (compactHudMode) 56.dp else 12.dp, start = 12.dp, end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (!compactHudMode) {
             Surface(
                 color = DeepCarbon.copy(alpha = 0.88f),
                 shape = RoundedCornerShape(6.dp),
@@ -731,9 +816,10 @@ fun TacticalMap(
                     )
                 }
             }
+            }
 
-            // Barometric Weather Pill (ONLY shown on phones equipped with a hardware barometer sensor)
-            if (hasBarometerSensor && barometricPressureHpa != null) {
+            // Barometric Weather Pill (In compactHudMode, only surface on active Storm Drop alert)
+            if (hasBarometerSensor && barometricPressureHpa != null && (!compactHudMode || isStormAlertActive)) {
                 val localizedTrend = com.kostadinosk.pulsemesh.util.AppStrings.weatherTrendLabel(appLanguage, weatherTrendLabel)
                 Surface(
                     color = if (isStormAlertActive) RedSosAlert.copy(alpha = 0.92f) else DeepCarbon.copy(alpha = 0.88f),
@@ -793,6 +879,7 @@ fun TacticalMap(
                 }
             }
 
+            if (!compactHudMode) {
             Surface(
                 color = DeepCarbon.copy(alpha = 0.90f),
                 shape = RoundedCornerShape(8.dp),
@@ -1034,6 +1121,7 @@ fun TacticalMap(
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
                     )
                 }
+            }
             }
 
             if (gpxStatusBanner.isNotBlank()) {

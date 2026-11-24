@@ -562,9 +562,17 @@ object TacticalE2eeManager {
         return raw.trim().length >= 8
     }
 
-    fun isValidAccountPin(raw: String): Boolean {
+    /**
+     * Universal account secret validator shared across Android, Web/iPhone PWA, and Relay recovery:
+     * accepts either a 4-8 digit numeric PIN OR a 6-64 character password.
+     */
+    fun isValidUniversalAccountSecret(raw: String): Boolean {
         val trimmed = raw.trim()
-        return trimmed.matches(Regex("^\\d{4,6}$")) || isValidVaultPassphrase(trimmed)
+        return trimmed.matches(Regex("^\\d{4,8}$")) || trimmed.length in 6..64
+    }
+
+    fun isValidAccountPin(raw: String): Boolean {
+        return isValidUniversalAccountSecret(raw)
     }
 
     fun generateAccountSaltHex(): String {
