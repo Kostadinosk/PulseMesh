@@ -497,4 +497,24 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("settings_hotspot_host_url").assertExists()
         composeTestRule.onNodeWithTag("settings_hotspot_copy_btn").assertExists()
     }
+
+    @Test
+    fun `first setup persists completion across app restarts`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        app.getSharedPreferences("pulsemesh_production_v11", android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
+
+        val firstLaunchVm = MeshViewModel(app)
+        assertTrue("Brand new install should show first setup once", firstLaunchVm.uiState.value.showSetupWizard)
+
+        firstLaunchVm.closeSetupWizard()
+        assertFalse("Finishing or skipping setup should hide wizard", firstLaunchVm.uiState.value.showSetupWizard)
+        assertTrue("isFirstLaunchCompleted should persist to prefs", firstLaunchVm.prefs.isFirstLaunchCompleted)
+        firstLaunchVm.meshNetworkService.stop()
+
+        // Simulate app restart with a fresh ViewModel instance
+        val restartedVm = MeshViewModel(app)
+        assertFalse("Restarted app must not show first setup again", restartedVm.uiState.value.showSetupWizard)
+        restartedVm.meshNetworkService.stop()
+    }
 }

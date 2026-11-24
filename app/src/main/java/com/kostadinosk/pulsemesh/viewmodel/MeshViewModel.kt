@@ -318,7 +318,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             isSpokenCallerIdEnabled = prefs.isSpokenCallerIdEnabled,
             x25519Fingerprint = prefs.fingerprint.ifBlank { "7A:B2:3F:89:12:44:C0:EE" },
             x25519PublicKey = prefs.x25519PublicKey,
-            showSetupWizard = !prefs.isFirstLaunchCompleted,
+            showSetupWizard = run {
+                if (!prefs.isFirstLaunchCompleted && prefs.claimedUsername.isNotBlank()) {
+                    prefs.isFirstLaunchCompleted = true
+                }
+                !prefs.isFirstLaunchCompleted
+            },
             realBatteryPercent = detectedHw.batteryPercent,
             detectedHardware = detectedHw,
             selectedPhoneProfile = initialSelectedProfile,
@@ -327,6 +332,8 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             showMismatchWarningDialog = false,
             isSimpleMode = prefs.isSimpleMode,
             appTheme = prefs.appTheme,
+            themePreset = prefs.themePreset,
+            themeBrightness = prefs.themeBrightness,
             encryptionKeyEpoch = prefs.encryptionKeyEpoch,
             broadcastCoarseLocationInBle = prefs.locationShareMode == LocationShareMode.COARSE,
             locationShareMode = prefs.locationShareMode,
@@ -1834,6 +1841,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeSetupWizard() {
+        prefs.isFirstLaunchCompleted = true
         _uiState.update { it.copy(showSetupWizard = false) }
         triggerHaptic(20)
     }

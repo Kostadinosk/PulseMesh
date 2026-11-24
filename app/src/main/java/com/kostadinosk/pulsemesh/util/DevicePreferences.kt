@@ -190,7 +190,9 @@ class DevicePreferences(context: Context) {
 
     var isFirstLaunchCompleted: Boolean
         get() = prefs.getBoolean("first_launch_done", false)
-        set(value) = prefs.edit().putBoolean("first_launch_done", value).apply()
+        set(value) {
+            prefs.edit().putBoolean("first_launch_done", value).commit()
+        }
 
     var isSimpleMode: Boolean
         get() = prefs.getBoolean("is_simple_mode", true)
