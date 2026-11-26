@@ -13,6 +13,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -97,6 +99,13 @@ fun MeshChatScreen(
     onRotateGroupKey: (String) -> Unit = {},
     onBuildGroupInviteQr: (String) -> String = { "" },
     onSendVoiceNoteClip: (ByteArray, Long) -> Unit = { _, _ -> },
+    onStartVoiceNoteRecording: () -> Unit = {},
+    onLockVoiceNoteRecording: () -> Unit = {},
+    onCancelVoiceNoteRecording: () -> Unit = {},
+    onFinishVoiceNoteRecording: () -> Unit = {},
+    onTogglePlayVoiceNote: (packetId: String, content: String, speed: Float) -> Unit = { _, content, _ -> onPlayVoiceClip(content) },
+    onSeekVoiceNote: (packetId: String, fraction: Float) -> Unit = { _, _ -> },
+    onSetVoiceNoteSpeed: (Float) -> Unit = {},
     onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
@@ -147,6 +156,13 @@ fun MeshChatScreen(
             onRotateGroupKey = onRotateGroupKey,
             onBuildGroupInviteQr = onBuildGroupInviteQr,
             onSendVoiceNoteClip = onSendVoiceNoteClip,
+            onStartVoiceNoteRecording = onStartVoiceNoteRecording,
+            onLockVoiceNoteRecording = onLockVoiceNoteRecording,
+            onCancelVoiceNoteRecording = onCancelVoiceNoteRecording,
+            onFinishVoiceNoteRecording = onFinishVoiceNoteRecording,
+            onTogglePlayVoiceNote = onTogglePlayVoiceNote,
+            onSeekVoiceNote = onSeekVoiceNote,
+            onSetVoiceNoteSpeed = onSetVoiceNoteSpeed,
             onOpenSafetyNumber = onOpenSafetyNumber,
             modifier = modifier
         )
@@ -1311,6 +1327,13 @@ private fun ConversationThreadView(
     onRotateGroupKey: (String) -> Unit = {},
     onBuildGroupInviteQr: (String) -> String = { "" },
     onSendVoiceNoteClip: (ByteArray, Long) -> Unit = { _, _ -> },
+    onStartVoiceNoteRecording: () -> Unit = {},
+    onLockVoiceNoteRecording: () -> Unit = {},
+    onCancelVoiceNoteRecording: () -> Unit = {},
+    onFinishVoiceNoteRecording: () -> Unit = {},
+    onTogglePlayVoiceNote: (packetId: String, content: String, speed: Float) -> Unit = { _, content, _ -> onPlayVoiceClip(content) },
+    onSeekVoiceNote: (packetId: String, fraction: Float) -> Unit = { _, _ -> },
+    onSetVoiceNoteSpeed: (Float) -> Unit = {},
     onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
@@ -1750,6 +1773,15 @@ private fun ConversationThreadView(
                         packet = packet,
                         isSimpleMode = state.isSimpleMode,
                         onPlayVoiceClip = onPlayVoiceClip,
+                        playbackState = state.voiceNotePlaybackState,
+                        onTogglePlayVoiceNote = onTogglePlayVoiceNote,
+                        onSeekVoiceNote = onSeekVoiceNote,
+                        onSetVoiceNoteSpeed = onSetVoiceNoteSpeed,
+                        onCallBackPeer = { peerId, peerName ->
+                            val target = state.nodes.firstOrNull { it.id.equals(peerId, ignoreCase = true) }
+                                ?: com.kostadinosk.pulsemesh.model.MeshNode(id = peerId, callsign = peerName)
+                            onStartCall(target)
+                        },
                         onRetrySendPacket = onRetrySendPacket,
                         onReact = { emoji -> onSendReaction(packet.id, emoji) },
                         appLanguage = state.appLanguage,
@@ -1925,7 +1957,90 @@ private fun ConversationThreadView(
             }
         }
 
-        // Bottom Input Row with Photo/File Sharing, Voice Note & Send
+        // Live WhatsApp Voice Note Recording Bar (Hold / Slide-Left-to-Cancel / Slide-Up-to-Lock Hands-Free)
+        val vnRec = state.voiceNoteRecordingState
+        if (isRecordingVoiceNote || vnRec.isRecording) {
+            val recSec = (vnRec.elapsedMs / 1000L).toInt()
+            val recTimerText = "%d:%02d".format(recSec / 60, recSec % 60)
+            Surface(
+                color = p.card,
+                border = androidx.compose.foundation.BorderStroke(1.dp, p.red.copy(alpha = 0.65f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("chat_voice_note_recording_bar")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(p.red)
+                        )
+                        Text(
+                            text = recTimerText,
+                            color = p.textPrimary,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = if (vnRec.isLocked) {
+                                com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Locked • Hands-free", "Κλειδωμένο")
+                            } else {
+                                com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "< Slide left cancel • ^ Up lock", "< Σύρετε αριστερά ακύρωση")
+                            },
+                            color = p.textSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (vnRec.isLocked) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    isRecordingVoiceNote = false
+                                    onCancelVoiceNoteRecording()
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(p.redDim)
+                                    .testTag("voice_note_locked_cancel_btn")
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Cancel Voice Note", tint = p.red, modifier = Modifier.size(18.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    isRecordingVoiceNote = false
+                                    onFinishVoiceNoteRecording()
+                                },
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(p.emerald)
+                                    .testTag("voice_note_locked_send_btn")
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Voice Note", tint = Color.Black, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom Input Row with Photo/File Sharing, WhatsApp Hold/Slide Voice Note & Send
         Surface(
             color = if (p.isAero) Color.Transparent else p.card,
             modifier = Modifier
@@ -2001,34 +2116,59 @@ private fun ConversationThreadView(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
+                val curStartRec by rememberUpdatedState(onStartVoiceNoteRecording)
+                val curLockRec by rememberUpdatedState(onLockVoiceNoteRecording)
+                val curCancelRec by rememberUpdatedState(onCancelVoiceNoteRecording)
+                val curFinishRec by rememberUpdatedState(onFinishVoiceNoteRecording)
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(42.dp)
                         .clip(btnShape)
-                        .background(if (isRecordingVoiceNote) p.red else p.surfaceVariant)
-                        .border(1.dp, if (isRecordingVoiceNote) p.red else p.border, btnShape)
+                        .background(if (isRecordingVoiceNote || vnRec.isRecording) p.red else p.surfaceVariant)
+                        .border(1.dp, if (isRecordingVoiceNote || vnRec.isRecording) p.red else p.border, btnShape)
                         .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    isRecordingVoiceNote = true
-                                    val startAt = System.currentTimeMillis()
-                                    try {
-                                        tryAwaitRelease()
-                                    } finally {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                val startPos = down.position
+                                isRecordingVoiceNote = true
+                                var cancelled = false
+                                var locked = false
+                                curStartRec()
+                                try {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                                        if (change == null || !change.pressed) break
+                                        val dx = change.position.x - startPos.x
+                                        val dy = change.position.y - startPos.y
+                                        if (dx < -100f) {
+                                            cancelled = true
+                                            curCancelRec()
+                                            break
+                                        }
+                                        if (dy < -80f) {
+                                            locked = true
+                                            curLockRec()
+                                            break
+                                        }
+                                    }
+                                } finally {
+                                    if (!locked) {
                                         isRecordingVoiceNote = false
-                                        val elapsedMs = (System.currentTimeMillis() - startAt).coerceAtLeast(500L)
-                                        onSendVoiceNoteClip(ByteArray(320), elapsedMs)
+                                        if (!cancelled) {
+                                            curFinishRec()
+                                        }
                                     }
                                 }
-                            )
+                            }
                         }
                         .testTag("chat_voice_note_hold_btn")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Mic,
+                        imageVector = if (vnRec.isLocked) Icons.Default.Lock else Icons.Default.Mic,
                         contentDescription = "Hold to record voice note",
-                        tint = if (isRecordingVoiceNote) Color.White else p.cyan,
+                        tint = if (isRecordingVoiceNote || vnRec.isRecording) Color.White else p.cyan,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -2269,6 +2409,11 @@ private fun MessageBubble(
     packet: MeshPacket,
     isSimpleMode: Boolean = false,
     onPlayVoiceClip: (String) -> Unit = {},
+    playbackState: com.kostadinosk.pulsemesh.voice.VoiceNotePlaybackState = com.kostadinosk.pulsemesh.voice.VoiceNotePlaybackState(),
+    onTogglePlayVoiceNote: (packetId: String, content: String, speed: Float) -> Unit = { _, content, _ -> onPlayVoiceClip(content) },
+    onSeekVoiceNote: (packetId: String, fraction: Float) -> Unit = { _, _ -> },
+    onSetVoiceNoteSpeed: (Float) -> Unit = {},
+    onCallBackPeer: (peerId: String, peerName: String) -> Unit = { _, _ -> },
     onRetrySendPacket: (MeshPacket) -> Unit = {},
     onReact: (String) -> Unit = {},
     appLanguage: String = "en",
@@ -2450,10 +2595,74 @@ private fun MessageBubble(
                     }
                 }
 
-                val isVoiceDrop = packet.content.startsWith("[[PM_VOICEDROP]]:") ||
+                val isCallEvent = packet.attachmentMime.equals("pulsemesh/call-event", ignoreCase = true) ||
+                    packet.transport.equals("VOICE CALL", ignoreCase = true)
+                val isVoiceDrop = packet.content.startsWith("[[PM_VOICENOTE]]:") ||
+                    packet.content.startsWith("[[PM_VOICEDROP]]:") ||
                     packet.content.startsWith("[[PM_AUDIO]]:") ||
-                    packet.content.startsWith("[[PM_VOICENOTE]]:")
+                    packet.attachmentMime.startsWith("audio/pulsemesh", ignoreCase = true) ||
+                    packet.attachmentName.startsWith("voice_note_", ignoreCase = true)
                 when {
+                    isCallEvent -> {
+                        val peerIdForCallback = if (isOutgoing) packet.destId else packet.sourceId
+                        val peerNameForCallback = packet.sourceCallsign.removeSuffix(" (Self)")
+                        Surface(
+                            color = p.surfaceVariant,
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, p.emerald.copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("chat_call_event_bubble")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(p.emerald.copy(alpha = 0.16f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Call, contentDescription = null, tint = p.emerald, modifier = Modifier.size(18.dp))
+                                    }
+                                    Column {
+                                        Text(
+                                            text = packet.content,
+                                            color = p.textPrimary,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "Tap to call back", "Πατήστε για επιστροφή κλήσης"),
+                                            color = p.textSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                                TextButton(
+                                    onClick = { onCallBackPeer(peerIdForCallback, peerNameForCallback) },
+                                    modifier = Modifier.testTag("chat_call_back_btn")
+                                ) {
+                                    Text(
+                                        text = com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "Call", "Κλήση"),
+                                        color = p.emerald,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
                     decodedPhotoAndCaption != null -> {
                         val (imageBitmap, captionText) = decodedPhotoAndCaption
                         Column(
@@ -2558,89 +2767,122 @@ private fun MessageBubble(
                         }
                     }
                     isVoiceDrop -> {
+                        val parsedNote = remember(packet.id, packet.content) {
+                            com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.parsePayload(packet.content)
+                        }
+                        val isThisPlaying = playbackState.activePacketId == packet.id && playbackState.isPlaying
+                        val isThisActive = playbackState.activePacketId == packet.id
+                        val totalDurMs = (parsedNote?.durationMs ?: packet.voiceDurationMs).coerceAtLeast(1_000L)
+                        val progressFrac = if (isThisActive && playbackState.durationMs > 0L) {
+                            (playbackState.positionMs.toFloat() / playbackState.durationMs.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+                        val displaySec = ((if (isThisActive) playbackState.positionMs else totalDurMs) / 1000L).toInt()
+                        val durationText = "%d:%02d".format(displaySec / 60, displaySec % 60)
+                        val waveformBars = parsedNote?.waveformBars ?: List(24) { bar -> 24 + (((bar * 11 + packet.id.hashCode()) and 15) * 4) }
+                        val speedValues = remember { listOf(1.0f, 1.5f, 2.0f) }
+
                         Surface(
-                            color = p.background,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, p.amber),
+                            color = p.surfaceVariant,
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isThisPlaying) p.emerald else p.cyan.copy(alpha = 0.55f)),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onPlayVoiceClip(packet.content) }
                                 .testTag("voice_drop_play_bubble")
                         ) {
-                            Column(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                        Icon(
-                                            imageVector = Icons.Default.PlayCircleFilled,
-                                            contentDescription = "Play Voice Drop",
-                                            tint = p.amber,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "TACTICAL VOICE DROP", "ΦΩΝΗΤΙΚΟ ΜΗΝΥΜΑ"),
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = p.amber
-                                                )
-                                            )
-                                            Text(
-                                                text = if (packet.voiceDurationMs > 0L) {
-                                                    "${(packet.voiceDurationMs / 1000.0).let { "%.1fs".format(it) }} • TAP TO PLAY"
-                                                } else {
-                                                    com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "TAP TO PLAY AUDIO CLIP", "ΠΑΤΗΣΤΕ ΓΙΑ ΑΝΑΠΑΡΑΓΩΓΗ")
-                                                },
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 9.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = p.textSecondary
-                                                )
-                                            )
+                                Surface(
+                                    color = if (isThisPlaying) p.emerald else p.cyan,
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            onTogglePlayVoiceNote(packet.id, packet.content, speedValues[playbackSpeedIdx])
                                         }
-                                    }
-                                    Surface(
-                                        color = p.surfaceVariant,
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = androidx.compose.foundation.BorderStroke(0.8.dp, p.emerald.copy(alpha = 0.6f)),
-                                        modifier = Modifier
-                                            .clickable { playbackSpeedIdx = (playbackSpeedIdx + 1) % playbackSpeedLabels.size }
-                                            .testTag("voice_note_speed_btn")
-                                    ) {
-                                        Text(
-                                            text = playbackSpeedLabels[playbackSpeedIdx],
-                                            color = p.emerald,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 9.sp,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .testTag("voice_note_play_pause_btn")
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (isThisPlaying) "Pause Voice Note" else "Play Voice Note",
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(22.dp)
                                         )
                                     }
                                 }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().height(12.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    for (bar in 0 until 18) {
-                                        val h = 0.35f + (((bar * 7 + packet.id.hashCode()) and 7) / 10f)
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight(h.coerceIn(0.25f, 1f))
-                                                .clip(RoundedCornerShape(1.dp))
-                                                .background(p.emerald.copy(alpha = 0.7f))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(22.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        waveformBars.forEachIndexed { idx, amp ->
+                                            val frac = idx.toFloat() / waveformBars.size.coerceAtLeast(1).toFloat()
+                                            val played = isThisActive && frac <= progressFrac
+                                            val h = (amp / 100f).coerceIn(0.22f, 1f)
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight(h)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(
+                                                        if (played) p.emerald else p.textSecondary.copy(alpha = 0.45f)
+                                                    )
+                                                    .clickable {
+                                                        if (isThisActive) {
+                                                            onSeekVoiceNote(packet.id, frac)
+                                                        } else {
+                                                            onTogglePlayVoiceNote(packet.id, packet.content, speedValues[playbackSpeedIdx])
+                                                        }
+                                                    }
+                                            )
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "Voice note", "Φωνητικό")} • $durationText",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = p.textSecondary
+                                            )
                                         )
+                                        Surface(
+                                            color = p.card,
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = androidx.compose.foundation.BorderStroke(0.8.dp, p.emerald.copy(alpha = 0.6f)),
+                                            modifier = Modifier
+                                                .clickable {
+                                                    playbackSpeedIdx = (playbackSpeedIdx + 1) % playbackSpeedLabels.size
+                                                    onSetVoiceNoteSpeed(speedValues[playbackSpeedIdx])
+                                                }
+                                                .testTag("voice_note_speed_btn")
+                                        ) {
+                                            Text(
+                                                text = playbackSpeedLabels[playbackSpeedIdx],
+                                                color = p.emerald,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2737,34 +2979,37 @@ private fun MessageBubble(
                         }
                     }
 
-                    if (isOutgoing) {
+                    if (isOutgoing && !isCallEvent) {
                         val isQueuedKeyPending = packet.transport == "ECDH KEY PENDING" || packet.rawHexBadge.contains("KEY EXCHANGE PENDING")
-                        val isInGraceWindow = !packet.isDelivered && !isQueuedKeyPending && !retryGraceElapsed
-                        val isReadReceipt = packet.deliveryStatus.equals("READ", ignoreCase = true)
+                        val statusUpper = packet.deliveryStatus.trim().uppercase()
+                        val isReadReceipt = statusUpper == "READ"
+                        val isReceivedReceipt = packet.isDelivered || statusUpper == "RECEIVED" || statusUpper == "DELIVERED"
+                        val isNotSent = isQueuedKeyPending || statusUpper == "NOT_SENT" || statusUpper == "FAILED"
+
+                        // Clean 4-state receipt lifecycle: NOT SENT -> SENT -> RECEIVED -> READ (zero ACK jargon)
                         val receiptIcon = when {
-                            isQueuedKeyPending || isInGraceWindow -> Icons.Default.Schedule
-                            isReadReceipt || packet.isDelivered -> Icons.Default.DoneAll
+                            isNotSent -> Icons.Default.ErrorOutline
+                            isReadReceipt || isReceivedReceipt -> Icons.Default.DoneAll
                             else -> Icons.Default.Check
                         }
                         val receiptTint = when {
-                            isQueuedKeyPending -> p.amber
+                            isNotSent -> p.red
                             isReadReceipt -> p.cyan
-                            packet.isDelivered -> p.emerald
+                            isReceivedReceipt -> p.emerald
                             else -> p.textSecondary
                         }
                         val receiptLabel = when {
-                            isQueuedKeyPending -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "QUEUED", "ΣΕ ΑΝΑΜΟΝΗ")
+                            isNotSent -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "NOT SENT", "ΔΕΝ ΣΤΑΛΘΗΚΕ")
                             isReadReceipt -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "READ", "ΑΝΑΓΝΩΣΤΗΚΕ")
-                            packet.isDelivered -> if (packet.ackedByCallsign.isNotBlank()) "${com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "RECEIVED", "ΠΑΡΑΔΟΘΗΚΕ")} (${packet.ackedByCallsign})" else com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "RECEIVED", "ΠΑΡΑΔΟΘΗΚΕ")
-                            isInGraceWindow -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "SENDING", "ΑΠΟΣΤΟΛΗ")
-                            else -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "NO ACK", "ΧΩΡΙΣ ACK")
+                            isReceivedReceipt -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "RECEIVED", "ΠΑΡΑΔΟΘΗΚΕ")
+                            else -> com.kostadinosk.pulsemesh.util.AppStrings.tr(appLanguage, "SENT", "ΣΤΑΛΘΗΚΕ")
                         }
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            if (!packet.isDelivered && !isQueuedKeyPending && retryGraceElapsed) {
+                            if ((!isReceivedReceipt && !isQueuedKeyPending && retryGraceElapsed) || (isNotSent && !isQueuedKeyPending)) {
                                 Surface(
                                     color = p.amberDim,
                                     shape = RoundedCornerShape(4.dp),

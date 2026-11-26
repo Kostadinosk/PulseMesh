@@ -708,7 +708,9 @@ class OffGridBleMeshEngine(
                 .setLegacyMode(false)
                 .setConnectable(false)
                 .setScannable(false)
-                .setPrimaryPhy(BluetoothDevice.PHY_LE_1M)
+                // True Bluetooth 5 Long Range (+12 dB / up to 4x range): primary AND secondary on PHY_LE_CODED
+                // (while the primary legacy 1M advertising set remains active for older Bluetooth 4.x phones)
+                .setPrimaryPhy(BluetoothDevice.PHY_LE_CODED)
                 .setSecondaryPhy(BluetoothDevice.PHY_LE_CODED)
                 .setInterval(AdvertisingSetParameters.INTERVAL_LOW)
                 .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_HIGH)
@@ -1048,6 +1050,12 @@ class OffGridBleMeshEngine(
                 .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
                 .build()
 
+            // Hardware-offloaded 0xCAFE / 0xCAFF manufacturer filters keep BLE discovery alive
+            // even when the screen turns off (preventing Android 10-16 unfiltered scan throttling).
+            val hardwareFilters = listOf(
+                ScanFilter.Builder().setManufacturerData(MANUFACTURER_ID_CAFE, byteArrayOf()).build(),
+                ScanFilter.Builder().setManufacturerData(MANUFACTURER_ID_CAFF, byteArrayOf()).build()
+            )
             var scanStarted = false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 bluetoothAdapter?.isLeExtendedAdvertisingSupported == true
@@ -1060,7 +1068,7 @@ class OffGridBleMeshEngine(
                         .setLegacy(false)
                         .setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
                         .build()
-                    bleScanner?.startScan(emptyList<ScanFilter>(), extSettings, scanCallback)
+                    bleScanner?.startScan(hardwareFilters, extSettings, scanCallback)
                     scanStarted = true
                 } catch (_: Throwable) {
                     scanStarted = false
@@ -1068,7 +1076,11 @@ class OffGridBleMeshEngine(
             }
 
             if (!scanStarted) {
-                bleScanner?.startScan(emptyList<ScanFilter>(), standardSettings, scanCallback)
+                runCatching {
+                    bleScanner?.startScan(hardwareFilters, standardSettings, scanCallback)
+                }.onFailure {
+                    bleScanner?.startScan(emptyList<ScanFilter>(), standardSettings, scanCallback)
+                }
             }
 
             _telemetry.update { it.copy(isScanning = true, statusText = "BLE Scanning (${getBatteryProfile().label} Profile)") }

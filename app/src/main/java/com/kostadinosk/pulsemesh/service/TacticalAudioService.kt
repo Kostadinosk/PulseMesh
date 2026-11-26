@@ -766,10 +766,16 @@ class TacticalAudioService(
     var speakerphoneEnabled: Boolean = true
 
     @Volatile
-    private var trackConfiguredForSpeaker: Boolean? = null
+    var activeAudioRoute: com.kostadinosk.pulsemesh.voice.AudioRoute = com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER
 
     @Volatile
-    private var lastAppliedSpeakerRoute: Boolean? = null
+    private var preferredOutputDevice: AudioDeviceInfo? = null
+
+    @Volatile
+    private var trackConfiguredForRoute: com.kostadinosk.pulsemesh.voice.AudioRoute? = null
+
+    @Volatile
+    private var lastAppliedAudioRoute: com.kostadinosk.pulsemesh.voice.AudioRoute? = null
 
     @Volatile
     private var audioFocusGranted: Boolean = false
@@ -898,24 +904,82 @@ class TacticalAudioService(
             }
         }
         persistentAudioTrack = null
-        trackConfiguredForSpeaker = null
-        lastAppliedSpeakerRoute = null
+        trackConfiguredForRoute = null
+        lastAppliedAudioRoute = null
         isPlayoutBurstActive = false
         lastPlayedSampleVal = 0
     }
 
     fun setSpeakerRouting(enabled: Boolean) {
-        speakerphoneEnabled = enabled
-        lastAppliedSpeakerRoute = null
+        val target = if (enabled) {
+            com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER
+        } else {
+            com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE
+        }
+        setAudioRoute(target, preferredOutputDevice = null)
+    }
+
+    fun setAudioRoute(
+        route: com.kostadinosk.pulsemesh.voice.AudioRoute,
+        preferredOutputDevice: AudioDeviceInfo? = null
+    ) {
+        activeAudioRoute = route
+        speakerphoneEnabled = (route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER)
+        this.preferredOutputDevice = preferredOutputDevice
+        lastAppliedAudioRoute = null
+        runCatching {
+            val trk = persistentAudioTrack
+            if (trk != null && trk.state == AudioTrack.STATE_INITIALIZED) {
+                val resolvedDev = preferredOutputDevice ?: resolveDeviceForRoute(route)
+                trk.setPreferredDevice(resolvedDev)
+            }
+        }
+        ensureSpeakerphoneAndVolume(speakerphoneEnabled)
+    }
+
+    private fun resolveDeviceForRoute(route: com.kostadinosk.pulsemesh.voice.AudioRoute): AudioDeviceInfo? {
+        val mgr = audioManager ?: return null
+        val targetTypes = when (route) {
+            com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER -> listOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+            com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE -> listOf(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+            com.kostadinosk.pulsemesh.voice.AudioRoute.WIRED_HEADSET -> listOf(
+                AudioDeviceInfo.TYPE_USB_HEADSET,
+                AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+            )
+            com.kostadinosk.pulsemesh.voice.AudioRoute.BLUETOOTH_SCO -> listOf(
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+            )
+            com.kostadinosk.pulsemesh.voice.AudioRoute.BLE_AUDIO -> listOf(
+                AudioDeviceInfo.TYPE_BLE_HEADSET,
+                AudioDeviceInfo.TYPE_BLE_SPEAKER,
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+            )
+        }
+        val commDevs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching { mgr.availableCommunicationDevices }.getOrDefault(emptyList())
+        } else emptyList()
+        val outDevs = runCatching { mgr.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() }.getOrDefault(emptyList())
+        for (t in targetTypes) {
+            commDevs.firstOrNull { it.type == t }?.let { return it }
+        }
+        for (t in targetTypes) {
+            outDevs.firstOrNull { it.type == t }?.let { return it }
+        }
+        return null
     }
 
     @Synchronized
     private fun ensureAudioTrackReady(useSpeaker: Boolean): AudioTrack? {
+        val route = activeAudioRoute
         val existing = persistentAudioTrack
         if (existing != null &&
             existing.state == AudioTrack.STATE_INITIALIZED &&
-            trackConfiguredForSpeaker == useSpeaker
+            trackConfiguredForRoute == route
         ) {
+            val targetDev = preferredOutputDevice ?: resolveDeviceForRoute(route)
+            runCatching { existing.setPreferredDevice(targetDev) }
             return existing
         }
         releasePersistentAudioTrack()
@@ -926,13 +990,16 @@ class TacticalAudioService(
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             ).coerceAtLeast(1280)
-            // Stable ring buffer (at least 4800 bytes = 300ms capacity) prevents HAL underrun stalls after ~20s
             val bufSize = maxOf(minBuf * 2, 4800)
-            // Always use USAGE_VOICE_COMMUNICATION + CONTENT_TYPE_SPEECH so Android HAL hardware AEC keeps referencing playback.
+            val usage = if (route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER && !_isRecording.value) {
+                AudioAttributes.USAGE_MEDIA
+            } else {
+                AudioAttributes.USAGE_VOICE_COMMUNICATION
+            }
             val builder = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setUsage(usage)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
@@ -951,9 +1018,15 @@ class TacticalAudioService(
             val track = builder.build()
 
             if (track.state == AudioTrack.STATE_INITIALIZED) {
-                runCatching { track.setVolume(1.0f) }
+                runCatching {
+                    val targetDev = preferredOutputDevice ?: resolveDeviceForRoute(route)
+                    if (targetDev != null) {
+                        track.setPreferredDevice(targetDev)
+                    }
+                    track.setVolume(1.0f)
+                }
                 persistentAudioTrack = track
-                trackConfiguredForSpeaker = useSpeaker
+                trackConfiguredForRoute = route
                 track
             } else {
                 runCatching { track.release() }
@@ -1076,35 +1149,55 @@ class TacticalAudioService(
                 }
             }
 
-            if (lastAppliedSpeakerRoute == useSpeaker) {
+            val route = activeAudioRoute
+            if (lastAppliedAudioRoute == route) {
                 return@runCatching
             }
-            lastAppliedSpeakerRoute = useSpeaker
+            lastAppliedAudioRoute = route
 
-            // Keep MODE_IN_COMMUNICATION + STREAM_VOICE_CALL for both speakerphone and earpiece
-            // so Android Audio HAL hardware AEC stays active on speakerphone.
             mgr.mode = AudioManager.MODE_IN_COMMUNICATION
+            val dev = preferredOutputDevice ?: resolveDeviceForRoute(route)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val targetType = if (useSpeaker) {
-                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                } else {
-                    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                }
-                val dev = mgr.availableCommunicationDevices.firstOrNull { it.type == targetType }
-                if (dev != null) {
+                if (dev != null && dev in mgr.availableCommunicationDevices) {
                     runCatching { mgr.setCommunicationDevice(dev) }
-                } else if (useSpeaker) {
-                    @Suppress("DEPRECATION")
-                    mgr.isSpeakerphoneOn = true
                 }
+                @Suppress("DEPRECATION")
+                mgr.isSpeakerphoneOn = (route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER)
             } else {
                 @Suppress("DEPRECATION")
-                mgr.isSpeakerphoneOn = useSpeaker
+                when (route) {
+                    com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER -> {
+                        if (mgr.isBluetoothScoOn) {
+                            runCatching { mgr.stopBluetoothSco() }
+                            mgr.isBluetoothScoOn = false
+                        }
+                        mgr.isSpeakerphoneOn = true
+                    }
+                    com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE,
+                    com.kostadinosk.pulsemesh.voice.AudioRoute.WIRED_HEADSET -> {
+                        if (mgr.isBluetoothScoOn) {
+                            runCatching { mgr.stopBluetoothSco() }
+                            mgr.isBluetoothScoOn = false
+                        }
+                        mgr.isSpeakerphoneOn = false
+                    }
+                    com.kostadinosk.pulsemesh.voice.AudioRoute.BLUETOOTH_SCO,
+                    com.kostadinosk.pulsemesh.voice.AudioRoute.BLE_AUDIO -> {
+                        mgr.isSpeakerphoneOn = false
+                        runCatching { mgr.startBluetoothSco() }
+                        mgr.isBluetoothScoOn = true
+                    }
+                }
             }
-            val maxVoiceVol = mgr.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-            val curVoiceVol = mgr.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+            val streamType = if (route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER && !_isRecording.value) {
+                AudioManager.STREAM_MUSIC
+            } else {
+                AudioManager.STREAM_VOICE_CALL
+            }
+            val maxVoiceVol = mgr.getStreamMaxVolume(streamType)
+            val curVoiceVol = mgr.getStreamVolume(streamType)
             if (maxVoiceVol > 0 && curVoiceVol < maxVoiceVol / 2) {
-                mgr.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (maxVoiceVol * 0.85).toInt().coerceAtLeast(1), 0)
+                mgr.setStreamVolume(streamType, (maxVoiceVol * 0.85).toInt().coerceAtLeast(1), 0)
             }
         }
     }

@@ -35,6 +35,7 @@ import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 import com.kostadinosk.pulsemesh.viewmodel.MeshViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -516,5 +517,81 @@ class V200UiAndFeaturesTest {
         val restartedVm = MeshViewModel(app)
         assertFalse("Restarted app must not show first setup again", restartedVm.uiState.value.showSetupWizard)
         restartedVm.meshNetworkService.stop()
+    }
+
+    @Test
+    fun `v210 voice note payload, 4-state receipts, WhatsApp call phases, double-talk, selective group call, and drawer toggles`() {
+        // 1. VoiceNoteEngine builds & parses real VOICE_NOTE payloads (never file text)
+        val rawAudio = ByteArray(256) { idx -> ((idx * 17) and 0x7F).toByte() }
+        val wave = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.computeWaveformFromBytes(rawAudio)
+        val payload = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.buildPayload("M4A", 4200L, wave, rawAudio)
+        assertTrue(payload.startsWith("[[PM_VOICENOTE]]:M4A:4200:"))
+        val parsed = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.parsePayload(payload)
+        assertNotNull(parsed)
+        assertEquals("M4A", parsed!!.codec)
+        assertEquals(4200L, parsed.durationMs)
+        assertEquals(24, parsed.waveformBars.size)
+        assertEquals(256, parsed.audioBytes.size)
+
+        // 2. Full-duplex double-talk: simultaneous talking transmits smoothly on both Wi-Fi and BLE
+        assertTrue(
+            com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
+                hasHotspotUdpLink = true, micPeak = 650, nowMs = 10_050L, lastIncomingAudioTime = 10_000L, isSpeakerphoneOn = true
+            )
+        )
+        assertTrue(
+            com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
+                hasHotspotUdpLink = false, micPeak = 650, nowMs = 10_050L, lastIncomingAudioTime = 10_000L, isSpeakerphoneOn = true
+            )
+        )
+
+        // 3. Clean 4-state receipts (NOT_SENT -> SENT -> RECEIVED -> READ) & VoiceNote never sent as .pcm file text
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = MeshViewModel(app)
+        vm.sendVoiceNoteBytes("channel_primary", rawAudio, 2600L)
+        val latest = vm.persistentChatManager.getPacketsForThread("channel_primary").firstOrNull()
+        assertNotNull("Voice note should be stored in thread", latest)
+        assertEquals("audio/pulsemesh-voicenote", latest!!.attachmentMime)
+        assertTrue("Voice note must use dedicated [[PM_VOICENOTE]]: payload", latest.content.startsWith("[[PM_VOICENOTE]]:"))
+        assertFalse("Voice note must not be stored as .pcm attachment text", latest.attachmentName.endsWith(".pcm"))
+
+        vm.persistentChatManager.markPacketNotSent(latest.id)
+        assertEquals("NOT_SENT", vm.persistentChatManager.getPacketsForThread("channel_primary").first { it.id == latest.id }.deliveryStatus)
+        vm.persistentChatManager.markPacketSent(latest.id)
+        assertEquals("SENT", vm.persistentChatManager.getPacketsForThread("channel_primary").first { it.id == latest.id }.deliveryStatus)
+        vm.persistentChatManager.markPacketDelivered(latest.id, "Bravo")
+        assertEquals("RECEIVED", vm.persistentChatManager.getPacketsForThread("channel_primary").first { it.id == latest.id }.deliveryStatus)
+        vm.persistentChatManager.markPacketRead(latest.id)
+        assertEquals("READ", vm.persistentChatManager.getPacketsForThread("channel_primary").first { it.id == latest.id }.deliveryStatus)
+
+        // 4. WhatsApp CALLING -> RINGING phase & Selective Multi-Person Group Voice Call
+        val p1 = com.kostadinosk.pulsemesh.model.MeshNode(id = "0x1111", callsign = "Alpha")
+        val p2 = com.kostadinosk.pulsemesh.model.MeshNode(id = "0x2222", callsign = "Bravo")
+        vm.startSelectiveGroupCall(listOf(p1, p2))
+        assertEquals(com.kostadinosk.pulsemesh.service.WhatsAppCallPhase.CALLING, vm.tacticalCallService.callState.value.callPhase)
+        assertEquals(listOf("Alpha", "Bravo"), vm.tacticalCallService.callState.value.selectedParticipants)
+        vm.tacticalCallService.markRemoteRingingConfirmed()
+        assertEquals(com.kostadinosk.pulsemesh.service.WhatsAppCallPhase.RINGING, vm.tacticalCallService.callState.value.callPhase)
+        vm.endDuplexCall()
+        vm.meshNetworkService.stop()
+
+        // 5. Top-left TelemetryStatusDrawer exposes dedicated Hotspot Host, Wi-Fi Direct, and Wi-Fi Aware toggles
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.LIQUID_GLASS, themeBrightness = ThemeBrightness.DARK) {
+                com.kostadinosk.pulsemesh.ui.components.TelemetryDrawerContent(
+                    state = MeshUiState(isInternetEnabled = true, wifiAwareEnabled = true),
+                    onDismiss = {},
+                    onToggleInternetMode = {},
+                    onToggleHotspot = {},
+                    onOpenRadioLab = {},
+                    onOpenConnectHub = {},
+                    onToggleWifiDirect = {},
+                    onToggleWifiAware = {}
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("drawer_toggle_hotspot").assertExists()
+        composeTestRule.onNodeWithTag("drawer_toggle_wifi_direct").assertExists()
+        composeTestRule.onNodeWithTag("drawer_toggle_wifi_aware").assertExists()
     }
 }

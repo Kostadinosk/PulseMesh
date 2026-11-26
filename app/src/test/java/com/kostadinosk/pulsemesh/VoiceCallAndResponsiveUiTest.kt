@@ -822,12 +822,24 @@ class VoiceCallAndResponsiveUiTest {
         // 3. PacketId vs_ sequence extraction aligns with PA binary seq
         assertEquals(42, vm.extractVoiceSeqFromPacketId("vs_9B1C_42_1234"))
 
-        // 4. Speakerphone acoustic echo ("micing") suppression on high-speed UDP calls
-        assertFalse(
-            "Speakerphone bleed (micPeak=900) within 260ms of incoming audio must be suppressed",
+        // 4. Full-duplex double-talk: simultaneous speech (micPeak=900) transmits smoothly while silent noise floor (150) stays gated
+        assertTrue(
+            "Full-duplex double-talk (micPeak=900) during incoming audio must transmit smoothly",
             com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
                 hasHotspotUdpLink = true,
                 micPeak = 900,
+                nowMs = 10_120L,
+                lastIncomingAudioTime = 10_000L,
+                pushToOverrideActive = false,
+                isMuted = false,
+                isSpeakerphoneOn = true,
+            ),
+        )
+        assertFalse(
+            "Quiet background noise floor (micPeak=150) remains gated",
+            com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
+                hasHotspotUdpLink = true,
+                micPeak = 150,
                 nowMs = 10_120L,
                 lastIncomingAudioTime = 10_000L,
                 pushToOverrideActive = false,

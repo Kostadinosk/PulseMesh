@@ -59,8 +59,18 @@ class CloudflareRealtimeClient(
 
     private val writeLock = Any()
 
+    @Volatile
+    private var lastRequestedRoom: String = ""
+
+    @Synchronized
+    fun reconnectNow() {
+        if (!isInternetEnabled()) return
+        startOrReconnect(lastRequestedRoom)
+    }
+
     @Synchronized
     fun startOrReconnect(room: String = "") {
+        lastRequestedRoom = room
         stop()
         if (!isInternetEnabled()) return
         val baseUrl = activeRelayUrl().trim().trimEnd('/')
@@ -69,13 +79,13 @@ class CloudflareRealtimeClient(
         if (baseUrl.isEmpty() || uname.length < 3 || token.isBlank()) return
 
         readerJob = scope.launch(Dispatchers.IO) {
-            var backoffMs = 1_500L
+            var backoffMs = 500L
             while (isActive && isInternetEnabled()) {
                 val ok = runSessionOnce(baseUrl, uname, token, room.ifBlank { "inbox:$uname" })
                 if (ok) {
-                    backoffMs = 1_500L
+                    backoffMs = 500L
                 } else {
-                    backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
+                    backoffMs = (backoffMs * 2).coerceAtMost(10_000L)
                 }
                 if (!isActive || !isInternetEnabled()) break
                 delay(backoffMs)

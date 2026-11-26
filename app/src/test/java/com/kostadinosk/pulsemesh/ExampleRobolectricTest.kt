@@ -1409,13 +1409,23 @@ class ExampleRobolectricTest {
     )
     assertEquals(beforeRx + 1, vm.uiState.value.rxAudioCount)
 
-    // 5. Verify BLE half-duplex 350ms auto-ducking and Push-To-Override
+    // 5. Verify full-duplex double-talk (simultaneous talking works smoothly while quiet noise stays gated) and Push-To-Override
     val tNow = 10_000L
     assertTrue(
-      "BLE voice must duck while incoming audio arrived <350ms ago",
-      !com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
+      "Full-duplex double-talk must allow BLE voice TX when speaking during incoming audio",
+      com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
         hasHotspotUdpLink = false,
         micPeak = 2000,
+        nowMs = tNow,
+        lastIncomingAudioTime = tNow - 200L,
+        pushToOverrideActive = false
+      )
+    )
+    assertTrue(
+      "Quiet background noise (micPeak=150) remains gated on BLE calls",
+      !com.kostadinosk.pulsemesh.service.TacticalCallService.shouldTransmitCallVoiceFrame(
+        hasHotspotUdpLink = false,
+        micPeak = 150,
         nowMs = tNow,
         lastIncomingAudioTime = tNow - 200L,
         pushToOverrideActive = false

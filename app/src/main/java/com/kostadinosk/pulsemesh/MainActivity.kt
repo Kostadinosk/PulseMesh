@@ -778,6 +778,13 @@ class MainActivity : FragmentActivity() {
                                         onRotateGroupKey = { gid -> viewModel.rotateGroupKeyById(gid) },
                                         onBuildGroupInviteQr = { gid -> viewModel.buildGroupInviteQr(gid) },
                                         onSendVoiceNoteClip = { bytes, dur -> viewModel.sendVoiceNoteBytes(activeSplitThread, bytes, dur) },
+                                        onStartVoiceNoteRecording = { viewModel.startChatVoiceNoteRecording() },
+                                        onLockVoiceNoteRecording = { viewModel.lockChatVoiceNoteRecording() },
+                                        onCancelVoiceNoteRecording = { viewModel.cancelChatVoiceNoteRecording() },
+                                        onFinishVoiceNoteRecording = { viewModel.finishAndSendChatVoiceNote(activeSplitThread) },
+                                        onTogglePlayVoiceNote = { pid, content, speed -> viewModel.togglePlayVoiceNote(pid, content, speed) },
+                                        onSeekVoiceNote = { pid, frac -> viewModel.seekVoiceNote(pid, frac) },
+                                        onSetVoiceNoteSpeed = { spd -> viewModel.setVoiceNoteSpeed(spd) },
                                         modifier = Modifier.weight(0.58f).fillMaxHeight(),
                                     )
                                 }
@@ -839,6 +846,16 @@ class MainActivity : FragmentActivity() {
                                         val tid = state.selectedThreadId ?: "channel_primary"
                                         viewModel.sendVoiceNoteBytes(tid, bytes, dur)
                                     },
+                                    onStartVoiceNoteRecording = { viewModel.startChatVoiceNoteRecording() },
+                                    onLockVoiceNoteRecording = { viewModel.lockChatVoiceNoteRecording() },
+                                    onCancelVoiceNoteRecording = { viewModel.cancelChatVoiceNoteRecording() },
+                                    onFinishVoiceNoteRecording = {
+                                        val tid = state.selectedThreadId ?: "channel_primary"
+                                        viewModel.finishAndSendChatVoiceNote(tid)
+                                    },
+                                    onTogglePlayVoiceNote = { pid, content, speed -> viewModel.togglePlayVoiceNote(pid, content, speed) },
+                                    onSeekVoiceNote = { pid, frac -> viewModel.seekVoiceNote(pid, frac) },
+                                    onSetVoiceNoteSpeed = { spd -> viewModel.setVoiceNoteSpeed(spd) },
                                 )
                             }
                             2 -> com.kostadinosk.pulsemesh.ui.screens.voice.PulseVoiceHubScreen(
@@ -858,7 +875,10 @@ class MainActivity : FragmentActivity() {
                                 onJoinPttChannel = { cid -> viewModel.joinPttChannel(cid) },
                                 onToggleCourtesyBeep = { enabled -> viewModel.setPttCourtesyBeepEnabled(enabled) },
                                 onToggleConferenceMute = { nid -> viewModel.toggleConferencePeerMute(nid) },
-                                onKickConferencePeer = { nid -> viewModel.kickConferencePeer(nid) }
+                                onKickConferencePeer = { nid -> viewModel.kickConferencePeer(nid) },
+                                onStartSelectiveGroupCall = { chosen -> viewModel.startSelectiveGroupCall(chosen) },
+                                onSelectBluetoothDevice = { route, devId -> viewModel.selectAudioRoute(route, devId) },
+                                onSearchBluetoothAudio = { viewModel.searchBluetoothAudioDevices() }
                             )
                             else -> {
                                 com.kostadinosk.pulsemesh.ui.screens.settings.ModularSettingsHub(
@@ -1227,13 +1247,15 @@ class MainActivity : FragmentActivity() {
                     )
                 }
 
-                // PulseMesh v2.0 Tap-to-Expand Telemetry Drawer
+                // PulseMesh v2.1 Tap-to-Expand Telemetry Drawer (with Hotspot, Wi-Fi Direct & Wi-Fi Aware Quick Toggles)
                 if (showTelemetryDrawer) {
                     TelemetryStatusDrawer(
                         state = state,
                         onDismiss = { showTelemetryDrawer = false },
                         onToggleInternetMode = { viewModel.toggleInternetEnabled() },
                         onToggleHotspot = { viewModel.toggleWebPortal() },
+                        onToggleWifiDirect = { viewModel.toggleOrConnectHotspot() },
+                        onToggleWifiAware = { viewModel.toggleWifiAware() },
                         onOpenRadioLab = {
                             activeSettingsDest = com.kostadinosk.pulsemesh.ui.screens.settings.SettingsDestination.RADIO_LAB
                             viewModel.setTab(3)

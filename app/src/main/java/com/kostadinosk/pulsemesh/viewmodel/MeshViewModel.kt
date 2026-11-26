@@ -271,11 +271,16 @@ data class MeshUiState(
         com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE
     ),
     val activeAudioRoute: com.kostadinosk.pulsemesh.voice.AudioRoute = com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER,
+    val activeAudioDeviceName: String = "Speaker",
+    val bluetoothAudioDevices: List<com.kostadinosk.pulsemesh.voice.BluetoothAudioDeviceInfo> = emptyList(),
+    val isScanningBluetoothAudio: Boolean = false,
     val pttChannels: List<com.kostadinosk.pulsemesh.voice.PttChannelState> = emptyList(),
     val activePttChannelId: String = "#tactical",
     val pttCourtesyBeepEnabled: Boolean = true,
     val conferencePeers: List<ConferencePeerStatus> = emptyList(),
     val voiceCodecStats: com.kostadinosk.pulsemesh.voice.VoiceCodecStats = com.kostadinosk.pulsemesh.voice.VoiceCodecStats(),
+    val voiceNoteRecordingState: com.kostadinosk.pulsemesh.voice.VoiceNoteRecordingState = com.kostadinosk.pulsemesh.voice.VoiceNoteRecordingState(),
+    val voiceNotePlaybackState: com.kostadinosk.pulsemesh.voice.VoiceNotePlaybackState = com.kostadinosk.pulsemesh.voice.VoiceNotePlaybackState(),
 
     // PulseMesh v1.5.5 Map 2.0 CoT, LoRa Hardware Bridge, Verified Updater & Acoustic 2.0 State
     val isCotBridgeEnabled: Boolean = false,
@@ -424,6 +429,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     val voiceTransportEngine: com.kostadinosk.pulsemesh.voice.VoiceTransportEngine =
         com.kostadinosk.pulsemesh.voice.VoiceEngineFactory.create(application)
     val audioRouteManager = com.kostadinosk.pulsemesh.voice.AudioRouteManager(application)
+    val voiceNoteEngine = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine(application, viewModelScope)
     val pttChannelController = com.kostadinosk.pulsemesh.voice.TacticalPttChannelController()
     val conferenceAudioMixer = com.kostadinosk.pulsemesh.voice.ConferenceAudioMixer()
     val chunkedFileTransferManager = ChunkedFileTransferManager(application)
@@ -789,10 +795,19 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 val req = NetworkRequest.Builder()
                     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                     .build()
+                val lastNetKickMs = java.util.concurrent.atomic.AtomicLong(0L)
                 val cb = object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
-                        if (prefs.isUsernameOnHold && _uiState.value.isInternetEnabled) {
-                            syncPendingUsernameHoldIfOnline()
+                        if (_uiState.value.isInternetEnabled) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastNetKickMs.get() > 2_000L && lastNetKickMs.compareAndSet(lastNetKickMs.get(), now)) {
+                                // Instant online WebSocket + SSE reconnect on Wi-Fi <-> 5G/LTE transitions
+                                meshNetworkService.reconnect()
+                                flushPendingDtnPacketsToPeer("ALL")
+                            }
+                            if (prefs.isUsernameOnHold) {
+                                syncPendingUsernameHoldIfOnline()
+                            }
                         }
                     }
                 }
@@ -1105,7 +1120,11 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Collect Audio Routes, Zello PTT Channels, Conference Mixer & Voice Codec Telemetry
+        // Collect Audio Routes, Bluetooth Audio Devices, Conference Mixer & Voice Codec Telemetry
+        tacticalCallService.isExternalWebRtcMicActive = {
+            voiceTransportEngine.isNativeWebRtcAvailable() &&
+                (_uiState.value.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink())
+        }
         viewModelScope.launch {
             audioRouteManager.refreshRoutes()
             audioRouteManager.availableRoutes.collect { routes ->
@@ -1113,11 +1132,44 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
+            audioRouteManager.bluetoothDevices.collect { btList ->
+                _uiState.update { it.copy(bluetoothAudioDevices = btList) }
+            }
+        }
+        viewModelScope.launch {
+            audioRouteManager.activeDeviceName.collect { devName ->
+                _uiState.update { cur ->
+                    cur.copy(
+                        activeAudioDeviceName = devName,
+                        unifiedCallState = cur.unifiedCallState.copy(audioRouteLabel = devName)
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            audioRouteManager.isScanningBluetoothAudio.collect { scanning ->
+                _uiState.update { it.copy(isScanningBluetoothAudio = scanning) }
+            }
+        }
+        viewModelScope.launch {
+            voiceNoteEngine.recordingState.collect { rec ->
+                _uiState.update { it.copy(voiceNoteRecordingState = rec) }
+            }
+        }
+        viewModelScope.launch {
+            voiceNoteEngine.playbackState.collect { pb ->
+                _uiState.update { it.copy(voiceNotePlaybackState = pb) }
+            }
+        }
+        viewModelScope.launch {
             audioRouteManager.activeRoute.collect { route ->
+                val resolvedDev = audioRouteManager.resolvePreferredOutputDevice(route)
+                audioService.setAudioRoute(route, resolvedDev)
+                tacticalCallService.setAudioRoute(route, resolvedDev, audioRouteManager.activeDeviceName.value)
                 _uiState.update { cur ->
                     cur.copy(
                         activeAudioRoute = route,
-                        unifiedCallState = cur.unifiedCallState.copy(audioRouteLabel = route.label)
+                        unifiedCallState = cur.unifiedCallState.copy(audioRouteLabel = audioRouteManager.activeDeviceName.value)
                     )
                 }
             }
@@ -1152,6 +1204,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             voiceTransportEngine.stats.collect { st ->
+                val iceUpper = st.iceState.uppercase()
+                if (iceUpper == "CONNECTED" || iceUpper == "COMPLETED") {
+                    tacticalCallService.markWebRtcConnected(true)
+                } else if (iceUpper == "FAILED" || iceUpper == "DISCONNECTED") {
+                    tacticalCallService.markWebRtcConnected(false)
+                }
                 _uiState.update { cur ->
                     cur.copy(
                         voiceCodecStats = st,
@@ -3429,8 +3487,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 val caption = payload.substringAfter("||", "").trim()
                 if (caption.isNotBlank()) "📷 Photo: $caption" else "📷 Tactical Photo"
             }
+            rawContent.startsWith("[[PM_VOICENOTE]]:") -> {
+                val parsed = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.parsePayload(rawContent)
+                val sec = ((parsed?.durationMs ?: 1000L) / 1000L).coerceAtLeast(1L)
+                "🎙️ Voice note (${sec}s)"
+            }
             rawContent.startsWith("[[PM_VOICEDROP]]:") || rawContent.startsWith("[[PM_AUDIO]]:") -> {
-                "🎙️ Tactical Voice Drop (3s)"
+                "🎙️ Voice note"
             }
             else -> rawContent
         }
@@ -3739,6 +3802,13 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         val effectiveBurnSec = state.perThreadBurnTtlMap[threadId] ?: state.messageBurnTtlSeconds
         val burnExpMs = if (effectiveBurnSec > 0) nowMs + effectiveBurnSec * 1000L else 0L
         val replyTarget = state.replyingToPacket
+        val parsedVoiceNote = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.parsePayload(trimmed)
+        val hasOutboundPath = canTransmitWire && (
+            state.isInternetEnabled ||
+                autoHotspotNegotiator.hasHighSpeedLink() ||
+                state.activePeerCount > 0 ||
+                offGridBleEngine.isBleHardwareReady()
+            )
         val userPacket = MeshPacket(
             id = pktId,
             sourceId = state.localNodeId,
@@ -3751,11 +3821,15 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             transport = if (canTransmitWire) realOutboundTransport else "ECDH KEY PENDING",
             rawHexBadge = badge,
             isIncoming = false,
+            isDelivered = false,
+            deliveryStatus = if (hasOutboundPath) "SENT" else "NOT_SENT",
             timestamp = nowMs,
             expiresAtMs = burnExpMs,
             replyToId = replyTarget?.id.orEmpty(),
             replyToSender = replyTarget?.sourceCallsign.orEmpty(),
-            replyToPreview = replyTarget?.content?.take(80).orEmpty()
+            replyToPreview = replyTarget?.content?.take(80).orEmpty(),
+            attachmentMime = if (parsedVoiceNote != null) "audio/pulsemesh-voicenote" else "",
+            voiceDurationMs = parsedVoiceNote?.durationMs ?: 0L
         )
         if (replyTarget != null) {
             _uiState.update { it.copy(replyingToPacket = null) }
@@ -5948,7 +6022,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
-            "CALL_RING", "CALL_INVITE" -> {
+            "CALL_RING", "CALL_INVITE", "GROUP_CALL_INVITE" -> {
                 val curUi = _uiState.value
                 // If we already accepted and are IN_CALL_ACTIVE with this caller, but the caller is STILL ringing
                 // (because our initial CALL_ACCEPT burst dropped), immediately re-send CALL_ACCEPT!
@@ -5963,6 +6037,16 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         activePeerNorm == normSrc ||
                         normalizeId(packet.dstNodeId) == normSelf
                     ) {
+                        if (activePeerNorm.isNotBlank() && activePeerNorm != normSrc && !curUi.activeCallTargetId.equals("ALL", ignoreCase = true)) {
+                            sendCallControlBurst(
+                                type = "CALL_BUSY",
+                                targetNodeId = fallbackCallNode.id,
+                                payload = "BUSY",
+                                repeatCount = 2,
+                                spacingMs = 90L
+                            )
+                            return
+                        }
                         sendCallControlBurst(
                             type = "CALL_ACCEPT",
                             targetNodeId = fallbackCallNode.id,
@@ -5987,18 +6071,27 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                     return
                 }
                 val isGroupRing = !isFromCafeBeacon && (
-                    packet.dstNodeId.equals("ALL", ignoreCase = true) ||
+                    packet.type.equals("GROUP_CALL_INVITE", ignoreCase = true) ||
+                        packet.dstNodeId.equals("ALL", ignoreCase = true) ||
                         packet.dstNodeId.equals("BROADCAST", ignoreCase = true)
                     )
                 val isTargetedToMe = isFromCafeBeacon || normalizeId(packet.dstNodeId) == normSelf
                 if (isTargetedToMe || isGroupRing) {
-                    val ringTarget = if (isGroupRing) "ALL" else fallbackCallNode.id
+                    val ringTarget = if (isGroupRing && packet.dstNodeId.equals("ALL", ignoreCase = true)) "ALL" else fallbackCallNode.id
                     val displayName = if (isGroupRing) "${fallbackCallNode.callsign} (Group Call)" else fallbackCallNode.callsign
                     tacticalCallService.startIncomingCall(fallbackCallNode.id, displayName, state.isSpokenCallerIdEnabled)
+                    // WhatsApp-style CALL_RINGING receipt so caller transitions "Calling..." -> "Ringing..."
+                    sendCallControlBurst(
+                        type = "CALL_RINGING",
+                        targetNodeId = fallbackCallNode.id,
+                        payload = "RINGING",
+                        repeatCount = 2,
+                        spacingMs = 100L
+                    )
                     notificationManager.showIncomingCallNotification(
                         callerNodeId = fallbackCallNode.id,
                         callerCallsign = displayName,
-                        transportLabel = if (autoHotspotNegotiator.hasHighSpeedLink()) "Hotspot Wi-Fi 8kHz HD" else "BLE Off-Grid Mesh"
+                        transportLabel = if (autoHotspotNegotiator.hasHighSpeedLink() || _uiState.value.isInternetEnabled) "WebRTC Opus HD" else "BLE Off-Grid Mesh"
                     )
                     _uiState.update {
                         it.copy(
@@ -6013,6 +6106,42 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     triggerHaptic(120)
+                }
+            }
+            "CALL_RINGING" -> {
+                val curUi = _uiState.value
+                if (curUi.callState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING ||
+                    curUi.duplexCallState.signalingState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING
+                ) {
+                    tacticalCallService.markRemoteRingingConfirmed()
+                }
+            }
+            "CALL_BUSY" -> {
+                val curUi = _uiState.value
+                if (curUi.callState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING ||
+                    curUi.duplexCallState.signalingState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING
+                ) {
+                    recordCallEventInChat(
+                        peerNodeId = fallbackCallNode.id,
+                        peerCallsign = fallbackCallNode.callsign,
+                        summary = "Busy - ${fallbackCallNode.callsign} is on another call",
+                        isOutgoing = true
+                    )
+                    ringSignalRepeatJob?.cancel()
+                    ringSignalRepeatJob = null
+                    tacticalCallService.endCall(isUserBusy = true)
+                    voiceTransportEngine.stopCall()
+                    _uiState.update {
+                        it.copy(
+                            callState = com.kostadinosk.pulsemesh.service.CallSignalingState.IDLE,
+                            remoteCallerId = "",
+                            remoteCallerName = "",
+                            activeCallTargetId = "ALL",
+                            activePrivateCallNode = null,
+                            isPrivateCallActive = false,
+                            pttStatus = "${fallbackCallNode.callsign} is busy on another call"
+                        )
+                    }
                 }
             }
             "CALL_ACCEPT" -> {
@@ -6175,7 +6304,10 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
                 triggerHaptic(60)
             }
             "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE" -> {
-                // Relay WebRTC P2P signaling frames directly to connected Web/iPhone PWA clients over /ws & SSE
+                if (packet.payload.isNotBlank()) {
+                    voiceTransportEngine.onRemoteSignal(packet.payload)
+                }
+                // Also relay WebRTC P2P signaling frames to connected Web/iPhone PWA clients over /ws & SSE
                 pulseMeshWebServer.notifyCallSignal(
                     type = packet.type,
                     srcNodeId = packet.srcNodeId,
@@ -7089,6 +7221,28 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         runCatching {
             com.kostadinosk.pulsemesh.voice.PulseMeshTelecomConnectionService.markCallActive()
         }
+        // Start callee-side WebRTC engine symmetrically so Offer/Answer + ICE completes cleanly
+        if (_uiState.value.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val iceList = if (_uiState.value.isInternetEnabled) {
+                    meshNetworkService.fetchTurnCredentials().map { t ->
+                        com.kostadinosk.pulsemesh.voice.IceServerConfig(t.urls, t.username, t.credential)
+                    }
+                } else {
+                    emptyList()
+                }
+                voiceTransportEngine.startCall(
+                    callId = acceptCallId,
+                    peerNodeId = replyTarget,
+                    isCaller = false,
+                    iceServers = iceList,
+                    onOutboundAudio = {},
+                    onSignalMessage = { sigJson ->
+                        sendCallControlBurst(type = "WEBRTC_SIGNAL", targetNodeId = replyTarget, payload = sigJson, repeatCount = 1, spacingMs = 50L)
+                    }
+                )
+            }
+        }
         syncBackgroundRelayService()
         notificationManager.clearCallNotification()
         _uiState.update {
@@ -7152,6 +7306,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     fun declineDuplexCall() {
         val targetId = _uiState.value.incomingPrivateCall?.id
             ?: _uiState.value.remoteCallerId.ifBlank { "ALL" }
+        val targetName = _uiState.value.incomingPrivateCall?.callsign
+            ?: _uiState.value.remoteCallerName.ifBlank { "Peer" }
+        recordCallEventInChat(targetId, targetName, "Declined voice call", isOutgoing = false)
         lastCallEndedMs = System.currentTimeMillis()
         lastEndedPeerNormId = if (!targetId.equals("ALL", ignoreCase = true)) normalizeId(targetId) else null
         ringSignalRepeatJob?.cancel()
@@ -7194,12 +7351,23 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
      * - Sets `callState = IDLE`, stops all audio/ringtones, and sends `CALL_END` over Hotspot TCP/UDP + BLE GATT + Hybrid.
      */
     fun endDuplexCall() {
+        val prevCallState = tacticalCallService.callState.value
         val targetId = _uiState.value.activePrivateCallNode?.id
             ?: _uiState.value.activeCallTargetId.ifBlank {
                 _uiState.value.remoteCallerId.ifBlank {
-                    tacticalCallService.callState.value.peerNodeId.ifBlank { "ALL" }
+                    prevCallState.peerNodeId.ifBlank { "ALL" }
                 }
             }
+        val targetName = _uiState.value.activePrivateCallNode?.callsign
+            ?: _uiState.value.remoteCallerName.ifBlank { prevCallState.peerCallsign.ifBlank { "Peer" } }
+        if (prevCallState.isInCall && prevCallState.durationSeconds > 0) {
+            val mins = prevCallState.durationSeconds / 60
+            val secs = prevCallState.durationSeconds % 60
+            val durStr = if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+            recordCallEventInChat(targetId, targetName, "Voice call • $durStr", isOutgoing = true)
+        } else if (prevCallState.isRinging) {
+            recordCallEventInChat(targetId, targetName, "Cancelled voice call", isOutgoing = true)
+        }
         lastCallEndedMs = System.currentTimeMillis()
         lastEndedPeerNormId = if (!targetId.equals("ALL", ignoreCase = true)) normalizeId(targetId) else null
         ringSignalRepeatJob?.cancel()
@@ -7279,19 +7447,151 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleCallSpeaker() {
-        tacticalCallService.toggleSpeakerphone()
-        val isSpk = tacticalCallService.callState.value.isSpeakerphoneOn
-        audioRouteManager.selectRoute(
-            if (isSpk) com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER
-            else com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE
-        )
+        val currentRoute = audioRouteManager.activeRoute.value
+        val nextRoute = if (currentRoute == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER) {
+            com.kostadinosk.pulsemesh.voice.AudioRoute.EARPIECE
+        } else {
+            com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER
+        }
+        selectAudioRoute(nextRoute)
         triggerHaptic(30)
     }
 
-    fun selectAudioRoute(route: com.kostadinosk.pulsemesh.voice.AudioRoute) {
-        audioRouteManager.selectRoute(route)
-        audioService.setSpeakerRouting(route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER)
+    fun selectAudioRoute(route: com.kostadinosk.pulsemesh.voice.AudioRoute, preferredDeviceId: Int? = null) {
+        audioRouteManager.selectRoute(route, preferredDeviceId)
+        val resolvedDev = audioRouteManager.resolvePreferredOutputDevice(route, preferredDeviceId)
+        val devLabel = audioRouteManager.activeDeviceName.value
+        audioService.setAudioRoute(route, resolvedDev)
+        tacticalCallService.setAudioRoute(route, resolvedDev, devLabel)
+        _uiState.update { cur ->
+            cur.copy(
+                activeAudioRoute = route,
+                activeAudioDeviceName = devLabel,
+                unifiedCallState = cur.unifiedCallState.copy(audioRouteLabel = devLabel)
+            )
+        }
         triggerHaptic(20)
+    }
+
+    fun searchBluetoothAudioDevices() {
+        viewModelScope.launch(Dispatchers.IO) {
+            audioRouteManager.searchBluetoothAudioDevices()
+        }
+        triggerHaptic(20)
+    }
+
+    /**
+     * Selective Multi-Person Group Voice Call: rings ONLY the selected contacts instead of everyone on the mesh.
+     */
+    fun startSelectiveGroupCall(selectedPeers: List<MeshNode>) {
+        val uniqueTargets = selectedPeers
+            .filter { !it.isSelf && it.id.isNotBlank() }
+            .distinctBy { normalizeId(it.id) }
+        if (uniqueTargets.isEmpty()) {
+            startGroupMeshCall()
+            return
+        }
+        if (uniqueTargets.size == 1) {
+            startDuplexCall(uniqueTargets.first())
+            return
+        }
+
+        val label = uniqueTargets.take(3).joinToString(", ") { it.callsign } +
+            if (uniqueTargets.size > 3) " +${uniqueTargets.size - 3}" else ""
+        val participantNames = uniqueTargets.map { it.callsign }
+        val groupCallId = "gcall_${System.currentTimeMillis()}"
+
+        lastCallEndedMs = 0L
+        lastEndedPeerNormId = null
+        callAcceptConfirmedByPeer = false
+        tacticalCallService.startOutgoingCall("ALL", "Group Call ($label)", participants = participantNames)
+        conferenceAudioMixer.clear()
+        uniqueTargets.forEach { conferenceAudioMixer.addOrUpdatePeer(it.id, it.callsign) }
+
+        val rawPass = _uiState.value.meshPassphrase.ifBlank { _uiState.value.meshChannel }
+        val fallbackGroupKey = android.util.Base64.encodeToString(
+            java.security.MessageDigest.getInstance("SHA-256").digest(rawPass.toByteArray(Charsets.UTF_8)),
+            android.util.Base64.NO_WRAP
+        )
+        val gKey = _uiState.value.meshGroups.firstOrNull()?.groupKeyBase64 ?: fallbackGroupKey
+        voiceCallController.establishGroupVoiceSession(groupCallId, gKey)
+
+        _uiState.update {
+            it.copy(
+                callState = com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING,
+                remoteCallerId = "ALL",
+                remoteCallerName = "Group Call ($label)",
+                activeCallTargetId = "ALL",
+                activePrivateCallNode = null,
+                isPrivateCallActive = true,
+                callAckConfirmed = false,
+                selectedTabIndex = 2
+            )
+        }
+
+        val invitePayload = org.json.JSONObject().apply {
+            put("callId", groupCallId)
+            put("participants", org.json.JSONArray(participantNames))
+        }.toString()
+        uniqueTargets.forEach { target ->
+            sendCallControlBurst(
+                type = "GROUP_CALL_INVITE",
+                targetNodeId = target.id,
+                payload = invitePayload,
+                repeatCount = 2,
+                spacingMs = 110L
+            )
+        }
+        ringSignalRepeatJob?.cancel()
+        ringSignalRepeatJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive && _uiState.value.duplexCallState.signalingState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING) {
+                delay(2200L)
+                if (isActive && _uiState.value.duplexCallState.signalingState == com.kostadinosk.pulsemesh.service.CallSignalingState.RINGING_OUTGOING) {
+                    uniqueTargets.forEach { target ->
+                        sendCallControlBurst(
+                            type = "GROUP_CALL_INVITE",
+                            targetNodeId = target.id,
+                            payload = invitePayload,
+                            repeatCount = 1,
+                            spacingMs = 90L
+                        )
+                    }
+                }
+            }
+        }
+        triggerHaptic(60)
+    }
+
+    private fun recordCallEventInChat(
+        peerNodeId: String,
+        peerCallsign: String,
+        summary: String,
+        isOutgoing: Boolean
+    ) {
+        if (peerNodeId.isBlank() || peerNodeId.equals("ALL", ignoreCase = true)) return
+        val peerNorm = normalizeId(peerNodeId)
+        val existingDm = _uiState.value.conversations.find {
+            !it.peerNodeId.isNullOrBlank() && normalizeId(it.peerNodeId) == peerNorm
+        }
+        val threadId = existingDm?.threadId ?: "dm_$peerNodeId"
+        val eventPacket = MeshPacket(
+            id = "CALL#${System.currentTimeMillis()}_${Random.nextInt(1000, 9999)}",
+            sourceId = if (isOutgoing) _uiState.value.localNodeId else peerNodeId,
+            destId = if (isOutgoing) peerNodeId else _uiState.value.localNodeId,
+            sourceCallsign = if (isOutgoing) "${_uiState.value.operatorCallsign} (Self)" else peerCallsign,
+            type = PacketType.TEXT,
+            content = summary,
+            hops = 0,
+            transport = "VOICE CALL",
+            rawHexBadge = "[VOICE CALL]",
+            isIncoming = !isOutgoing,
+            isDelivered = true,
+            deliveryStatus = "RECEIVED",
+            timestamp = System.currentTimeMillis(),
+            attachmentMime = "pulsemesh/call-event"
+        )
+        persistentChatManager.savePacket(threadId, eventPacket)
+        refreshConversationsList()
     }
 
     fun joinPttChannel(channelId: String) {
@@ -9583,8 +9883,57 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendVoiceNoteBytes(threadId: String, encodedAudioBytes: ByteArray, durationMs: Long) {
         if (encodedAudioBytes.isEmpty()) return
-        val fileName = "voice_note_${System.currentTimeMillis()}.pcm"
-        sendFileAttachment(threadId, fileName, "audio/pulsemesh-adpcm;dur=$durationMs", encodedAudioBytes)
+        val waveform = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.computeWaveformFromBytes(encodedAudioBytes)
+        val payload = com.kostadinosk.pulsemesh.voice.VoiceNoteEngine.buildPayload(
+            codec = "ADPCM8K",
+            durationMs = durationMs.coerceAtLeast(400L),
+            waveformBars = waveform,
+            audioBytes = encodedAudioBytes
+        )
+        sendMessageInThread(threadId, payload)
+    }
+
+    fun startChatVoiceNoteRecording() {
+        val preferM4a = _uiState.value.isInternetEnabled || autoHotspotNegotiator.hasHighSpeedLink()
+        voiceNoteEngine.startRecording(preferM4a = preferM4a)
+        triggerHaptic(30)
+    }
+
+    fun lockChatVoiceNoteRecording() {
+        voiceNoteEngine.lockRecording()
+        triggerHaptic(25)
+    }
+
+    fun cancelChatVoiceNoteRecording() {
+        voiceNoteEngine.cancelRecording()
+        triggerHaptic(20)
+    }
+
+    fun finishAndSendChatVoiceNote(threadId: String) {
+        viewModelScope.launch {
+            val recorded = voiceNoteEngine.stopAndFinishRecording()
+            if (recorded != null) {
+                sendMessageInThread(threadId, recorded.payload)
+            }
+        }
+    }
+
+    fun togglePlayVoiceNote(packetId: String, content: String, speed: Float = _uiState.value.voiceNotePlaybackState.speed) {
+        val preferredDev = audioRouteManager.resolvePreferredOutputDevice(audioRouteManager.activeRoute.value)
+        voiceNoteEngine.togglePlayOrPause(
+            packetId = packetId,
+            content = content,
+            speed = speed,
+            preferredOutputDevice = preferredDev
+        )
+    }
+
+    fun seekVoiceNote(packetId: String, fraction: Float) {
+        voiceNoteEngine.seekTo(packetId, fraction)
+    }
+
+    fun setVoiceNoteSpeed(speed: Float) {
+        voiceNoteEngine.setPlaybackSpeed(speed)
     }
 
     fun addGroupMember(groupId: String, memberNodeId: String) {
@@ -9763,7 +10112,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         bleRadioService.stopRawRxSniffer()
         sensorService.stop()
         voiceTransportEngine.stopCall()
+        voiceNoteEngine.release()
         conferenceAudioMixer.clear()
         audioRouteManager.clearCallAudioMode()
+        audioRouteManager.release()
     }
 }

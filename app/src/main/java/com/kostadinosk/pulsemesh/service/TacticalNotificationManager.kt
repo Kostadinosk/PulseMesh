@@ -416,7 +416,8 @@ class TacticalNotificationManager(private val context: Context) {
 
         val cleanPreview = when {
             messagePreview.startsWith("[[PM_IMAGE]]:") || messagePreview.startsWith("[[PM_IMG]]:") -> "📷 Sent an off-grid tactical photo"
-            messagePreview.startsWith("[[PM_VOICEDROP]]:") || messagePreview.startsWith("[[PM_AUDIO]]:") -> "🎙️ Sent a 3s voice drop memo"
+            messagePreview.startsWith("[[PM_VOICENOTE]]:") -> "🎙️ Sent a voice note"
+            messagePreview.startsWith("[[PM_VOICEDROP]]:") || messagePreview.startsWith("[[PM_AUDIO]]:") -> "🎙️ Sent a voice note"
             else -> messagePreview
         }
 

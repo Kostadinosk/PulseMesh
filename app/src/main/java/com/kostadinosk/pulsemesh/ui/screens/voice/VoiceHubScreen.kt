@@ -34,8 +34,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.BluetoothAudio
 import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Hearing
@@ -44,16 +48,20 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -79,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import com.kostadinosk.pulsemesh.model.MeshNode
 import com.kostadinosk.pulsemesh.service.CallSignalingState
 import com.kostadinosk.pulsemesh.service.DuplexCallState
+import com.kostadinosk.pulsemesh.service.WhatsAppCallPhase
 import com.kostadinosk.pulsemesh.ui.theme.LocalPulseTokens
 import com.kostadinosk.pulsemesh.ui.theme.PulseMeshTheme
 import com.kostadinosk.pulsemesh.ui.theme.pulseSurfaceCard
@@ -87,6 +96,7 @@ import com.kostadinosk.pulsemesh.util.ThemeBrightness
 import com.kostadinosk.pulsemesh.util.ThemePreset
 import com.kostadinosk.pulsemesh.viewmodel.MeshUiState
 import com.kostadinosk.pulsemesh.voice.AudioRoute
+import com.kostadinosk.pulsemesh.voice.BluetoothAudioDeviceInfo
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -242,23 +252,42 @@ fun PulseVoiceHubScreen(
     onToggleCourtesyBeep: (Boolean) -> Unit,
     onToggleConferenceMute: (String) -> Unit,
     onKickConferencePeer: (String) -> Unit,
+    onStartSelectiveGroupCall: (List<MeshNode>) -> Unit = { onStartGroupCall() },
+    onSelectBluetoothDevice: (AudioRoute, Int?) -> Unit = { route, _ -> onSelectAudioRoute(route) },
+    onSearchBluetoothAudio: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
     val lang = state.appLanguage
 
-    // Default to Phone Call page (0 = Calls, 1 = Walkie-Talkie, 2 = Conference)
+    // 0 = Calls (1-to-1 + Selective Group Voice Calls), 1 = Walkie-Talkie (no PTT channels), 2 = Active Room
     var selectedSegment by remember { mutableIntStateOf(0) }
     var isPttLocked by remember { mutableStateOf(false) }
     var quickDialTarget by remember { mutableStateOf("") }
+    var showAudioDevicePicker by remember { mutableStateOf(false) }
+    var isMultiSelectGroupMode by remember { mutableStateOf(false) }
+    var selectedGroupPeerIds by remember { mutableStateOf(setOf<String>()) }
 
     val peers = remember(state.nodes) { state.nodes.filter { !it.isSelf } }
     val isIncomingRinging = duplexCallState.signalingState == CallSignalingState.RINGING_INCOMING
     val isOutgoingRinging = duplexCallState.signalingState == CallSignalingState.RINGING_OUTGOING || duplexCallState.isRinging
     val isInActiveCall = duplexCallState.isInCall
 
-    // Dedicated Full-Panel Phone Call Screen whenever ringing or active (clean native Phone-app layout)
+    if (showAudioDevicePicker) {
+        AudioOutputPickerDialog(
+            state = state,
+            lang = lang,
+            onSelectRoute = { route, devId ->
+                onSelectBluetoothDevice(route, devId)
+                showAudioDevicePicker = false
+            },
+            onSearchBluetooth = onSearchBluetoothAudio,
+            onDismiss = { showAudioDevicePicker = false }
+        )
+    }
+
+    // Dedicated Full-Panel WhatsApp-Style Voice Call Screen whenever ringing or active
     if (isIncomingRinging || isOutgoingRinging || isInActiveCall) {
         val callerName = duplexCallState.peerCallsign.ifBlank {
             state.remoteCallerName.ifBlank { AppStrings.tr(lang, "Mesh Peer", "Κόμβος Mesh") }
@@ -266,8 +295,12 @@ fun PulseVoiceHubScreen(
         val durationMin = duplexCallState.durationSeconds / 60
         val durationSec = duplexCallState.durationSeconds % 60
         val statusText = when {
-            isIncomingRinging -> AppStrings.tr(lang, "Incoming call...", "Εισερχόμενη κλήση...")
+            isIncomingRinging -> AppStrings.tr(lang, "Incoming voice call...", "Εισερχόμενη φωνητική κλήση...")
+            isInActiveCall && duplexCallState.callPhase == WhatsAppCallPhase.CONNECTING && duplexCallState.durationSeconds == 0 ->
+                AppStrings.tr(lang, "Connecting...", "Σύνδεση...")
             isInActiveCall -> "%02d:%02d".format(durationMin, durationSec)
+            duplexCallState.callPhase == WhatsAppCallPhase.RINGING ->
+                AppStrings.tr(lang, "Ringing...", "Κουδουνίζει...")
             else -> AppStrings.tr(lang, "Calling...", "Κλήση...")
         }
 
@@ -279,7 +312,6 @@ fun PulseVoiceHubScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Minimal top encryption indicator (no telemetry clutter)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -292,21 +324,24 @@ fun PulseVoiceHubScreen(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = AppStrings.tr(lang, "End-to-end encrypted", "Κρυπτογραφημένη κλήση"),
+                    text = if (duplexCallState.isWebRtcEngineActive) {
+                        AppStrings.tr(lang, "End-to-end encrypted • HD Opus", "Κρυπτογραφημένη • HD Opus")
+                    } else {
+                        AppStrings.tr(lang, "End-to-end encrypted", "Κρυπτογραφημένη κλήση")
+                    },
                     color = p.textSecondary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            // Large Caller Avatar + Name + Timer
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(104.dp)
+                        .size(108.dp)
                         .clip(CircleShape)
                         .background(tokens.accentPrimary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
@@ -322,14 +357,24 @@ fun PulseVoiceHubScreen(
                     text = callerName,
                     color = p.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp
+                    fontSize = 24.sp,
+                    textAlign = TextAlign.Center
                 )
+                if (duplexCallState.selectedParticipants.size > 1) {
+                    Text(
+                        text = duplexCallState.selectedParticipants.joinToString(", "),
+                        color = p.textSecondary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 Text(
                     text = statusText,
                     color = if (isInActiveCall) tokens.statusOnline else p.textSecondary,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
+                    fontSize = 15.sp,
+                    modifier = Modifier.testTag("whatsapp_call_phase_label")
                 )
                 if (isInActiveCall) {
                     LiveVoiceWaveform(
@@ -339,7 +384,6 @@ fun PulseVoiceHubScreen(
                 }
             }
 
-            // Bottom Native Phone-App Controls
             if (isIncomingRinging) {
                 Row(
                     modifier = Modifier
@@ -374,7 +418,10 @@ fun PulseVoiceHubScreen(
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pulseSurfaceCard()
+                            .padding(vertical = 14.dp, horizontal = 8.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         PhoneCircleActionButton(
@@ -382,27 +429,34 @@ fun PulseVoiceHubScreen(
                             label = if (duplexCallState.isMuted) AppStrings.tr(lang, "Unmute", "Ήχος") else AppStrings.tr(lang, "Mute", "Σίγαση"),
                             containerColor = if (duplexCallState.isMuted) tokens.statusWarning else p.surfaceVariant,
                             contentColor = if (duplexCallState.isMuted) Color.Black else p.textPrimary,
-                            sizeDp = 58,
+                            sizeDp = 56,
                             onClick = onToggleMute,
                             tag = "phone_call_mute_btn"
                         )
                         PhoneCircleActionButton(
-                            icon = Icons.AutoMirrored.Filled.VolumeUp,
-                            label = if (duplexCallState.isSpeakerphoneOn) AppStrings.tr(lang, "Speaker", "Ηχείο") else AppStrings.tr(lang, "Earpiece", "Ακουστικό"),
-                            containerColor = if (duplexCallState.isSpeakerphoneOn) tokens.accentSecondary else p.surfaceVariant,
-                            contentColor = if (duplexCallState.isSpeakerphoneOn) Color.White else p.textPrimary,
-                            sizeDp = 58,
+                            icon = iconForRoute(state.activeAudioRoute),
+                            label = if (state.activeAudioRoute == AudioRoute.SPEAKER) {
+                                AppStrings.tr(lang, "Speaker", "Ηχείο")
+                            } else {
+                                state.activeAudioDeviceName.take(10)
+                            },
+                            containerColor = if (state.activeAudioRoute == AudioRoute.SPEAKER) tokens.accentSecondary else p.surfaceVariant,
+                            contentColor = if (state.activeAudioRoute == AudioRoute.SPEAKER) Color.White else p.textPrimary,
+                            sizeDp = 56,
                             onClick = onToggleSpeaker,
                             tag = "phone_call_speaker_btn"
                         )
                         PhoneCircleActionButton(
-                            icon = Icons.Default.Replay,
-                            label = AppStrings.tr(lang, "Replay", "Επανάληψη"),
-                            containerColor = p.surfaceVariant,
-                            contentColor = p.textPrimary,
-                            sizeDp = 58,
-                            onClick = onReplayLastRx,
-                            tag = "phone_call_replay_btn"
+                            icon = Icons.Default.BluetoothAudio,
+                            label = AppStrings.tr(lang, "Audio / BT", "Ήχος / BT"),
+                            containerColor = if (state.activeAudioRoute == AudioRoute.BLUETOOTH_SCO || state.activeAudioRoute == AudioRoute.BLE_AUDIO) tokens.accentPrimary else p.surfaceVariant,
+                            contentColor = if (state.activeAudioRoute == AudioRoute.BLUETOOTH_SCO || state.activeAudioRoute == AudioRoute.BLE_AUDIO) Color.Black else p.textPrimary,
+                            sizeDp = 56,
+                            onClick = {
+                                onSearchBluetoothAudio()
+                                showAudioDevicePicker = true
+                            },
+                            tag = "phone_call_audio_picker_btn"
                         )
                     }
                     PhoneCircleActionButton(
@@ -420,8 +474,7 @@ fun PulseVoiceHubScreen(
         return
     }
 
-    // Idle Voice Hub: Clean Calls Page (default) | Walkie-Talkie | Room
-    val routes = state.availableAudioRoutes.ifEmpty { listOf(AudioRoute.SPEAKER, AudioRoute.EARPIECE) }
+    // Idle Voice Hub: Calls (1-to-1 + Selective Multi-Person Group Calls) | Walkie-Talkie (No PTT Channels) | Room
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -430,7 +483,7 @@ fun PulseVoiceHubScreen(
             .testTag("voice_hub_screen"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Minimal Header: Title + 1-Tap Audio Output Pill
+        // Minimal Header: Title + 1-Tap Audio Output & Bluetooth Search Pill
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -449,8 +502,8 @@ fun PulseVoiceHubScreen(
                 modifier = Modifier
                     .clip(tokens.pillShape)
                     .clickable {
-                        val nextIdx = (routes.indexOf(state.activeAudioRoute).coerceAtLeast(0) + 1) % routes.size
-                        onSelectAudioRoute(routes[nextIdx])
+                        onSearchBluetoothAudio()
+                        showAudioDevicePicker = true
                     }
                     .testTag("voice_quick_route_pill")
             ) {
@@ -466,7 +519,7 @@ fun PulseVoiceHubScreen(
                         modifier = Modifier.size(15.dp)
                     )
                     Text(
-                        text = state.activeAudioRoute.label,
+                        text = state.activeAudioDeviceName.ifBlank { state.activeAudioRoute.label },
                         color = p.textPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -514,14 +567,13 @@ fun PulseVoiceHubScreen(
 
         when (selectedSegment) {
             0 -> {
-                // Clean, Uncluttered Phone-App Direct Call Page
+                // WhatsApp-style Calls Page: Quick Dial + Selective Multi-Person Group Calls + Contacts
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("phone_dialer_page"),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Quick Dial Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -566,7 +618,43 @@ fun PulseVoiceHubScreen(
                         }
                     }
 
-                    // Contacts / Nearby Peers
+                    // Selective Group Voice Call Toolbar (pick multiple specific people instead of everyone!)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isMultiSelectGroupMode) {
+                                AppStrings.tr(lang, "Select people to call (${selectedGroupPeerIds.size})", "Επιλέξτε άτομα (${selectedGroupPeerIds.size})")
+                            } else {
+                                AppStrings.tr(lang, "Contacts & Nearby", "Επαφές & Κοντινοί")
+                            },
+                            color = p.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        TextButton(
+                            onClick = {
+                                isMultiSelectGroupMode = !isMultiSelectGroupMode
+                                if (!isMultiSelectGroupMode) selectedGroupPeerIds = emptySet()
+                            },
+                            modifier = Modifier.testTag("voice_selective_group_toggle")
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (isMultiSelectGroupMode) {
+                                    AppStrings.tr(lang, "Cancel", "Άκυρο")
+                                } else {
+                                    AppStrings.tr(lang, "Select Group", "Επιλογή Ομάδας")
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
                     if (peers.isEmpty()) {
                         Column(
                             modifier = Modifier
@@ -593,12 +681,24 @@ fun PulseVoiceHubScreen(
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             peers.forEach { peer ->
+                                val isChecked = peer.id in selectedGroupPeerIds
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .pulseSurfaceCard()
-                                        .clickable { onStartCall(peer) }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        .pulseSurfaceCard(accentBorder = if (isChecked) tokens.accentPrimary else null)
+                                        .clickable {
+                                            if (isMultiSelectGroupMode) {
+                                                selectedGroupPeerIds = if (isChecked) {
+                                                    selectedGroupPeerIds - peer.id
+                                                } else {
+                                                    selectedGroupPeerIds + peer.id
+                                                }
+                                            } else {
+                                                onStartCall(peer)
+                                            }
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                                        .testTag("voice_peer_row_${peer.id}"),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -607,6 +707,14 @@ fun PulseVoiceHubScreen(
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                                         modifier = Modifier.weight(1f)
                                     ) {
+                                        if (isMultiSelectGroupMode) {
+                                            Icon(
+                                                imageVector = if (isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                                contentDescription = null,
+                                                tint = if (isChecked) tokens.accentPrimary else p.textMuted,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                         Box(
                                             modifier = Modifier
                                                 .size(40.dp)
@@ -630,13 +738,15 @@ fun PulseVoiceHubScreen(
                                             )
                                         }
                                     }
-                                    Surface(
-                                        color = tokens.statusOnline.copy(alpha = 0.16f),
-                                        shape = CircleShape,
-                                        modifier = Modifier.size(38.dp)
-                                    ) {
-                                        IconButton(onClick = { onStartCall(peer) }) {
-                                            Icon(Icons.Default.Call, contentDescription = "Call ${peer.callsign}", tint = tokens.statusOnline, modifier = Modifier.size(19.dp))
+                                    if (!isMultiSelectGroupMode) {
+                                        Surface(
+                                            color = tokens.statusOnline.copy(alpha = 0.16f),
+                                            shape = CircleShape,
+                                            modifier = Modifier.size(38.dp)
+                                        ) {
+                                            IconButton(onClick = { onStartCall(peer) }) {
+                                                Icon(Icons.Default.Call, contentDescription = "Call ${peer.callsign}", tint = tokens.statusOnline, modifier = Modifier.size(19.dp))
+                                            }
                                         }
                                     }
                                 }
@@ -644,33 +754,99 @@ fun PulseVoiceHubScreen(
                         }
                     }
 
-                    // Lightweight secondary Group Call action
-                    OutlinedButton(
-                        onClick = onStartGroupCall,
-                        shape = tokens.pillShape,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("phone_group_call_btn")
-                    ) {
-                        Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(AppStrings.tr(lang, "Group Mesh Call", "Ομαδική Κλήση Mesh"), fontWeight = FontWeight.SemiBold)
+                    if (isMultiSelectGroupMode) {
+                        val chosenPeers = peers.filter { it.id in selectedGroupPeerIds }
+                        Button(
+                            onClick = {
+                                if (chosenPeers.isNotEmpty()) {
+                                    onStartSelectiveGroupCall(chosenPeers)
+                                    isMultiSelectGroupMode = false
+                                    selectedGroupPeerIds = emptySet()
+                                }
+                            },
+                            enabled = chosenPeers.isNotEmpty(),
+                            shape = tokens.pillShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = tokens.statusOnline,
+                                contentColor = Color.Black
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("phone_call_selected_group_btn")
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = AppStrings.tr(lang, "Call Selected (${chosenPeers.size})", "Κλήση Επιλεγμένων (${chosenPeers.size})"),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = onStartGroupCall,
+                            shape = tokens.pillShape,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("phone_group_call_btn")
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(AppStrings.tr(lang, "Call All Nearby", "Κλήση Όλων των Κοντινών"), fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
 
             1 -> {
-                // Walkie-Talkie PTT Deck
-                if (state.showTacticalHud) {
-                    VoiceHubHeaderCard(state = state, onSelectAudioRoute = onSelectAudioRoute)
+                // Clean Walkie-Talkie PTT (NO PTT channels — simple direct PTT + working Audio/Bluetooth output bar)
+                Surface(
+                    color = p.surfaceVariant,
+                    shape = tokens.cardShape,
+                    border = BorderStroke(1.dp, p.border),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(tokens.cardShape)
+                        .clickable {
+                            onSearchBluetoothAudio()
+                            showAudioDevicePicker = true
+                        }
+                        .testTag("walkie_audio_route_bar")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(iconForRoute(state.activeAudioRoute), contentDescription = null, tint = tokens.accentPrimary, modifier = Modifier.size(18.dp))
+                            Column {
+                                Text(
+                                    text = AppStrings.tr(lang, "Audio Output", "Έξοδος Ήχου"),
+                                    color = p.textSecondary,
+                                    fontSize = 10.sp
+                                )
+                                Text(
+                                    text = state.activeAudioDeviceName.ifBlank { state.activeAudioRoute.label },
+                                    color = p.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                        Text(
+                            text = AppStrings.tr(lang, "Switch / BT", "Αλλαγή / BT"),
+                            color = tokens.accentPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
-                WalkieTalkieDeckPanel(
-                    channels = state.pttChannels,
-                    activeChannelId = state.activePttChannelId,
-                    courtesyBeepEnabled = state.pttCourtesyBeepEnabled,
-                    onJoinChannel = onJoinPttChannel,
-                    onToggleCourtesyBeep = onToggleCourtesyBeep
-                )
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -680,7 +856,7 @@ fun PulseVoiceHubScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = state.activeSpeakingBanner.ifBlank { state.pttStatus },
+                        text = state.activeSpeakingBanner.ifBlank { AppStrings.tr(lang, "Walkie-Talkie Ready", "Ασύρματος Έτοιμος") },
                         color = if (state.isPttPressed) tokens.statusDanger else tokens.statusOnline,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
@@ -762,6 +938,152 @@ fun PulseVoiceHubScreen(
             }
         }
     }
+}
+
+@Composable
+private fun AudioOutputPickerDialog(
+    state: MeshUiState,
+    lang: String,
+    onSelectRoute: (AudioRoute, Int?) -> Unit,
+    onSearchBluetooth: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val tokens = LocalPulseTokens.current
+    val p = tokens.palette
+    val coreRoutes = listOf(AudioRoute.SPEAKER, AudioRoute.EARPIECE, AudioRoute.WIRED_HEADSET)
+        .filter { it == AudioRoute.SPEAKER || it == AudioRoute.EARPIECE || it in state.availableAudioRoutes }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = p.card,
+        shape = tokens.cardShape,
+        modifier = Modifier.testTag("voice_audio_picker_dialog"),
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = AppStrings.tr(lang, "Audio & Bluetooth", "Ήχος & Bluetooth"),
+                    color = p.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+                TextButton(
+                    onClick = onSearchBluetooth,
+                    modifier = Modifier.testTag("voice_bt_search_btn")
+                ) {
+                    Icon(Icons.Default.BluetoothSearching, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(AppStrings.tr(lang, "Scan BT", "Αναζήτηση BT"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                coreRoutes.forEach { route ->
+                    val active = state.activeAudioRoute == route
+                    Surface(
+                        color = if (active) tokens.accentPrimary.copy(alpha = 0.18f) else p.surfaceVariant,
+                        shape = tokens.buttonShape,
+                        border = BorderStroke(1.dp, if (active) tokens.accentPrimary else p.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(tokens.buttonShape)
+                            .clickable { onSelectRoute(route, null) }
+                            .testTag("audio_picker_route_${route.name.lowercase()}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(iconForRoute(route), contentDescription = null, tint = if (active) tokens.accentPrimary else p.textSecondary, modifier = Modifier.size(18.dp))
+                                Text(route.label, color = p.textPrimary, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, fontSize = 13.sp)
+                            }
+                            if (active) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = tokens.accentPrimary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    text = AppStrings.tr(lang, "Bluetooth Audio Devices", "Συσκευές Ήχου Bluetooth"),
+                    color = p.textSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+
+                if (state.bluetoothAudioDevices.isEmpty()) {
+                    Text(
+                        text = AppStrings.tr(
+                            lang,
+                            "No Bluetooth headset detected yet. Turn on your headset and tap Scan BT.",
+                            "Δεν βρέθηκε ακουστικό Bluetooth. Ενεργοποιήστε το και πατήστε Αναζήτηση BT."
+                        ),
+                        color = p.textMuted,
+                        fontSize = 11.sp
+                    )
+                } else {
+                    state.bluetoothAudioDevices.forEach { bt ->
+                        Surface(
+                            color = if (bt.isActive) tokens.accentPrimary.copy(alpha = 0.18f) else p.surfaceVariant,
+                            shape = tokens.buttonShape,
+                            border = BorderStroke(1.dp, if (bt.isActive) tokens.accentPrimary else p.border),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(tokens.buttonShape)
+                                .clickable {
+                                    onSelectRoute(bt.route, bt.deviceId.takeIf { it > 0 })
+                                }
+                                .testTag("voice_bt_device_${bt.deviceId}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(iconForRoute(bt.route), contentDescription = null, tint = if (bt.isConnected) tokens.statusOnline else p.textMuted, modifier = Modifier.size(18.dp))
+                                    Column {
+                                        Text(bt.name, color = p.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text(
+                                            text = if (bt.isConnected) {
+                                                AppStrings.tr(lang, "Connected • Tap to route audio", "Συνδεδεμένο • Πατήστε για ήχο")
+                                            } else {
+                                                AppStrings.tr(lang, "Paired • Connect in Bluetooth", "Ζευγοποιημένο")
+                                            },
+                                            color = if (bt.isConnected) tokens.statusOnline else p.textSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                                if (bt.isActive) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = tokens.accentPrimary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(AppStrings.tr(lang, "Done", "Τέλος"))
+            }
+        }
+    )
 }
 
 @Composable

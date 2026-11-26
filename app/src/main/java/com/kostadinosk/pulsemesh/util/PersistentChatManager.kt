@@ -260,6 +260,44 @@ class PersistentChatManager(context: Context) {
     }
 
     @Synchronized
+    fun markPacketSent(packetId: String): Boolean {
+        if (packetId.isBlank()) return false
+        var updatedAny = false
+        for ((tid, list) in memoryCache) {
+            for (idx in list.indices) {
+                val existing = list[idx]
+                if (existing.id == packetId && !existing.isDelivered && existing.deliveryStatus != "SENT" && existing.deliveryStatus != "READ") {
+                    val next = existing.copy(deliveryStatus = "SENT")
+                    list[idx] = next
+                    val existingRow = messageDao.getOneInThread(tid, existing.id)
+                    messageDao.upsert(toEntity(tid, next).copy(rowId = existingRow?.rowId ?: 0L))
+                    updatedAny = true
+                }
+            }
+        }
+        return updatedAny
+    }
+
+    @Synchronized
+    fun markPacketNotSent(packetId: String): Boolean {
+        if (packetId.isBlank()) return false
+        var updatedAny = false
+        for ((tid, list) in memoryCache) {
+            for (idx in list.indices) {
+                val existing = list[idx]
+                if (existing.id == packetId && !existing.isDelivered && existing.deliveryStatus != "NOT_SENT" && existing.deliveryStatus != "READ") {
+                    val next = existing.copy(deliveryStatus = "NOT_SENT")
+                    list[idx] = next
+                    val existingRow = messageDao.getOneInThread(tid, existing.id)
+                    messageDao.upsert(toEntity(tid, next).copy(rowId = existingRow?.rowId ?: 0L))
+                    updatedAny = true
+                }
+            }
+        }
+        return updatedAny
+    }
+
+    @Synchronized
     fun markPacketDelivered(packetId: String, ackerCallsign: String = ""): Boolean {
         if (packetId.isBlank()) return false
         var updatedAny = false
@@ -268,7 +306,7 @@ class PersistentChatManager(context: Context) {
                 val existing = list[idx]
                 if (existing.id == packetId && (!existing.isIncoming || existing.transport == "WEB PORTAL")) {
                     if (!existing.isDelivered || (ackerCallsign.isNotBlank() && existing.ackedByCallsign.isBlank())) {
-                        val nextStatus = if (existing.deliveryStatus == "READ") "READ" else "DELIVERED"
+                        val nextStatus = if (existing.deliveryStatus == "READ") "READ" else "RECEIVED"
                         val next = existing.copy(
                             isDelivered = true,
                             deliveryStatus = nextStatus,

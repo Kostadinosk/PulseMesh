@@ -55,8 +55,9 @@ class LinkCostRouter {
         private val CRITICAL_FANOUT_TYPES = setOf(
             "SOS", "SOS_CLEAR",
             "CHAT_ACK", "CHAT_READ",
-            "CALL_RING", "CALL_INVITE", "CALL_ACCEPT", "CALL_ACCEPT_ACK", "CALL_DECLINE", "CALL_END",
-            "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE"
+            "CALL_RING", "CALL_RINGING", "CALL_BUSY", "GROUP_CALL_INVITE",
+            "CALL_INVITE", "CALL_ACCEPT", "CALL_ACCEPT_ACK", "CALL_DECLINE", "CALL_END",
+            "WEBRTC_SIGNAL", "WEBRTC_OFFER", "WEBRTC_ANSWER", "WEBRTC_ICE"
         )
     }
 

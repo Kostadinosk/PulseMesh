@@ -31,18 +31,32 @@ enum class CallSignalingState {
     IN_CALL_ACTIVE
 }
 
+enum class WhatsAppCallPhase {
+    IDLE,
+    CALLING,
+    RINGING,
+    CONNECTING,
+    CONNECTED,
+    BUSY,
+    MISSED
+}
+
 data class DuplexCallState(
     val signalingState: CallSignalingState = CallSignalingState.IDLE,
+    val callPhase: WhatsAppCallPhase = WhatsAppCallPhase.IDLE,
     val isInCall: Boolean = false,
     val isRinging: Boolean = false,
     val isIncoming: Boolean = false,
     val peerNodeId: String = "",
     val peerCallsign: String = "",
+    val selectedParticipants: List<String> = emptyList(),
     val durationSeconds: Int = 0,
     val isMuted: Boolean = false,
     val isPushToOverrideActive: Boolean = false,
     val isSpeakerphoneOn: Boolean = true,
-    val transportType: String = "G.711 u-Law 160ms (640B / 0xCAFF + UDP)",
+    val activeAudioRouteLabel: String = "Speaker",
+    val isWebRtcEngineActive: Boolean = false,
+    val transportType: String = "WebRTC Opus HD / Adaptive Mesh",
     val audioLevelRms: Float = 0.0f,
     val micLevelDb: Int = -60,
     val voiceFramesSent: Int = 0,
@@ -91,17 +105,14 @@ class TacticalCallService(
         ): Boolean {
             if (isMuted) return false
             if (pushToOverrideActive) return true
-            return if (hasHotspotUdpLink) {
-                if (isSpeakerphoneOn && (nowMs - lastIncomingAudioTime) < SPEAKER_ECHO_DUCK_WINDOW_MS) {
-                    // Suppress speakerphone-to-mic acoustic echo ("micing") while letting close-mic speech override
-                    micPeak > CALL_VAD_SPEAKER_ECHO_PEAK_THRESHOLD
-                } else {
-                    micPeak > TacticalAudioService.CALL_VAD_PEAK_THRESHOLD // 300
-                }
+            // True full-duplex double-talk: rely on hardware AcousticEchoCanceler + NoiseSuppressor
+            // rather than hard mutual-muting both speakers when two people talk at the same time.
+            val threshold = if (hasHotspotUdpLink) {
+                TacticalAudioService.CALL_VAD_PEAK_THRESHOLD // 300
             } else {
-                val isOtherPersonSpeaking = (nowMs - lastIncomingAudioTime) < BLE_HALF_DUPLEX_DUCK_WINDOW_MS
-                !isOtherPersonSpeaking && micPeak > TacticalAudioService.CALL_VAD_BLE_PEAK_THRESHOLD // 350
+                TacticalAudioService.CALL_VAD_BLE_PEAK_THRESHOLD // 350
             }
+            return micPeak > threshold
         }
     }
 
@@ -114,6 +125,7 @@ class TacticalCallService(
     var isHighSpeedLinkActive: () -> Boolean = { true }
     var isBleVoiceSending: () -> Boolean = { false }
     var isCapturePermitted: () -> Boolean = { true }
+    var isExternalWebRtcMicActive: () -> Boolean = { false }
 
     var onUnansweredCallResetToIdle: (() -> Unit)? = null
 
@@ -235,7 +247,7 @@ class TacticalCallService(
         }
     }
 
-    fun startOutgoingCall(peerId: String, peerCallsign: String) {
+    fun startOutgoingCall(peerId: String, peerCallsign: String, participants: List<String> = emptyList()) {
         stopAllRinging()
         voicemailCaptureJob?.cancel()
         voicemailCaptureJob = null
@@ -244,10 +256,12 @@ class TacticalCallService(
         stopAudioCapture()
         _callState.value = DuplexCallState(
             signalingState = CallSignalingState.RINGING_OUTGOING,
+            callPhase = WhatsAppCallPhase.CALLING,
             isRinging = true,
             isIncoming = false,
             peerNodeId = peerId,
-            peerCallsign = peerCallsign
+            peerCallsign = peerCallsign,
+            selectedParticipants = participants
         )
         startOutgoingRingbackTone()
 
@@ -467,19 +481,21 @@ class TacticalCallService(
         }
 
         val current = _callState.value
+        val webRtcOwnsAudio = isExternalWebRtcMicActive()
         _callState.value = current.copy(
             signalingState = CallSignalingState.IN_CALL_ACTIVE,
+            callPhase = if (webRtcOwnsAudio) WhatsAppCallPhase.CONNECTING else WhatsAppCallPhase.CONNECTED,
             isInCall = true,
             isRinging = false,
             isIncoming = false,
             durationSeconds = 0,
             isMuted = false,
             isPushToOverrideActive = false,
-            isSpeakerphoneOn = true,
-            transportType = if (isHighSpeedLinkActive()) {
-                "IMA-ADPCM 8kHz HD 80ms (324B / Binary UDP 45888)"
-            } else {
-                "IMA-ADPCM 8kHz HD 120ms (484B / BLE L2CAP+0xCAFF)"
+            isWebRtcEngineActive = webRtcOwnsAudio,
+            transportType = when {
+                webRtcOwnsAudio -> "WebRTC Opus HD (ICE / E2EE)"
+                isHighSpeedLinkActive() -> "IMA-ADPCM 8kHz HD 80ms (324B / Binary UDP 45888)"
+                else -> "IMA-ADPCM 8kHz HD 120ms (484B / BLE L2CAP+0xCAFF)"
             },
             voiceFramesSent = 0,
             voiceFramesPlayed = 0,
@@ -490,25 +506,84 @@ class TacticalCallService(
         )
 
         playBriefConfirmationTone(ToneGenerator.TONE_PROP_ACK)
-        audioService?.setSpeakerRouting(true)
-        configureAudioForSpeakerphone()
         if (audioService == null) {
             ensurePersistentAudioTrackPlaying()
         }
         startCallTimer()
 
         delayedMicStartJob?.cancel()
-        if (isCapturePermitted()) {
+        if (isCapturePermitted() && !webRtcOwnsAudio) {
             if (startMicDelayMs > 0L) {
                 delayedMicStartJob = scope.launch(Dispatchers.IO) {
                     delay(startMicDelayMs)
-                    if (isActive && _callState.value.signalingState == CallSignalingState.IN_CALL_ACTIVE && isCapturePermitted()) {
+                    if (isActive && _callState.value.signalingState == CallSignalingState.IN_CALL_ACTIVE && isCapturePermitted() && !isExternalWebRtcMicActive()) {
                         startAudioCapture()
                     }
                 }
             } else {
                 startAudioCapture()
             }
+        }
+    }
+
+    fun markRemoteRingingConfirmed() {
+        if (_callState.value.signalingState == CallSignalingState.RINGING_OUTGOING) {
+            _callState.update { it.copy(callPhase = WhatsAppCallPhase.RINGING) }
+        }
+    }
+
+    fun markConnecting() {
+        if (_callState.value.signalingState != CallSignalingState.IDLE) {
+            _callState.update { it.copy(callPhase = WhatsAppCallPhase.CONNECTING) }
+        }
+    }
+
+    fun markWebRtcConnected(connected: Boolean) {
+        if (_callState.value.signalingState == CallSignalingState.IN_CALL_ACTIVE) {
+            if (connected) {
+                stopAudioCapture()
+                _callState.update {
+                    it.copy(
+                        callPhase = WhatsAppCallPhase.CONNECTED,
+                        isWebRtcEngineActive = true,
+                        transportType = "WebRTC Opus HD (ICE / E2EE)"
+                    )
+                }
+            } else {
+                _callState.update {
+                    it.copy(
+                        isWebRtcEngineActive = false,
+                        transportType = if (isHighSpeedLinkActive()) {
+                            "IMA-ADPCM 8kHz HD 80ms (UDP)"
+                        } else {
+                            "IMA-ADPCM 8kHz HD 120ms (BLE Mesh)"
+                        }
+                    )
+                }
+                if (isCapturePermitted() && micCaptureJob?.isActive != true) {
+                    startAudioCapture()
+                }
+            }
+        }
+    }
+
+    fun setAudioRoute(
+        route: com.kostadinosk.pulsemesh.voice.AudioRoute,
+        preferredDevice: AudioDeviceInfo? = null,
+        routeDisplayName: String = route.label
+    ) {
+        val isSpk = (route == com.kostadinosk.pulsemesh.voice.AudioRoute.SPEAKER)
+        audioService?.setAudioRoute(route, preferredDevice)
+        runCatching {
+            synchronized(audioTrackLock) {
+                audioTrack?.setPreferredDevice(preferredDevice)
+            }
+        }
+        _callState.update {
+            it.copy(
+                isSpeakerphoneOn = isSpk,
+                activeAudioRouteLabel = routeDisplayName
+            )
         }
     }
 
@@ -761,7 +836,7 @@ class TacticalCallService(
      */
     @SuppressLint("MissingPermission")
     private fun startAudioCapture() {
-        if (!isCapturePermitted()) return
+        if (!isCapturePermitted() || isExternalWebRtcMicActive()) return
         val hasMic = ContextCompat.checkSelfPermission(
             context,
             android.Manifest.permission.RECORD_AUDIO

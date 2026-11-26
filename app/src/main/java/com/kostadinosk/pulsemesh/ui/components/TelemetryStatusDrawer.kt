@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -61,7 +62,9 @@ fun TelemetryStatusDrawer(
     onToggleInternetMode: () -> Unit,
     onToggleHotspot: () -> Unit,
     onOpenRadioLab: () -> Unit,
-    onOpenConnectHub: () -> Unit
+    onOpenConnectHub: () -> Unit,
+    onToggleWifiDirect: () -> Unit = {},
+    onToggleWifiAware: () -> Unit = {}
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
@@ -77,7 +80,9 @@ fun TelemetryStatusDrawer(
             onToggleInternetMode = onToggleInternetMode,
             onToggleHotspot = onToggleHotspot,
             onOpenRadioLab = onOpenRadioLab,
-            onOpenConnectHub = onOpenConnectHub
+            onOpenConnectHub = onOpenConnectHub,
+            onToggleWifiDirect = onToggleWifiDirect,
+            onToggleWifiAware = onToggleWifiAware
         )
     }
 }
@@ -89,7 +94,9 @@ fun TelemetryDrawerContent(
     onToggleInternetMode: () -> Unit,
     onToggleHotspot: () -> Unit,
     onOpenRadioLab: () -> Unit,
-    onOpenConnectHub: () -> Unit
+    onOpenConnectHub: () -> Unit,
+    onToggleWifiDirect: () -> Unit = {},
+    onToggleWifiAware: () -> Unit = {}
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
@@ -128,7 +135,7 @@ fun TelemetryDrawerContent(
             }
         }
 
-        // Quick Mode Controls
+        // Quick Mode Controls (Row 1: Hybrid Relay + Hotspot Portal; Row 2: Wi-Fi Direct + Wi-Fi Aware NAN)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -140,16 +147,42 @@ fun TelemetryDrawerContent(
                 active = state.isInternetEnabled,
                 accent = tokens.statusMesh,
                 onClick = onToggleInternetMode,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).testTag("drawer_toggle_internet")
             )
             QuickControlTile(
-                title = AppStrings.tr(lang, "Hotspot Portal", "Πύλη Hotspot"),
-                subtitle = if (state.webPortalStatus.isRunning) AppStrings.tr(lang, "Portal Running", "Ενεργή Πύλη") else AppStrings.tr(lang, "Tap to Start", "Πάτησε για εκκίνηση"),
+                title = AppStrings.tr(lang, "Hotspot Host", "Hotspot Host"),
+                subtitle = if (state.webPortalStatus.isRunning) AppStrings.tr(lang, "Hosting Link Active", "Ενεργός Σύνδεσμος") else AppStrings.tr(lang, "Tap to Host", "Πάτησε για εκκίνηση"),
                 icon = Icons.Default.WifiTethering,
                 active = state.webPortalStatus.isRunning,
                 accent = tokens.statusOnline,
                 onClick = onToggleHotspot,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).testTag("drawer_toggle_hotspot")
+            )
+        }
+        val wifiDirectActive = state.hotspotButtonText.contains("HOST", ignoreCase = true) ||
+            state.hotspotButtonText.contains("CONNECTED", ignoreCase = true) ||
+            state.hotspotButtonText.contains("STARTING", ignoreCase = true)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            QuickControlTile(
+                title = AppStrings.tr(lang, "Wi-Fi Direct", "Wi-Fi Direct"),
+                subtitle = if (wifiDirectActive) state.hotspotButtonText.removePrefix("HOTSPOT: ").take(18) else AppStrings.tr(lang, "Off-Grid P2P Link", "Απευθείας P2P"),
+                icon = Icons.Default.Wifi,
+                active = wifiDirectActive,
+                accent = tokens.accentPrimary,
+                onClick = onToggleWifiDirect,
+                modifier = Modifier.weight(1f).testTag("drawer_toggle_wifi_direct")
+            )
+            QuickControlTile(
+                title = AppStrings.tr(lang, "Wi-Fi Aware", "Wi-Fi Aware"),
+                subtitle = if (state.wifiAwareEnabled) AppStrings.tr(lang, "NAN Zero-Popup ON", "NAN Ενεργό") else AppStrings.tr(lang, "Tap to Enable NAN", "Ενεργοποίηση NAN"),
+                icon = Icons.Default.Router,
+                active = state.wifiAwareEnabled,
+                accent = tokens.accentSecondary,
+                onClick = onToggleWifiAware,
+                modifier = Modifier.weight(1f).testTag("drawer_toggle_wifi_aware")
             )
         }
 
