@@ -502,6 +502,33 @@ class DevicePreferences(context: Context) {
         prefs.edit().putString("mesh_groups_json", arr.toString()).apply()
     }
 
+    private fun normalizeDeletedDmKey(peerId: String): String =
+        peerId.trim().uppercase().removePrefix("0X").removePrefix("NODE-").removePrefix("PEER-").takeLast(4)
+
+    fun getDeletedDmPeerIds(): Set<String> {
+        return prefs.getStringSet("deleted_dm_peer_ids", emptySet())
+            ?.map { normalizeDeletedDmKey(it) }
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            ?: emptySet()
+    }
+
+    fun addDeletedDmPeerId(peerId: String) {
+        val norm = normalizeDeletedDmKey(peerId)
+        if (norm.isBlank()) return
+        val next = getDeletedDmPeerIds().toMutableSet().apply { add(norm) }
+        prefs.edit().putStringSet("deleted_dm_peer_ids", next).apply()
+    }
+
+    fun removeDeletedDmPeerId(peerId: String) {
+        val norm = normalizeDeletedDmKey(peerId)
+        if (norm.isBlank()) return
+        val current = getDeletedDmPeerIds()
+        if (norm !in current) return
+        val next = current.toMutableSet().apply { remove(norm) }
+        prefs.edit().putStringSet("deleted_dm_peer_ids", next).apply()
+    }
+
     // =========================================================================
     // UNIQUE USERNAME RESERVATION, PIN & RECOVERY KEY ACCOUNT PERSISTENCE
     // =========================================================================

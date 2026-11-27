@@ -498,32 +498,71 @@ object HardwareCapabilityDetector {
         }
     }
 
-    fun launchOemBatterySettings(context: Context, guide: OemBatteryBypassGuide): Boolean {
-        // 1. Try OEM-specific autostart/power screen if resolvable
+    fun buildBatteryBypassIntents(
+        packageName: String,
+        guide: OemBatteryBypassGuide,
+        isAlreadyExempt: Boolean
+    ): List<Intent> {
+        val candidates = mutableListOf<Intent>()
+
+        // 1. When not yet exempt from Doze, request Android's 1-tap system exemption dialog first.
+        if (!isAlreadyExempt && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            candidates.add(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
+        }
+
+        // 2. Try OEM-specific autostart / power-saver screens (direct launch avoids Android 11+ resolveActivity hiding).
         for ((pkg, cls) in guide.oemSettingsComponents) {
-            val intent = Intent().apply {
-                component = ComponentName(pkg, cls)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            candidates.add(
+                Intent().apply {
+                    component = ComponentName(pkg, cls)
+                }
+            )
+        }
+
+        // 3. Standard Android Battery Optimization list screen.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            candidates.add(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+
+        // 4. Last-resort: PulseMesh App Info page (Battery -> Unrestricted).
+        candidates.add(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
             }
-            if (intent.resolveActivity(context.packageManager) != null) {
-                val ok = runCatching { context.startActivity(intent); true }.getOrDefault(false)
-                if (ok) return true
+        )
+        return candidates
+    }
+
+    fun launchOemBatterySettings(context: Context, guide: OemBatteryBypassGuide): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val isAlreadyExempt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && pm != null) {
+            runCatching { pm.isIgnoringBatteryOptimizations(context.packageName) }
+                .getOrDefault(guide.isIgnoringBatteryOptimizations)
+        } else {
+            guide.isIgnoringBatteryOptimizations
+        }
+
+        val addNewTaskFlag = context !is android.app.Activity
+        val candidates = buildBatteryBypassIntents(
+            packageName = context.packageName,
+            guide = guide,
+            isAlreadyExempt = isAlreadyExempt
+        )
+
+        for (intent in candidates) {
+            if (addNewTaskFlag) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            val started = runCatching {
+                context.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (started) return true
         }
-        // 2. Fallback to Android standard battery optimization exemption request
-        val requestIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        if (requestIntent.resolveActivity(context.packageManager) != null) {
-            val ok = runCatching { context.startActivity(requestIntent); true }.getOrDefault(false)
-            if (ok) return true
-        }
-        // 3. Last-resort app details settings page
-        val detailsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        return runCatching { context.startActivity(detailsIntent); true }.getOrDefault(false)
+        return false
     }
 }

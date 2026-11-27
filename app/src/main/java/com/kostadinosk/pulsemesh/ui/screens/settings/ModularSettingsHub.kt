@@ -63,7 +63,7 @@ enum class SettingsDestination(
     val icon: ImageVector
 ) {
     PROFILE("Profile & @username", "Προφίλ & @username", "profile callsign username qr nfc identity", Icons.Default.Badge),
-    RADIOS("Radios & Power Profiles", "Ράδιο & Ενέργεια", "ble wifi hotspot lora meshtastic meshcore acoustic cot battery expedition power", Icons.Default.Radio),
+    RADIOS("Radios & Power Profiles", "Ράδιο & Ενέργεια", "ble wifi hotspot lora meshtastic meshcore cot battery expedition power", Icons.Default.Radio),
     SECURITY("Security & Privacy", "Ασφάλεια & Ιδιωτικότητα", "e2ee encryption safety number key pin lock decoy duress location privacy", Icons.Default.Security),
     SAFETY("Safety, SOS & Weather", "Ασφάλεια Πεδίου & SOS", "sos emergency ice medical dead man geofence barometer weather checkin", Icons.Default.HealthAndSafety),
     APPEARANCE("Appearance & Language", "Εμφάνιση & Γλώσσα", "theme preset dark light aero tactical messenger language greek english", Icons.Default.Palette),
@@ -202,7 +202,7 @@ fun ModularSettingsHub(
         filtered.forEach { dest ->
             val subtitle = when (dest) {
                 SettingsDestination.PROFILE -> if (state.claimedUsername.isNotBlank()) "@${state.claimedUsername} • QR & NFC" else "Callsign, optional @username & QR"
-                SettingsDestination.RADIOS -> "${state.batteryPowerProfile.label} • ${if (state.loraBridgeState.isConnected) "LoRa ON" else "BLE/Wi-Fi/LoRa/Acoustic"}"
+                SettingsDestination.RADIOS -> "${state.batteryPowerProfile.label} • ${if (state.loraBridgeState.isConnected) "LoRa ON" else "BLE/Wi-Fi/LoRa"}"
                 SettingsDestination.SECURITY -> "Double Ratchet E2EE • Safety Numbers • ${state.locationShareMode.name}"
                 SettingsDestination.SAFETY -> "SOS Kit, ICE Card, Dead-Man & Geofence"
                 SettingsDestination.APPEARANCE -> "${state.themePreset.displayName} (${state.themeBrightness.displayName}) • ${lang.uppercase()}"

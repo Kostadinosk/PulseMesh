@@ -40,7 +40,7 @@ enum class SettingsCategory(
 ) {
     IDENTITY("Identity & Account", R.string.settings_cat_identity, "Callsign, optional @username (recommended), cloud backup", "identity callsign username backup pin recovery", Icons.Default.Badge),
     SECURITY("Security & Privacy", R.string.settings_cat_security, "App Lock, biometric, E2EE keys, Double Ratchet, duress", "security lock biometric pin e2ee ratchet key duress wipe", Icons.Default.Lock),
-    VOICE("Voice & Audio", R.string.settings_cat_voice, "Hardware PTT, audio route, clarity DSP, Bell 202", "voice ptt bluetooth audio mic clarity bell202", Icons.Default.RecordVoiceOver),
+    VOICE("Voice & Audio", R.string.settings_cat_voice, "Hardware PTT, audio route, clarity DSP", "voice ptt bluetooth audio mic clarity", Icons.Default.RecordVoiceOver),
     NETWORK("Network & Mesh", R.string.settings_cat_network, "Battery profile, hotspot web portal, relay", "network mesh battery hotspot portal relay ble wifi", Icons.Default.Hub),
     APPEARANCE("Appearance & Layout", R.string.settings_cat_appearance, "Material 3 Dynamic Color, themes, Tactical HUD", "theme material3 aero dark light hud layout simple pro", Icons.Default.Palette),
     DIAGNOSTICS("Diagnostics & Storage", R.string.settings_cat_diagnostics, "Room DB, DTN store-and-forward, updates", "diagnostics storage dtn room updates logs", Icons.Default.Tune)

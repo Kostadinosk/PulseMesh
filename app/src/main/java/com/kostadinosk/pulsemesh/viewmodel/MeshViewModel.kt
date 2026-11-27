@@ -513,46 +513,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope
     )
 
-    val bell202Modem = com.kostadinosk.pulsemesh.service.Bell202AcousticModem(
-        context = application,
-        scope = viewModelScope,
-        isVoiceMicBusy = {
-            tacticalCallService.callState.value.isInCall ||
-                _uiState.value.duplexCallState.isInCall ||
-                audioService.isRecording.value ||
-                _uiState.value.isPttPressed ||
-                !appInForeground
-        },
-        onBell202FrameDecoded = { frame ->
-            val pktType = when (frame.typeByte) {
-                com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_SOS -> "SOS"
-                com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_CALL_RING -> "CALL_RING"
-                com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_KEY_VERIFY -> "KEY_VERIFY"
-                else -> "CHAT"
-            }
-            val transportLabel = if (frame.isEncrypted) {
-                if (frame.fecCorrectedBytes > 0) "ACOUSTIC 2.0 (E2EE+RS:${frame.fecCorrectedBytes}B)"
-                else "ACOUSTIC 2.0 (E2EE)"
-            } else {
-                "ACOUSTIC BELL202"
-            }
-            val pkt = com.kostadinosk.pulsemesh.service.WireMeshPacket(
-                packetId = "b202_${frame.srcNodeIdHex}_${System.currentTimeMillis()}",
-                srcNodeId = frame.srcNodeIdHex,
-                srcCallsign = peersBackingMap[normalizeId(frame.srcNodeIdHex)]?.callsign ?: "Acoustic-${frame.srcNodeIdHex}",
-                dstNodeId = "ALL",
-                type = pktType,
-                payload = frame.text.ifBlank { "Bell 202 AFSK Signal" },
-                sourceTransport = transportLabel,
-                rssiDbm = -48
-            )
-            viewModelScope.launch(Dispatchers.Main) {
-                handleIncomingPacket(pkt)
-            }
-        },
-        channelPassphraseProvider = { _uiState.value.meshPassphrase }
-    )
-
     val loraBridge = com.kostadinosk.pulsemesh.service.LoraCompanionBridge(
         context = application,
         scope = viewModelScope,
@@ -3587,11 +3547,17 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             .filter { it.isNotBlank() && normalizeId(it) != selfNormId }
             .distinctBy { normalizeId(it) }
 
+        val deletedDmPeerIds = prefs.getDeletedDmPeerIds()
         for (peerId in allPeerIds) {
             val threadId = "dm_$peerId"
-            val peer = peerNodes.find { normalizeId(it.id) == normalizeId(peerId) }
-            val claim = prefs.findUsernameClaimByNodeId(peerId)
+            val normPeerId = normalizeId(peerId)
             val packets = persistentChatManager.getPacketsForThread(threadId)
+            if (normPeerId in deletedDmPeerIds) {
+                if (packets.isEmpty()) continue
+                prefs.removeDeletedDmPeerId(peerId)
+            }
+            val peer = peerNodes.find { normalizeId(it.id) == normPeerId }
+            val claim = prefs.findUsernameClaimByNodeId(peerId)
             val lastMsg = packets.firstOrNull()
             val candidateCallsign = peer?.callsign
                 ?: claim?.let { "@${it.username}" }
@@ -3665,13 +3631,53 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         refreshConversationsList()
     }
 
+    fun deleteChatThread(threadId: String) {
+        val cleanId = threadId.trim()
+        if (cleanId.isBlank()) return
+        persistentChatManager.deleteThread(cleanId)
+        unreadCountsByThread.remove(cleanId)
+        notificationManager.cancelChatNotificationForThread(cleanId)
+
+        when {
+            cleanId.startsWith("group_") -> {
+                val gId = cleanId.removePrefix("group_")
+                val updatedGroups = prefs.loadMeshGroups().filterNot { it.groupId == gId }
+                prefs.saveMeshGroups(updatedGroups)
+                _uiState.update { current ->
+                    current.copy(meshGroups = updatedGroups)
+                }
+            }
+            cleanId.startsWith("dm_") -> {
+                val peerId = cleanId.removePrefix("dm_")
+                prefs.addDeletedDmPeerId(peerId)
+            }
+        }
+
+        _uiState.update { current ->
+            if (current.selectedThreadId == cleanId) {
+                current.copy(
+                    selectedThreadId = null,
+                    activeThreadPackets = emptyList(),
+                    replyingToPacket = null,
+                    editingPacket = null
+                )
+            } else {
+                current
+            }
+        }
+        refreshConversationsList()
+        triggerHaptic(30)
+    }
+
     fun selectThread(threadId: String?) {
         if (threadId != null && threadId.startsWith("dm_")) {
-            val targetNorm = normalizeId(threadId.removePrefix("dm_"))
+            val peerId = threadId.removePrefix("dm_")
+            val targetNorm = normalizeId(peerId)
             if (targetNorm == normalizeId(_uiState.value.localNodeId)) {
                 persistentChatManager.deleteThread(threadId)
                 return
             }
+            prefs.removeDeletedDmPeerId(peerId)
         }
         if (!threadId.isNullOrBlank()) {
             val hadUnread = (unreadCountsByThread[threadId] ?: 0) > 0
@@ -3717,6 +3723,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         if (isDm && normalizeId(threadId.removePrefix("dm_")) == normalizeId(state.localNodeId)) {
             persistentChatManager.deleteThread(threadId)
             return
+        }
+        if (isDm) {
+            prefs.removeDeletedDmPeerId(threadId.removePrefix("dm_"))
         }
 
         val groupObj = if (isGroupChat) {
@@ -3965,6 +3974,9 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         if (isDm && normalizeId(threadId.removePrefix("dm_")) == normalizeId(state.localNodeId)) {
             persistentChatManager.deleteThread(threadId)
             return
+        }
+        if (isDm) {
+            prefs.removeDeletedDmPeerId(threadId.removePrefix("dm_"))
         }
         val targetDest = packet.destId.ifBlank { "ALL" }
         val groupObj = if (isGroupChat) {
@@ -4691,26 +4703,12 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleBell202Modem() {
-        val next = !_uiState.value.bell202ModemEnabled
-        bell202Modem.setListening(next)
-        _uiState.update { it.copy(bell202ModemEnabled = next) }
-        triggerHaptic(35)
+        // Acoustic modem removed in v2.1.1; always remains disabled.
+        _uiState.update { it.copy(bell202ModemEnabled = false) }
     }
 
     fun transmitBell202AcousticMessage(text: String, isSos: Boolean = false) {
-        val st = _uiState.value
-        val typeByte = if (isSos) {
-            com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_SOS
-        } else {
-            com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_CHAT
-        }
-        val cleanText = text.trim().ifBlank { if (isSos) "SOS from ${st.operatorCallsign}" else "PulseMesh Bell202 Ping (${st.operatorCallsign})" }
-        if (st.acousticV2EncryptedEnabled) {
-            bell202Modem.transmitEncryptedMessage(typeByte, st.localNodeId, cleanText, st.meshPassphrase)
-        } else {
-            bell202Modem.transmitMessage(typeByte, st.localNodeId, cleanText, encryptedV2 = false)
-        }
-        triggerHaptic(50)
+        // Acoustic modem removed in v2.1.1.
     }
 
     fun syncNfcPairingPayload() {
@@ -8389,14 +8387,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun transmitUltrasonicKeyVerifyChirp() {
-        val st = _uiState.value
-        val fp = st.x25519Fingerprint.ifBlank { prefs.fingerprint }.take(16)
-        bell202Modem.transmitMessage(
-            com.kostadinosk.pulsemesh.service.Bell202AcousticModem.TYPE_KEY_VERIFY,
-            st.localNodeId,
-            "KEY:$fp"
-        )
-        triggerHaptic(40)
+        // Acoustic modem removed in v2.1.1.
     }
 
     fun cycleMessageBurnTtl() {
@@ -9078,7 +9069,7 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
             put("pulsemeshHost", true)
             put("version", "1.4.7")
             put("webrtcSignaling", true)
-            put("bell202Acoustic", true)
+            put("bell202Acoustic", false)
             put("sslEnabled", state.webPortalStatus.sslEnabled)
             put("httpsSelfTestPassed", state.webPortalStatus.httpsSelfTestPassed)
             put("httpsPortalUrl", state.webPortalStatus.httpsPortalUrl)
@@ -10098,7 +10089,6 @@ class MeshViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { statusTts?.stop(); statusTts?.shutdown() }
         statusTts = null
         emergencyToolkit.release()
-        bell202Modem.setListening(false)
         cotBridge?.stop()
         loraBridge.disconnect()
         audioService.release()

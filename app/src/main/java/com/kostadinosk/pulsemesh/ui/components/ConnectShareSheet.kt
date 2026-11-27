@@ -88,8 +88,8 @@ fun ConnectShareSheet(
     onToggleLoraBridge: () -> Unit,
     onSelectLoraProtocol: (LoraProtocol) -> Unit,
     onScanLoraDevices: () -> Unit,
-    onToggleAcousticModem: () -> Unit,
-    onSendAcousticMessage: (String) -> Unit
+    onToggleAcousticModem: () -> Unit = {},
+    onSendAcousticMessage: (String) -> Unit = {}
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
@@ -124,8 +124,8 @@ fun ConnectShareSheetContent(
     onToggleLoraBridge: () -> Unit,
     onSelectLoraProtocol: (LoraProtocol) -> Unit,
     onScanLoraDevices: () -> Unit,
-    onToggleAcousticModem: () -> Unit,
-    onSendAcousticMessage: (String) -> Unit
+    onToggleAcousticModem: () -> Unit = {},
+    onSendAcousticMessage: (String) -> Unit = {}
 ) {
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
@@ -133,7 +133,6 @@ fun ConnectShareSheetContent(
     val clipboard = LocalClipboardManager.current
 
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
-    var acousticDraft by remember { mutableStateOf("") }
     var copiedFeedback by remember { mutableStateOf(false) }
 
     val inviteUri = remember(state.localNodeId, state.operatorCallsign, state.claimedUsername, state.x25519PublicKey) {
@@ -496,63 +495,6 @@ fun ConnectShareSheetContent(
                             shape = tokens.pillShape
                         ) {
                             Text(AppStrings.tr(lang, "Scan", "Σάρωση"), fontSize = 11.sp)
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pulseSurfaceCard()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Default.GraphicEq, contentDescription = null, tint = tokens.statusWarning)
-                            Column {
-                                Text("Acoustic Modem 2.0 (RS-FEC + AES)", color = p.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("Air-gap speaker/mic frame transfer", color = p.textSecondary, fontSize = 11.sp)
-                            }
-                        }
-                        Switch(
-                            checked = state.bell202ModemEnabled,
-                            onCheckedChange = { onToggleAcousticModem() }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = acousticDraft,
-                            onValueChange = { acousticDraft = it.take(80) },
-                            placeholder = { Text(AppStrings.tr(lang, "Short acoustic message...", "Σύντομο ηχητικό μήνυμα..."), fontSize = 12.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                if (acousticDraft.isNotBlank()) {
-                                    onSendAcousticMessage(acousticDraft.trim())
-                                    acousticDraft = ""
-                                }
-                            },
-                            shape = tokens.buttonShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = tokens.statusWarning,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text(AppStrings.tr(lang, "TX", "TX"), fontWeight = FontWeight.Bold)
                         }
                     }
                 }

@@ -25,10 +25,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -70,7 +74,19 @@ fun RadioLabDiagnosticsScreen(
     val tokens = LocalPulseTokens.current
     val p = tokens.palette
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val lang = state.appLanguage
+
+    // Re-check battery exemption & hardware status when returning from Android Settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onRefreshHardware()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         modifier = modifier
@@ -116,7 +132,15 @@ fun RadioLabDiagnosticsScreen(
             HardwareSummaryCard(
                 hw = hw,
                 onOpenBatterySettings = {
-                    HardwareCapabilityDetector.launchOemBatterySettings(context, hw.batteryBypassGuide)
+                    val launched = HardwareCapabilityDetector.launchOemBatterySettings(context, hw.batteryBypassGuide)
+                    if (!launched) {
+                        android.widget.Toast.makeText(
+                            context,
+                            AppStrings.tr(lang, "Open Android Settings -> Apps -> PulseMesh -> Battery -> Unrestricted", "Ανοίξτε Ρυθμίσεις -> Εφαρμογές -> PulseMesh -> Μπαταρία -> Χωρίς περιορισμούς"),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    onRefreshHardware()
                 }
             )
             Column(
@@ -259,7 +283,7 @@ fun RadioLabDiagnosticsScreen(
                 }
             } else {
                 Text(
-                    text = "Standard unrooted mode. All PulseMesh transports (BLE, L2CAP, Wi-Fi Aware, Hotspot, LoRa, Acoustic 2.0) run without root.",
+                    text = "Standard unrooted mode. All PulseMesh transports (BLE, L2CAP, Wi-Fi Aware, Wi-Fi Direct, Hotspot, LoRa) run without root.",
                     color = p.textMuted,
                     fontSize = 11.sp
                 )

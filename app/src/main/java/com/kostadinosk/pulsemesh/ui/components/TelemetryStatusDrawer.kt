@@ -237,7 +237,6 @@ fun TelemetryDrawerContent(
             ) {
                 TransportChip("BLE", state.bleTxState.isAdvertising || state.activePeerCount > 0, Icons.Default.Bluetooth, Modifier.weight(1f))
                 TransportChip("LoRa", state.loraBridgeState.isConnected, Icons.Default.Router, Modifier.weight(1f))
-                TransportChip("Acoustic", state.bell202ModemEnabled, Icons.Default.GraphicEq, Modifier.weight(1f))
                 TransportChip("CoT", state.isCotBridgeEnabled, Icons.Default.BatteryChargingFull, Modifier.weight(1f))
             }
 

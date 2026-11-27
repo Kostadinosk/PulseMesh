@@ -270,7 +270,7 @@ fun RadiosSettingsScreen(
     onToggleLoraBridge: () -> Unit,
     onSelectLoraProtocol: (LoraProtocol) -> Unit,
     onScanLoraDevices: () -> Unit,
-    onToggleAcousticModem: () -> Unit,
+    onToggleAcousticModem: () -> Unit = {},
     onToggleCotBridge: (Boolean) -> Unit,
     onOpenConnectHub: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -517,7 +517,7 @@ fun RadiosSettingsScreen(
             SettingsToggleRow("ATAK / WinTAK CoT UDP Bridge", "Multicast 239.2.3.1:6969 interoperability", state.isCotBridgeEnabled) { onToggleCotBridge(!state.isCotBridgeEnabled) }
         }
 
-        // LoRa & Acoustic 2.0 Hardware Card
+        // LoRa Hardware Companion Card
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -527,7 +527,7 @@ fun RadiosSettingsScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Router, contentDescription = null, tint = tokens.accentSecondary)
-                Text("LoRa Companion & Acoustic 2.0", color = p.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text("LoRa Hardware Companion", color = p.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
             SettingsToggleRow("LoRa USB-OTG / BLE Bridge", state.loraBridgeState.statusText.ifBlank { "Meshtastic / MeshCore hardware companion" }, state.loraBridgeState.isConnected, onToggleLoraBridge)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -549,7 +549,6 @@ fun RadiosSettingsScreen(
                     Text("Scan", fontSize = 11.sp)
                 }
             }
-            SettingsToggleRow("Acoustic Modem 2.0 (RS-FEC + AES)", "Bell 202 speaker/mic air-gap frames", state.bell202ModemEnabled, onToggleAcousticModem)
         }
 
         // Mesh Channel & Shared Passphrase

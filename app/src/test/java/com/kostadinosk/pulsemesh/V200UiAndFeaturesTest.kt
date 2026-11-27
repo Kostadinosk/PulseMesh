@@ -36,6 +36,7 @@ import com.kostadinosk.pulsemesh.viewmodel.MeshViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -593,5 +594,90 @@ class V200UiAndFeaturesTest {
         composeTestRule.onNodeWithTag("drawer_toggle_hotspot").assertExists()
         composeTestRule.onNodeWithTag("drawer_toggle_wifi_direct").assertExists()
         composeTestRule.onNodeWithTag("drawer_toggle_wifi_aware").assertExists()
+    }
+
+    @Test
+    fun `v211 delete chat threads, acoustic modem removed, and battery bypass intent chain`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = MeshViewModel(app)
+
+        // 1. Delete DM chat thread hides it even when peer exists, and clears packets
+        vm.registerOrUpdatePeerInstant(peerNodeId = "0xD31E", callsign = "DeltaPeer", sourceTransport = "BLE")
+        vm.sendMessageInThread("dm_0xD31E", "Hello Delta")
+        assertTrue(vm.uiState.value.conversations.any { it.threadId == "dm_0xD31E" })
+        vm.selectThread("dm_0xD31E")
+        vm.deleteChatThread("dm_0xD31E")
+        assertNull("Deleting active thread must return to chat list", vm.uiState.value.selectedThreadId)
+        assertTrue("Deleted DM packets must be cleared", vm.persistentChatManager.getPacketsForThread("dm_0xD31E").isEmpty())
+        assertFalse("Deleted DM must be removed from conversations list", vm.uiState.value.conversations.any { it.threadId == "dm_0xD31E" })
+
+        // Re-selecting or sending a new message unhides it cleanly
+        vm.sendMessageInThread("dm_0xD31E", "Back online")
+        assertTrue("New message must restore DM thread", vm.uiState.value.conversations.any { it.threadId == "dm_0xD31E" })
+
+        // 2. Delete Group chat removes group & its packets
+        vm.createMeshGroup("Temp Squad", listOf("0xD31E"))
+        val grp = vm.uiState.value.meshGroups.first { it.groupName == "Temp Squad" }
+        val gThreadId = "group_${grp.groupId}"
+        assertTrue(vm.uiState.value.conversations.any { it.threadId == gThreadId })
+        vm.deleteChatThread(gThreadId)
+        assertFalse("Deleted group must disappear from conversations", vm.uiState.value.conversations.any { it.threadId == gThreadId })
+        assertFalse("Deleted group must be removed from prefs", vm.prefs.loadMeshGroups().any { it.groupId == grp.groupId })
+
+        // 3. Acoustic modem is removed and toggle never enables it
+        vm.toggleBell202Modem()
+        assertFalse("Acoustic modem must remain disabled", vm.uiState.value.bell202ModemEnabled)
+
+        // 4. Battery bypass intent chain prioritizes 1-tap system Doze exemption dialog + OEM + Battery list + App Info
+        val guide = com.kostadinosk.pulsemesh.util.OemBatteryBypassGuide(
+            oemName = "Xiaomi / Redmi / POCO",
+            backgroundKillerName = "HyperOS / MIUI PowerKeeper",
+            severityLabel = "Aggressive background kill",
+            instructions = listOf("Set No restrictions"),
+            isIgnoringBatteryOptimizations = false,
+            oemSettingsComponents = listOf("com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity")
+        )
+        val notExemptIntents = HardwareCapabilityDetector.buildBatteryBypassIntents(
+            packageName = app.packageName,
+            guide = guide,
+            isAlreadyExempt = false
+        )
+        assertEquals(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, notExemptIntents.first().action)
+        assertTrue(notExemptIntents.any { it.component?.packageName == "com.miui.securitycenter" })
+        assertTrue(notExemptIntents.any { it.action == android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS })
+        assertEquals(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, notExemptIntents.last().action)
+
+        val exemptIntents = HardwareCapabilityDetector.buildBatteryBypassIntents(
+            packageName = app.packageName,
+            guide = guide.copy(isIgnoringBatteryOptimizations = true),
+            isAlreadyExempt = true
+        )
+        assertEquals("com.miui.securitycenter", exemptIntents.first().component?.packageName)
+        vm.meshNetworkService.stop()
+
+        // 5. Chat list delete button & confirmation dialog invokes onDeleteThread
+        var deletedThreadId = ""
+        val dmConvo = com.kostadinosk.pulsemesh.model.ChatConversation(
+            threadId = "dm_0x7777",
+            title = "Echo (0x7777)",
+            isChannel = false,
+            isEncrypted = true,
+            peerNodeId = "0x7777",
+            lastMessageText = "Testing delete",
+            lastTimestamp = System.currentTimeMillis()
+        )
+        composeTestRule.setContent {
+            PulseMeshTheme(themePreset = ThemePreset.LIQUID_GLASS, themeBrightness = ThemeBrightness.DARK) {
+                com.kostadinosk.pulsemesh.ui.screens.MeshChatScreen(
+                    state = MeshUiState(conversations = listOf(dmConvo)),
+                    onSendMessage = {},
+                    onBroadcastGpsPin = {},
+                    onDeleteThread = { deletedThreadId = it }
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("delete_chat_dm_0x7777").assertExists().performClick()
+        composeTestRule.onNodeWithTag("confirm_delete_chat_button").assertExists().performClick()
+        assertEquals("dm_0x7777", deletedThreadId)
     }
 }

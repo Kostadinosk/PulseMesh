@@ -107,6 +107,7 @@ fun MeshChatScreen(
     onSeekVoiceNote: (packetId: String, fraction: Float) -> Unit = { _, _ -> },
     onSetVoiceNoteSpeed: (Float) -> Unit = {},
     onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
+    onDeleteThread: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (state.selectedThreadId == null) {
@@ -120,6 +121,7 @@ fun MeshChatScreen(
             onSendQuickStatus = onSendQuickStatus,
             onToggleQuickStatusVoice = onToggleQuickStatusVoice,
             onOpenWebPortal = onOpenWebPortal,
+            onDeleteThread = onDeleteThread,
             modifier = modifier
         )
     } else {
@@ -164,6 +166,7 @@ fun MeshChatScreen(
             onSeekVoiceNote = onSeekVoiceNote,
             onSetVoiceNoteSpeed = onSetVoiceNoteSpeed,
             onOpenSafetyNumber = onOpenSafetyNumber,
+            onDeleteThread = onDeleteThread,
             modifier = modifier
         )
     }
@@ -181,6 +184,7 @@ private fun ConversationListView(
     onSendQuickStatus: (com.kostadinosk.pulsemesh.model.QuickStatusCode) -> Unit = {},
     onToggleQuickStatusVoice: () -> Unit = {},
     onOpenWebPortal: () -> Unit = {},
+    onDeleteThread: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val p = LocalPulsePalette.current
@@ -198,6 +202,7 @@ private fun ConversationListView(
     var connectFeedbackSuccess by remember { mutableStateOf(false) }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var isQuickStatusExpanded by remember { mutableStateOf(false) }
+    var pendingDeleteConversation by remember { mutableStateOf<ChatConversation?>(null) }
 
     val discoveredPeers = remember(state.nodes) {
         state.nodes.filter { !it.isSelf }
@@ -461,7 +466,8 @@ private fun ConversationListView(
                     ConversationItemCard(
                         conversation = convo,
                         isSimpleMode = state.isSimpleMode,
-                        onClick = { onSelectThread(convo.threadId) }
+                        onClick = { onSelectThread(convo.threadId) },
+                        onDeleteClick = { pendingDeleteConversation = convo }
                     )
                 }
             }
@@ -480,7 +486,8 @@ private fun ConversationListView(
                     ConversationItemCard(
                         conversation = convo,
                         isSimpleMode = state.isSimpleMode,
-                        onClick = { onSelectThread(convo.threadId) }
+                        onClick = { onSelectThread(convo.threadId) },
+                        onDeleteClick = { pendingDeleteConversation = convo }
                     )
                 }
             }
@@ -499,7 +506,8 @@ private fun ConversationListView(
                     ConversationItemCard(
                         conversation = convo,
                         isSimpleMode = state.isSimpleMode,
-                        onClick = { onSelectThread(convo.threadId) }
+                        onClick = { onSelectThread(convo.threadId) },
+                        onDeleteClick = { pendingDeleteConversation = convo }
                     )
                 }
             }
@@ -983,13 +991,78 @@ private fun ConversationListView(
             }
         )
     }
+
+    pendingDeleteConversation?.let { target ->
+        val isBuiltInChannel = target.isChannel
+        AlertDialog(
+            onDismissRequest = { pendingDeleteConversation = null },
+            containerColor = p.card,
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    text = if (isBuiltInChannel) {
+                        com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Clear channel messages?", "Εκκαθάριση μηνυμάτων καναλιού;")
+                    } else {
+                        com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Delete chat?", "Διαγραφή συνομιλίας;")
+                    },
+                    color = p.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isBuiltInChannel) {
+                        com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                            state.appLanguage,
+                            "All messages in \"${target.title}\" will be deleted from this device.",
+                            "Όλα τα μηνύματα στο \"${target.title}\" θα διαγραφούν από αυτή τη συσκευή."
+                        )
+                    } else {
+                        com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                            state.appLanguage,
+                            "Remove \"${target.title}\" and delete all its messages from this device?",
+                            "Αφαίρεση της συνομιλίας \"${target.title}\" και διαγραφή όλων των μηνυμάτων από αυτή τη συσκευή;"
+                        )
+                    },
+                    color = p.textSecondary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteThread(target.threadId)
+                        pendingDeleteConversation = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = p.red, contentColor = Color.White),
+                    shape = btnShape,
+                    modifier = Modifier.testTag("confirm_delete_chat_button")
+                ) {
+                    Text(
+                        text = if (isBuiltInChannel) {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Clear", "Εκκαθάριση")
+                        } else {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Delete", "Διαγραφή")
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteConversation = null }) {
+                    Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Cancel", "Ακύρωση"), color = p.textSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun ConversationItemCard(
     conversation: ChatConversation,
     isSimpleMode: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: (() -> Unit)? = null
 ) {
     val p = LocalPulsePalette.current
     val cardShape = tacticalCardShape(isSimpleMode, p.isOriginal, p.isAero)
@@ -1289,6 +1362,23 @@ private fun ConversationItemCard(
                     }
                 }
             }
+
+            if (onDeleteClick != null) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .size(32.dp)
+                        .testTag("delete_chat_${conversation.threadId}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = if (conversation.isChannel) "Clear ${conversation.title}" else "Delete ${conversation.title}",
+                        tint = p.textMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -1335,6 +1425,7 @@ private fun ConversationThreadView(
     onSeekVoiceNote: (packetId: String, fraction: Float) -> Unit = { _, _ -> },
     onSetVoiceNoteSpeed: (Float) -> Unit = {},
     onOpenSafetyNumber: (String, String) -> Unit = { _, _ -> },
+    onDeleteThread: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Intercept back button to return to conversation list
@@ -1348,6 +1439,7 @@ private fun ConversationThreadView(
     }
     var showPhotoPickerModal by remember { mutableStateOf(false) }
     var showGroupMgmtDialog by remember { mutableStateOf(false) }
+    var showDeleteThreadDialog by remember(threadId) { mutableStateOf(false) }
     var pendingPhotoCaption by remember { mutableStateOf("") }
     var isRecordingVoiceNote by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -1597,9 +1689,92 @@ private fun ConversationThreadView(
                                 }
                             )
                         }
+                        val isBuiltInChannel = currentConvo?.isChannel == true
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (isBuiltInChannel) {
+                                        com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Clear messages", "Εκκαθάριση μηνυμάτων")
+                                    } else {
+                                        com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Delete chat", "Διαγραφή συνομιλίας")
+                                    },
+                                    color = p.red
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = p.red) },
+                            modifier = Modifier.testTag("chat_thread_delete_btn"),
+                            onClick = {
+                                showThreadMenu = false
+                                showDeleteThreadDialog = true
+                            }
+                        )
                     }
                 }
             }
+        }
+
+        if (showDeleteThreadDialog) {
+            val isBuiltInChannel = currentConvo?.isChannel == true
+            AlertDialog(
+                onDismissRequest = { showDeleteThreadDialog = false },
+                containerColor = p.card,
+                shape = RoundedCornerShape(16.dp),
+                title = {
+                    Text(
+                        text = if (isBuiltInChannel) {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Clear channel messages?", "Εκκαθάριση μηνυμάτων καναλιού;")
+                        } else {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Delete chat?", "Διαγραφή συνομιλίας;")
+                        },
+                        color = p.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = if (isBuiltInChannel) {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                                state.appLanguage,
+                                "All messages in \"$threadTitle\" will be deleted from this device.",
+                                "Όλα τα μηνύματα στο \"$threadTitle\" θα διαγραφούν από αυτή τη συσκευή."
+                            )
+                        } else {
+                            com.kostadinosk.pulsemesh.util.AppStrings.tr(
+                                state.appLanguage,
+                                "Remove \"$threadTitle\" and delete all its messages from this device?",
+                                "Αφαίρεση της συνομιλίας \"$threadTitle\" και διαγραφή όλων των μηνυμάτων από αυτή τη συσκευή;"
+                            )
+                        },
+                        color = p.textSecondary,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteThreadDialog = false
+                            onDeleteThread(threadId)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = p.red, contentColor = Color.White),
+                        shape = btnShape,
+                        modifier = Modifier.testTag("confirm_delete_thread_button")
+                    ) {
+                        Text(
+                            text = if (isBuiltInChannel) {
+                                com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Clear", "Εκκαθάριση")
+                            } else {
+                                com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Delete", "Διαγραφή")
+                            },
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteThreadDialog = false }) {
+                        Text(com.kostadinosk.pulsemesh.util.AppStrings.tr(state.appLanguage, "Cancel", "Ακύρωση"), color = p.textSecondary)
+                    }
+                }
+            )
         }
 
         if (isDm && currentConvo?.isKeyChangedWarning == true) {

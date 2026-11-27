@@ -630,18 +630,29 @@ fun HardwareSummaryCard(
             fontSize = 11.sp
         )
         Text(
-            text = "OEM Background Policy: ${hw.batteryBypassGuide.backgroundKillerName} (${hw.batteryBypassGuide.severityLabel})",
+            text = if (hw.batteryBypassGuide.isIgnoringBatteryOptimizations) {
+                "OEM Background Policy: ${hw.batteryBypassGuide.backgroundKillerName} (Unrestricted / Bypass Active)"
+            } else {
+                "OEM Background Policy: ${hw.batteryBypassGuide.backgroundKillerName} (${hw.batteryBypassGuide.severityLabel})"
+            },
             color = if (hw.batteryBypassGuide.isIgnoringBatteryOptimizations) tokens.statusOnline else tokens.statusWarning,
             fontSize = 11.sp
         )
-        if (!hw.batteryBypassGuide.isIgnoringBatteryOptimizations) {
-            OutlinedButton(
-                onClick = onOpenBatterySettings,
-                shape = tokens.buttonShape,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Open ${hw.batteryBypassGuide.oemName} Battery Bypass Settings", fontSize = 11.sp)
-            }
+        OutlinedButton(
+            onClick = onOpenBatterySettings,
+            shape = tokens.buttonShape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("open_battery_bypass_settings_btn")
+        ) {
+            Text(
+                text = if (hw.batteryBypassGuide.isIgnoringBatteryOptimizations) {
+                    "Manage ${hw.batteryBypassGuide.oemName} Battery & Autostart Settings"
+                } else {
+                    "Open ${hw.batteryBypassGuide.oemName} Battery Bypass Settings"
+                },
+                fontSize = 11.sp
+            )
         }
     }
 }

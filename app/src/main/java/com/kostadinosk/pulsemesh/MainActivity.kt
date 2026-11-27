@@ -856,6 +856,7 @@ class MainActivity : FragmentActivity() {
                                     onTogglePlayVoiceNote = { pid, content, speed -> viewModel.togglePlayVoiceNote(pid, content, speed) },
                                     onSeekVoiceNote = { pid, frac -> viewModel.seekVoiceNote(pid, frac) },
                                     onSetVoiceNoteSpeed = { spd -> viewModel.setVoiceNoteSpeed(spd) },
+                                    onDeleteThread = { tid -> viewModel.deleteChatThread(tid) },
                                 )
                             }
                             2 -> com.kostadinosk.pulsemesh.ui.screens.voice.PulseVoiceHubScreen(
@@ -951,7 +952,6 @@ class MainActivity : FragmentActivity() {
                                                     onToggleLoraBridge = { viewModel.toggleLoraBridge() },
                                                     onSelectLoraProtocol = { viewModel.selectLoraProtocol(it) },
                                                     onScanLoraDevices = { viewModel.scanLoraDevices() },
-                                                    onToggleAcousticModem = { viewModel.toggleBell202Modem() },
                                                     onToggleCotBridge = { viewModel.setCotBridgeEnabled(it) },
                                                     onOpenConnectHub = { showConnectHub = true }
                                                 )
@@ -1273,9 +1273,7 @@ class MainActivity : FragmentActivity() {
                         onToggleHotspotPortal = { viewModel.toggleWebPortal() },
                         onToggleLoraBridge = { viewModel.toggleLoraBridge() },
                         onSelectLoraProtocol = { viewModel.selectLoraProtocol(it) },
-                        onScanLoraDevices = { viewModel.scanLoraDevices() },
-                        onToggleAcousticModem = { viewModel.toggleBell202Modem() },
-                        onSendAcousticMessage = { msg -> viewModel.transmitBell202AcousticMessage(msg, isSos = false) }
+                        onScanLoraDevices = { viewModel.scanLoraDevices() }
                     )
                 }
 
